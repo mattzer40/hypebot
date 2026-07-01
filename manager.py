@@ -34,7 +34,8 @@ CUSTOMERS_FILE      = DATA_DIR / "customers.json"
 _CUSTOMERS_SEED     = CODE_DIR / "customers.json"
 _force_seed = os.environ.get("FORCE_SEED_CUSTOMERS", "0") == "1"
 _file_empty = CUSTOMERS_FILE.exists() and CUSTOMERS_FILE.stat().st_size <= 4
-if (_force_seed or not CUSTOMERS_FILE.exists() or _file_empty) and _CUSTOMERS_SEED.exists():
+_seed_customers_set = bool(os.environ.get("SEED_CUSTOMERS", "").strip())
+if not _seed_customers_set and (_force_seed or not CUSTOMERS_FILE.exists() or _file_empty) and _CUSTOMERS_SEED.exists():
     import shutil as _sh
     _sh.copy2(_CUSTOMERS_SEED, CUSTOMERS_FILE)
     print(f"[manager] customers.json copiado do código → volume ({CUSTOMERS_FILE})", flush=True)
