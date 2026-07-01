@@ -15,6 +15,8 @@ mkdir -p "$DATA_DIR/clientes"
 
 # Executa migração de dados (copia settings do código para o volume /data)
 echo "Executando migração de dados..."
+echo "[debug] manager.py linha 36: $(sed -n '36p' manager.py)"
+echo "[debug] SEED_CUSTOMERS len: ${#SEED_CUSTOMERS}"
 /opt/venv/bin/python manager.py --migrate-only
 echo "Migração concluída."
 
