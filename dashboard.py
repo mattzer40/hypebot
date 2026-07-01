@@ -77,7 +77,7 @@ def _seed_file(path: Path, env_var: str):
     """
     key = env_var.removeprefix("SEED_")  # SEED_CUSTOMERS → CUSTOMERS
     force = os.environ.get(f"FORCE_SEED_{key}", "0") == "1"
-    if path.exists() and not force:
+    if path.exists() and path.stat().st_size > 4 and not force:
         return
     raw = os.environ.get(env_var, "").strip()
     if not raw:
