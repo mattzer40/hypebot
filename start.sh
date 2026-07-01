@@ -7,7 +7,7 @@ set -e
 export DATA_DIR="${DATA_DIR:-/data}"
 export PYTHONUNBUFFERED=1
 
-echo "=== HypeBot iniciando ==="
+echo "=== HypeBot iniciando v2026-07-01 ==="
 echo "DATA_DIR: $DATA_DIR"
 
 # Garante que a pasta de dados existe
