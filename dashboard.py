@@ -701,6 +701,32 @@ class BotManager:
         return results
 
 
+# ── Restauração final de customers.json antes de iniciar o manager ────────────
+# Detecta e corrige customers.json vazio/corrompido usando SEED_CUSTOMERS.
+# Roda DEPOIS de _seed_file e do merge, garantindo dados válidos.
+_cfix_raw = os.environ.get("SEED_CUSTOMERS", "").strip()
+if _cfix_raw:
+    try:
+        import base64 as _cfix_b64, json as _cfix_json
+        _cfix_seed = _cfix_json.loads(_cfix_b64.b64decode(_cfix_raw).decode("utf-8"))
+        _cfix_vol: list = []
+        if CUSTOMERS_FILE.exists():
+            try:
+                _cfix_vol = _cfix_json.loads(CUSTOMERS_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                _cfix_vol = []
+        _cfix_size = CUSTOMERS_FILE.stat().st_size if CUSTOMERS_FILE.exists() else 0
+        print(f"[cfix] customers.json: {_cfix_size}B, {len(_cfix_vol)} entr{'y' if len(_cfix_vol)==1 else 'ies'}, seed has {len(_cfix_seed)}", flush=True)
+        if not isinstance(_cfix_vol, list) or len(_cfix_vol) == 0:
+            if isinstance(_cfix_seed, list) and _cfix_seed:
+                CUSTOMERS_FILE.write_text(
+                    _cfix_json.dumps(_cfix_seed, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                print(f"[cfix] customers.json restaurado de SEED_CUSTOMERS ({len(_cfix_seed)} clientes)", flush=True)
+    except Exception as _cfix_e:
+        print(f"[cfix] erro: {_cfix_e}", flush=True)
+
 bot_manager = BotManager()
 bot_manager.start_loop()
 
