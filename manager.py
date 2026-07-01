@@ -32,6 +32,8 @@ CLIENTS_DIR    = DATA_DIR / "clientes"          # no volume persistente
 # Na 1ª execução ou se estiver ausente, copia do código como seed.
 CUSTOMERS_FILE      = DATA_DIR / "customers.json"
 _CUSTOMERS_SEED     = CODE_DIR / "customers.json"
+_seed_debug = os.environ.get("SEED_CUSTOMERS", "")
+print(f"[manager] DEBUG SEED_CUSTOMERS len={len(_seed_debug)} empty={not _seed_debug.strip()}", flush=True)
 _force_seed = os.environ.get("FORCE_SEED_CUSTOMERS", "0") == "1"
 _file_empty = CUSTOMERS_FILE.exists() and CUSTOMERS_FILE.stat().st_size <= 4
 if (_force_seed or not CUSTOMERS_FILE.exists() or _file_empty) and _CUSTOMERS_SEED.exists():
