@@ -1,0 +1,11 @@
+
+==================================================
+  HypeBot Dashboard
+  http://localhost:5500
+==================================================
+
+  Donos: 2
+  Pressione Ctrl+C para parar.
+
+ * Serving Flask app 'dashboard'
+ * Debug mode: off

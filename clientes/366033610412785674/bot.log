@@ -1,0 +1,490 @@
+
+========================================
+[2026-05-26 05:29:44.016284] Iniciando bot '366033610412785674'
+[2026-05-26 05:29:46] [INFO    ] discord.client: logging in using static token
+[2026-05-26 05:29:47] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 9beeddc3236299e265dcd0bca7862148).
+[slash] NATA®: 7 cmds.
+[slash] Hype Bots: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-26 05:31:19.308250] Iniciando bot '366033610412785674'
+
+========================================
+[2026-05-26 05:31:20.542461] Iniciando bot '366033610412785674'
+[2026-05-26 05:31:22] [INFO    ] discord.client: logging in using static token
+[2026-05-26 05:31:24] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 51f960ac049cc5883476125ed99fc44c).
+[slash] NATA®: 7 cmds.
+[slash] Hype Bots: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-26 05:44:50.249142] Iniciando bot '366033610412785674'
+[2026-05-26 05:44:51] [INFO    ] discord.client: logging in using static token
+[2026-05-26 05:44:53] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 92ad6774dd367663de9cdfa51748fef6).
+[slash] NATA®: 7 cmds.
+[slash] Hype Bots: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-26 05:51:38.865298] Iniciando bot '366033610412785674'
+[2026-05-26 05:51:42] [INFO    ] discord.client: logging in using static token
+[2026-05-26 05:51:43] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: d57d1b9a75c783d9c5ccbb35e3b942af).
+[slash] NATA®: 7 cmds.
+[slash] Hype Bots: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+==================================================
+[2026-05-28 00:21:53.479292] Iniciando instÃ¢ncia '366033610412785674'
+[2026-05-28 00:21:56] [INFO    ] discord.client: logging in using static token
+[settings] carregado 3 servidor(es) do disco.
+Traceback (most recent call last):
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\http.py", line 844, in static_login
+    data = await self.request(Route('GET', '/users/@me'))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\http.py", line 778, in request
+    raise HTTPException(response, data)
+discord.errors.HTTPException: 401 Unauthorized (error code: 0): 401: Unauthorized
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\Anderson Chaves\Downloads\bot\bot.py", line 25516, in <module>
+    bot.run(token)
+    ~~~~~~~^^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\client.py", line 933, in run
+    asyncio.run(runner())
+    ~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\client.py", line 922, in runner
+    await self.start(token, reconnect=reconnect)
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\client.py", line 850, in start
+    await self.login(token)
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\client.py", line 679, in login
+    data = await self.http.static_login(token)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\http.py", line 848, in static_login
+    raise LoginFailure('Improper token has been passed.') from exc
+discord.errors.LoginFailure: Improper token has been passed.
+
+==================================================
+[2026-05-28 00:22:23.499173] Iniciando instÃ¢ncia '366033610412785674'
+[2026-05-28 00:22:25] [INFO    ] discord.client: logging in using static token
+[settings] carregado 3 servidor(es) do disco.
+Traceback (most recent call last):
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\http.py", line 844, in static_login
+    data = await self.request(Route('GET', '/users/@me'))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\http.py", line 778, in request
+    raise HTTPException(response, data)
+discord.errors.HTTPException: 401 Unauthorized (error code: 0): 401: Unauthorized
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\Anderson Chaves\Downloads\bot\bot.py", line 25516, in <module>
+    bot.run(token)
+    ~~~~~~~^^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\client.py", line 933, in run
+    asyncio.run(runner())
+    ~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\asyncio\base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\client.py", line 922, in runner
+    await self.start(token, reconnect=reconnect)
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\client.py", line 850, in start
+    await self.login(token)
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\client.py", line 679, in login
+    data = await self.http.static_login(token)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\http.py", line 848, in static_login
+    raise LoginFailure('Improper token has been passed.') from exc
+discord.errors.LoginFailure: Improper token has been passed.
+
+========================================
+[2026-05-30 07:02:26.946612] Iniciando bot '366033610412785674'
+[settings] carregado 3 servidor(es) do disco.
+[2026-05-30 07:02:29] [INFO    ] discord.client: logging in using static token
+
+========================================
+[2026-05-30 07:02:42.738866] Iniciando bot '366033610412785674'
+[settings] carregado 3 servidor(es) do disco.
+[2026-05-30 07:02:44] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:02:45] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: e8e3c28390a9c2c28568e2dae3ea170e).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] erro: 'charmap' codec can't encode character '\u2192' in position 24: character maps to <undefined>
+[avatar] OK (1458835 bytes)
+[app_icon] erro: 'charmap' codec can't encode character '\u2192' in position 29: character maps to <undefined>
+[banner] OK (886669 bytes)
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-30 07:06:07.202284] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:06:08] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:06:10] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 161b5d88b8a1db5a113dbb3b12ae8e3f).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] OK (1458835 bytes)
+[app_icon] /applications/@me -> 200
+[banner] HTTPException código 50035: Invalid Form Body
+In banner: You are changing your profile banner too fast. Try again later.
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-30 07:10:03.033372] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:10:04] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:10:05] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 83fcbca990e95a680b3cef4ef18a5004).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] OK (1458835 bytes)
+[app_icon] /applications/@me -> 200
+[banner] OK (886669 bytes)
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-30 07:12:36.101034] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:12:37] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:12:38] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 6d6084e3880118afee5ab1a5e5f31982).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] HTTPException código 50035: Invalid Form Body
+In avatar: You are changing your avatar too fast. Try again later.
+[banner] HTTPException código 50035: Invalid Form Body
+In banner: You are changing your profile banner too fast. Try again later.
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-30 07:13:37.869394] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:13:39] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:13:40] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: f25ae582c6725212c15a218355bb0e23).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] HTTPException código 50035: Invalid Form Body
+In avatar: You are changing your avatar too fast. Try again later.
+[banner] OK (886669 bytes)
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-30 07:15:24.525382] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:15:26] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:15:27] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 5ed85aa1b406e34e669dc56adba934ff).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] HTTPException código 50035: Invalid Form Body
+In avatar: You are changing your avatar too fast. Try again later.
+[banner] HTTPException código 50035: Invalid Form Body
+In banner: You are changing your profile banner too fast. Try again later.
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-30 07:16:26.735381] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:16:30] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:16:31] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 6ab20260b80b0bd65824f6cac06f2c8d).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] HTTPException código 50035: Invalid Form Body
+In avatar: You are changing your avatar too fast. Try again later.
+[banner] HTTPException código 50035: Invalid Form Body
+In banner: You are changing your profile banner too fast. Try again later.
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-30 07:19:01.811757] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:19:03] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:19:04] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 663fc8b5525274997c65dbe949383d8b).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] OK (1458835 bytes)
+[app_icon] /applications/@me -> 200
+[banner] HTTPException código 50035: Invalid Form Body
+In banner: You are changing your profile banner too fast. Try again later.
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-30 07:21:16.553805] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:21:18] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:21:19] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 8747133fd8cecbaab8300b0f980bbe31).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] HTTPException código 50035: Invalid Form Body
+In avatar: You are changing your avatar too fast. Try again later.
+[banner] HTTPException código 50035: Invalid Form Body
+In banner: You are changing your profile banner too fast. Try again later.
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-30 07:22:24.848700] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:22:26] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:22:27] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: dc88f16181a4dd7f9edb8c15e6c5c2fe).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] HTTPException código 50035: Invalid Form Body
+In avatar: You are changing your avatar too fast. Try again later.
+[banner] HTTPException código 50035: Invalid Form Body
+In banner: You are changing your profile banner too fast. Try again later.
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+[presence] OK streaming: Prefixo: n!
+
+========================================
+[2026-05-30 07:30:51.521748] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:30:52] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:30:54] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: a7776bb8884212b88a27e973000c8caa).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] OK (1458835 bytes)
+[app_icon] /applications/@me -> 200
+[banner] OK (886669 bytes)
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+[presence] OK streaming: Prefixo: n!
+
+========================================
+[2026-05-30 07:36:59.949795] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:37:01] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:37:02] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 988ec7d137f5e087c28452979d49bee3).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] OK (1458835 bytes)
+[app_icon] /applications/@me -> 200
+[banner] HTTPException código 50035: Invalid Form Body
+In banner: You are changing your profile banner too fast. Try again later.
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+
+========================================
+[2026-05-30 07:39:14.235441] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:39:15] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:39:16] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 58658ed8d282e2c9ec25639cb5b93929).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] OK (1458835 bytes)
+[app_icon] /applications/@me -> 200
+[banner] HTTPException código 50035: Invalid Form Body
+In banner: You are changing your profile banner too fast. Try again later.
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+[presence] OK streaming: Prefixo: n!
+[presence] OK streaming: Prefixo: n!
+[presence] OK streaming: Prefixo: n!
+[presence] OK streaming: Prefixo: n!
+ings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:47:22] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:47:23] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 3e096100ce771900bd2c313f377d3e38).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] OK (1458835 bytes)
+[app_icon] /applications/@me -> 200
+[banner] OK (886669 bytes)
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+[presence] OK streaming: Prefixo: n!
+gs] carregado 4 servidor(es) do disco.
+[2026-05-30 07:48:09] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:48:10] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: f438c9690786b92f35c99534ae897dd0).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] OK (1458835 bytes)
+[app_icon] /applications/@me -> 200
+[banner] HTTPException código 50035: Invalid Form Body
+In banner: You are changing your profile banner too fast. Try again later.
+[2026-05-30 07:48:27] [WARNING ] discord.http: We are being rate limited. PUT https://discord.com/api/v10/applications/1506154628432138362/guilds/1480958892103176222/commands responded with 429. Retrying in 9.51 seconds.
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+[presence] OK streaming: Prefixo: n!
+
+========================================
+[2026-05-30 07:57:08.213488] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 07:57:09] [INFO    ] discord.client: logging in using static token
+[2026-05-30 07:57:10] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: ad2921f77c9804804609e581ab531ec1).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] OK (1458835 bytes)
+[app_icon] /applications/@me -> 200
+[banner] OK (886669 bytes)
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+[presence] OK streaming: Prefixo: n!
+[presence] OK streaming: Prefixo: n!
+
+========================================
+[2026-05-30 08:10:08.252272] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 08:10:09] [INFO    ] discord.client: logging in using static token
+[2026-05-30 08:10:11] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 8413ece73c7145cc29da3801e81d4fad).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] OK (1458835 bytes)
+[app_icon] /applications/@me -> 200
+[banner] OK (886669 bytes)
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+[presence] OK streaming: Prefixo: n!
+[presence] OK streaming: Prefixo: n!
+
+========================================
+[2026-05-30 08:23:08.294905] Iniciando bot '366033610412785674'
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-30 08:23:09] [INFO    ] discord.client: logging in using static token
+[2026-05-30 08:23:10] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 7512fb8e39d3d3a4a73b7d140adad5ea).
+Bot online como NATA#1069 (ID: 1506154628432138362)
+[prefix] restaurado: 'n!' de 'C:\Users\Anderson Chaves\Downloads\bot\clientes\366033610412785674\bot_prefix.txt'
+[presence] OK streaming: Prefixo: n!
+[emoji] success via guild cache: <a:success:1508199526002065521>
+[presence] OK streaming: Prefixo: n!
+[bio] /applications/@me -> 200: {"id":"1506154628432138362","name":"NATA security","icon":"3d0255840c5fa813060508a9070ff576","description":"**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot","type":null,"bot":{"id":"150
+[bio] /users/@me -> 200: {"id":"1506154628432138362","username":"NATA","avatar":"3d0255840c5fa813060508a9070ff576","discriminator":"1069","public_flags":0,"flags":0,"bot":true,"banner":"f11ff6c2006b79a96f5f5eeb6301fa1b","acce
+[avatar] OK (1458835 bytes)
+[app_icon] /applications/@me -> 200
+[banner] OK (886669 bytes)
+[slash] NATA®: 7 cmds.
+[slash] teste hype: 7 cmds.
+[slash] Globais limpos.
+[presence] OK streaming: Prefixo: n!
+[presence] OK streaming: Prefixo: n!
+[presence] OK streaming: Prefixo: n!
+[presence] OK streaming: Prefixo: n!
+[presence] OK streaming: Prefixo: n!
+[presence] OK streaming: Prefixo: n!

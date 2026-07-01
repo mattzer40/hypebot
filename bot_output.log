@@ -1,0 +1,105 @@
+[2026-05-23 11:11:55] [INFO    ] discord.client: logging in using static token
+[2026-05-23 11:11:56] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 6f2db9d251bdd53f62aa39068e3b1bb3).
+C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py:1118: RuntimeWarning: coroutine 'ProtecaoGeralView._refresh' was never awaited
+  view._refresh(components)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+[2026-05-23 11:13:10] [INFO    ] discord.client: logging in using static token
+[2026-05-23 11:13:12] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: f1e0e40f137057429c53da749e7d9177).
+C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py:1118: RuntimeWarning: coroutine 'ProtecaoGeralView._refresh' was never awaited
+  view._refresh(components)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+[2026-05-23 11:15:05] [WARNING ] discord.http: We are being rate limited. POST https://discord.com/api/v10/channels/1506987751835303937/messages responded with 429. Retrying in 0.58 seconds.
+[2026-05-23 11:15:05] [WARNING ] discord.http: We are being rate limited. POST https://discord.com/api/v10/channels/1506987751835303937/messages responded with 429. Retrying in 0.58 seconds.
+[2026-05-23 11:15:05] [WARNING ] discord.http: We are being rate limited. POST https://discord.com/api/v10/channels/1506987751835303937/messages responded with 429. Retrying in 0.57 seconds.
+[2026-05-23 11:15:05] [WARNING ] discord.http: We are being rate limited. POST https://discord.com/api/v10/channels/1506987751835303937/messages responded with 429. Retrying in 0.51 seconds.
+[2026-05-23 11:15:06] [WARNING ] discord.http: We are being rate limited. POST https://discord.com/api/v10/channels/1506987751835303937/messages responded with 429. Retrying in 0.75 seconds.
+[2026-05-23 11:15:06] [WARNING ] discord.http: We are being rate limited. POST https://discord.com/api/v10/channels/1506987751835303937/messages responded with 429. Retrying in 0.76 seconds.
+[2026-05-23 11:15:06] [WARNING ] discord.http: We are being rate limited. POST https://discord.com/api/v10/channels/1506987751835303937/messages responded with 429. Retrying in 0.74 seconds.
+[2026-05-23 11:15:07] [WARNING ] discord.http: We are being rate limited. POST https://discord.com/api/v10/channels/1506987751835303937/messages responded with 429. Retrying in 0.77 seconds.
+[2026-05-23 11:15:07] [WARNING ] discord.http: We are being rate limited. POST https://discord.com/api/v10/channels/1506987751835303937/messages responded with 429. Retrying in 0.69 seconds.
+[2026-05-23 11:15:08] [WARNING ] discord.http: We are being rate limited. POST https://discord.com/api/v10/channels/1506987751835303937/messages responded with 429. Retrying in 0.75 seconds.
+[2026-05-23 11:15:10] [WARNING ] discord.http: We are being rate limited. POST https://discord.com/api/v10/channels/1506987751835303937/messages responded with 429. Retrying in 0.60 seconds.
+[2026-05-23 11:17:00] [INFO    ] discord.client: logging in using static token
+[2026-05-23 11:17:02] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: cf8a71624aa073e85c34c778e27a43f4).
+[2026-05-23 11:20:51] [INFO    ] discord.client: logging in using static token
+[2026-05-23 11:20:52] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 5df73c97cd3226b2da3b093ad591ff18).
+C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py:1118: RuntimeWarning: coroutine 'ProtecaoGeralView._refresh' was never awaited
+  view._refresh(components)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py:1118: RuntimeWarning: coroutine 'AntSpamView._refresh' was never awaited
+  view._refresh(components)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+[2026-05-23 11:58:43] [INFO    ] discord.client: logging in using static token
+[2026-05-23 11:58:45] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 933a3a7b7dbb1ca5cbe2bcfdba3a2517).
+C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py:1118: RuntimeWarning: coroutine 'ProtecaoGeralView._refresh' was never awaited
+  view._refresh(components)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py:1118: RuntimeWarning: coroutine 'EmbedBuilderView._refresh' was never awaited
+  view._refresh(components)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+[2026-05-23 12:14:01] [INFO    ] discord.client: logging in using static token
+[2026-05-23 12:14:02] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 92b5a012f88324955197e08dcae98f0f).
+C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py:1118: RuntimeWarning: coroutine 'ProtecaoGeralView._refresh' was never awaited
+  view._refresh(components)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+[2026-05-23 12:17:08] [ERROR   ] discord.ui.view: Ignoring exception in view <AntiRaidActionView timeout=60 children=1> for item <AntiRaidActionSelect placeholder='Escolha a punição a aplicar...' min_values=1 max_values=1 disabled=False id=2>
+Traceback (most recent call last):
+  File "C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py", line 598, in _scheduled_task
+    await item.callback(interaction)
+  File "C:\Users\Anderson Chaves\Downloads\bot\bot.py", line 12439, in callback
+    self._parent.author, settings,
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'author'
+[2026-05-23 12:18:25] [INFO    ] discord.client: logging in using static token
+[2026-05-23 12:18:27] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 48f176b9f9cace2ed6a65d8646855388).
+C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py:1118: RuntimeWarning: coroutine 'ProtecaoGeralView._refresh' was never awaited
+  view._refresh(components)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py:1118: RuntimeWarning: coroutine 'BackupView._refresh' was never awaited
+  view._refresh(components)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+[2026-05-23 20:21:35] [INFO    ] discord.client: logging in using static token
+[2026-05-23 20:21:37] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 3d23b68b451b42866369572980147c41).
+[2026-05-23 20:24:37] [INFO    ] discord.client: logging in using static token
+[2026-05-23 20:24:38] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 85283dde47e0bedcde43f168d6183d33).
+[2026-05-23 20:28:09] [INFO    ] discord.client: logging in using static token
+[2026-05-23 20:28:10] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: be2ff952d879907b937e96c85a610cef).
+[2026-05-23 20:29:24] [INFO    ] discord.client: logging in using static token
+[2026-05-23 20:29:26] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 781e937347d97f2c4ab4bdc7618537b0).
+[2026-05-23 20:47:41] [INFO    ] discord.client: logging in using static token
+[2026-05-23 20:47:43] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: c48df069a90ebcebeb0fa240d32ea532).
+C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py:1118: RuntimeWarning: coroutine 'ProtecaoGeralView._refresh' was never awaited
+  view._refresh(components)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+[2026-05-23 20:50:22] [INFO    ] discord.client: logging in using static token
+[2026-05-23 20:50:23] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 1a30d54f9ce967bb5be4c88b64a71e9b).
+[2026-05-23 20:53:16] [INFO    ] discord.client: logging in using static token
+[2026-05-23 20:53:17] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: d1801505126d9ed58cb66dbc6e64cd57).
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-23 20:54:13] [INFO    ] discord.client: logging in using static token
+[2026-05-23 20:54:15] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 04dc32da325d8196adb8aee7b9f3a7ce).
+Bot online como NATA security#1069 (ID: 1506154628432138362)
+[slash] Comandos slash sincronizados em 3 servidor(es).
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-23 20:55:01] [INFO    ] discord.client: logging in using static token
+[2026-05-23 20:55:02] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: e28c78be7d1dd63f61d71e7a545e4196).
+Bot online como NATA security#1069 (ID: 1506154628432138362)
+[slash] Comandos slash sincronizados em 3 servidor(es).
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-23 20:58:42] [INFO    ] discord.client: logging in using static token
+[2026-05-23 20:58:43] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: bd787754ca50732eb7f4e520169a2a1e).
+Bot online como NATA security#1069 (ID: 1506154628432138362)
+[slash] Comandos slash sincronizados em 3 servidor(es).
+C:\Users\Anderson Chaves\AppData\Local\Programs\Python\Python314\Lib\site-packages\discord\ui\view.py:1118: RuntimeWarning: coroutine 'ProtecaoGeralView._refresh' was never awaited
+  view._refresh(components)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-23 21:04:35] [INFO    ] discord.client: logging in using static token
+[2026-05-23 21:04:36] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 34fe8dea6f3b2e1a828cf90c2ed175b7).
+Bot online como NATA security#1069 (ID: 1506154628432138362)
+[slash] Comandos slash sincronizados em 3 servidor(es).
+[settings] carregado 4 servidor(es) do disco.
+[2026-05-23 21:07:23] [INFO    ] discord.client: logging in using static token
+[2026-05-23 21:07:24] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: e2459d570ba394d02c373d9b63ad8f7e).
+Bot online como NATA security#1069 (ID: 1506154628432138362)
+[slash] Comandos slash sincronizados em 3 servidor(es).

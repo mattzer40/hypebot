@@ -1,0 +1,10 @@
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5500
+ * Running on http://192.168.0.7:5500
+Press CTRL+C to quit
+127.0.0.1 - - [30/May/2026 07:56:34] "POST /api/bots/restart-all HTTP/1.1" 401 -
+127.0.0.1 - - [30/May/2026 08:04:24] "GET /api/customers HTTP/1.1" 401 -
+127.0.0.1 - - [30/May/2026 08:04:25] "GET /api/customers HTTP/1.1" 401 -
+127.0.0.1 - - [30/May/2026 08:04:36] "POST /login HTTP/1.1" 200 -
+127.0.0.1 - - [30/May/2026 08:04:36] "GET /api/customers HTTP/1.1" 401 -

@@ -1,0 +1,36 @@
+# Variáveis de ambiente (tokens, senhas)
+.env
+clientes/**/.env
+
+# Logs
+*.log
+*.txt
+!requirements.txt
+bot_output.*
+bot_error.*
+bot_out.*
+bot_err.*
+dash_out.*
+dash_err.*
+tunnel.log
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Dados locais dos clientes (gerados em runtime)
+clientes/*/bot_prefix.txt
+clientes/*/bot_settings.json
+clientes/*/bot.log
+
+# Arquivos temporários / builds
+deploy_update.zip
+*.vbs
+*.bat
+
+# Railway local config
+.railway/
+
+# Claude worktrees
+.claude/worktrees/

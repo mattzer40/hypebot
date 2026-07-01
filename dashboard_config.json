@@ -1,0 +1,19 @@
+{
+  "owners": [
+    {
+      "id": "mtzerak",
+      "nome": "mtzerak",
+      "hash": "6fc5aef5b7773f8f34ac0482930cfdd89b392894a5fa99da0a6ccbd99272e980",
+      "salt": "f594f1c4a7e214d91743ff6dcc8afadb",
+      "role": "super"
+    },
+    {
+      "id": "davi",
+      "nome": "dapraça",
+      "hash": "8d5028e798d2ce278a01d0b9bd1f18c1adb8e29ba2b0aafdda8aba7a643c8574",
+      "salt": "f30587f28214b745505e2992ec965af1",
+      "role": "super"
+    }
+  ],
+  "secret_key": "66e8aa01984654baacbf83593587260bb6c69d9907818eb16cf233ffede10ec8"
+}

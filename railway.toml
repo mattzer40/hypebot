@@ -1,0 +1,12 @@
+[build]
+builder = "nixpacks"
+installCommand = "pip install -r /app/requirements.txt"
+
+[deploy]
+startCommand = "bash start.sh"
+healthcheckPath = "/login"
+healthcheckTimeout = 120
+restartPolicyType = "always"
+
+[[mounts]]
+mountPath = "/data"
