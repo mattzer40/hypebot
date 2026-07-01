@@ -34,11 +34,22 @@ CUSTOMERS_FILE      = DATA_DIR / "customers.json"
 _CUSTOMERS_SEED     = CODE_DIR / "customers.json"
 _force_seed = os.environ.get("FORCE_SEED_CUSTOMERS", "0") == "1"
 _file_empty = CUSTOMERS_FILE.exists() and CUSTOMERS_FILE.stat().st_size <= 4
-_seed_customers_set = bool(os.environ.get("SEED_CUSTOMERS", "").strip())
-if not _seed_customers_set and (_force_seed or not CUSTOMERS_FILE.exists() or _file_empty) and _CUSTOMERS_SEED.exists():
+if (_force_seed or not CUSTOMERS_FILE.exists() or _file_empty) and _CUSTOMERS_SEED.exists():
     import shutil as _sh
     _sh.copy2(_CUSTOMERS_SEED, CUSTOMERS_FILE)
     print(f"[manager] customers.json copiado do código → volume ({CUSTOMERS_FILE})", flush=True)
+# Restaura customers do SEED_CUSTOMERS (tem prioridade sobre o arquivo do código)
+_seed_customers_raw = os.environ.get("SEED_CUSTOMERS", "").strip()
+if _seed_customers_raw and (not CUSTOMERS_FILE.exists() or CUSTOMERS_FILE.stat().st_size <= 4):
+    import base64 as _b64m
+    try:
+        _customers_content = _b64m.b64decode(_seed_customers_raw).decode("utf-8")
+        CUSTOMERS_FILE.write_text(_customers_content, encoding="utf-8")
+        import json as _jsonm
+        _n = len(_jsonm.loads(_customers_content))
+        print(f"[manager] customers.json restaurado de SEED_CUSTOMERS ({_n} cliente(s))", flush=True)
+    except Exception as _ce:
+        print(f"[manager] erro ao restaurar SEED_CUSTOMERS: {_ce}", flush=True)
 DEFAULT_AVATAR = CODE_DIR / "default_avatar.png"
 # Fallback: se não existir em /app/ (ex: não foi incluído no deploy), usa o volume persistente
 if not DEFAULT_AVATAR.exists():
