@@ -32826,47 +32826,51 @@ def _build_call_panel_v2_payload(
     color = settings.get("embed_color", 0x2B2D31)
     cid   = ch.id
 
-    blocks: list = []
+    # Conteúdo do container (banner + info + membros)
+    container_blocks: list = []
 
     # Banner no topo (se configurado)
     effective_banner = banner_url or settings.get("dono_call_banner_url", "")
     if effective_banner:
-        blocks.append({"type": 12, "items": [{"media": {"url": effective_banner}}]})
-        blocks.append({"type": 14, "divider": True, "spacing": 1})
+        container_blocks.append({"type": 12, "items": [{"media": {"url": effective_banner}}]})
+        container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
     # Info (abaixo do banner)
-    blocks.append({"type": 10, "content": (
+    container_blocks.append({"type": 10, "content": (
         f"**Proprietário** › {owner.mention}\n"
         f"**Canal** › {ch.mention}\n"
         f"**Limite** › {limite_val}\n\n"
         f"{status_emoji} **{status_text}**"
     )})
-    blocks.append({"type": 14, "divider": True, "spacing": 1})
+    container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
     # Membros
-    blocks.append({"type": 10, "content": f"**Membros na call — {total}**\n{membros_str}"})
-    blocks.append({"type": 14, "divider": True, "spacing": 1})
+    container_blocks.append({"type": 10, "content": f"**Membros na call — {total}**\n{membros_str}"})
 
-    # Botões — linha 0
-    blocks.append({"type": 1, "components": [
+    # Botões fora do container (mesma posição que os buttons do embed antigo)
+    btn_row0 = {"type": 1, "components": [
         {"type": 2, "style": 2, "label": "Alterar Nome",   "custom_id": f"dc_nome_{cid}"},
         {"type": 2, "style": 2, "label": "Alterar Limite", "custom_id": f"dc_limite_{cid}"},
         {"type": 2, "style": 2, "label": "Abrir Call" if is_locked else "Trancar Call", "custom_id": f"dc_status_{cid}"},
-    ]})
-    # Botões — linha 1
-    blocks.append({"type": 1, "components": [
+    ]}
+    btn_row1 = {"type": 1, "components": [
         {"type": 2, "style": 2, "label": "Expulsar da Call", "custom_id": f"dc_expulsar_{cid}"},
         {"type": 2, "style": 4 if is_auto_kick else 2, "label": "Desativar Privado" if is_auto_kick else "Modo Privado", "custom_id": f"dc_privado_{cid}"},
         {"type": 2, "style": 2, "label": "Permitir Entrada", "custom_id": f"dc_permitir_{cid}"},
-    ]})
-    # Botões — linha 2
-    blocks.append({"type": 1, "components": [
-        {"type": 2, "style": 2, "label": "Registro de Call", "custom_id": f"dc_registro_{cid}", "emoji": {"name": "📋"}},
-    ]})
+    ]}
+    btn_row2 = {"type": 1, "components": [
+        {"type": 2, "style": 2, "label": "Registro de Call", "custom_id": f"dc_registro_{cid}",
+         "emoji": {"id": "1518271952526250155", "name": "tickets"}},
+    ]}
 
     return {
         "flags": 32768,
-        "components": [{"type": 17, "accent_color": color, "components": blocks}],
+        "components": [
+            {"type": 17, "accent_color": color, "components": container_blocks},
+            btn_row0,
+            btn_row1,
+            btn_row2,
+        ],
     }
 
 
