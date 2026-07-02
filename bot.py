@@ -5572,24 +5572,35 @@ class AppearanceView(discord.ui.View):
             await interaction.followup.send(embed=err_embed, ephemeral=True)
             return
 
-        try:
-            await bot.user.edit(banner=image_bytes)
-        except discord.HTTPException as e:
-            _detalhe = (e.text or str(e))[:300]
-            print(f"[banner] erro HTTP {e.code}: {e.text}", flush=True)
-            err_embed = discord.Embed(
-                description=f"❌ {t['banner_error'].format(error=str(e))} (código {e.code})\n```{_detalhe}```",
-                color=0xED4245,
-            )
-            await interaction.followup.send(embed=err_embed, ephemeral=True)
-            return
-        except Exception as e:
-            err_embed = discord.Embed(
-                description=f"❌ Erro inesperado ao alterar o banner: `{type(e).__name__}: {e}`",
-                color=0xED4245,
-            )
-            await interaction.followup.send(embed=err_embed, ephemeral=True)
-            return
+        # Tenta aplicar o banner — Discord tem rate limit para mudanças de banner
+        for _attempt in range(3):
+            try:
+                await bot.user.edit(banner=image_bytes)
+                break  # sucesso
+            except discord.HTTPException as e:
+                _is_ratelimit = e.code == 50035 and "too fast" in (e.text or "").lower()
+                print(f"[banner] erro HTTP {e.code} (tentativa {_attempt+1}): {e.text}", flush=True)
+                if _is_ratelimit and _attempt < 2:
+                    wait_embed = discord.Embed(
+                        description=f"<a:alerta:1518271939460857968> Discord está com rate limit no banner. Aguardando {90 * (_attempt + 1)}s e tentando novamente...",
+                        color=color,
+                    )
+                    await interaction.followup.send(embed=wait_embed, ephemeral=True)
+                    await asyncio.sleep(90 * (_attempt + 1))
+                    continue
+                err_embed = discord.Embed(
+                    description=f"❌ {t['banner_error'].format(error=str(e))} (código {e.code})\n```{(e.text or '')[:200]}```",
+                    color=0xED4245,
+                )
+                await interaction.followup.send(embed=err_embed, ephemeral=True)
+                return
+            except Exception as e:
+                err_embed = discord.Embed(
+                    description=f"❌ Erro inesperado ao alterar o banner: `{type(e).__name__}: {e}`",
+                    color=0xED4245,
+                )
+                await interaction.followup.send(embed=err_embed, ephemeral=True)
+                return
 
         # Salva a imagem no disco para restaurar no reinício
         _banner_path = os.environ.get("BOT_BANNER_FILE") or os.path.join(
@@ -25388,16 +25399,24 @@ async def on_ready():
         # Aguarda 2s entre edições para evitar rate limit
         await asyncio.sleep(2)
 
-        # Banner
+        # Banner — tenta com retry porque múltiplos bots no mesmo restart competem pelo rate limit
         _bb = _read_image("BOT_BANNER_FILE", "default_banner.png")
         if _bb:
-            try:
-                await bot.user.edit(banner=_bb)
-                print(f"[banner] OK ({len(_bb)} bytes)", flush=True)
-            except discord.HTTPException as _e:
-                print(f"[banner] HTTPException código {_e.code}: {_e.text}", flush=True)
-            except Exception as _e:
-                print(f"[banner] erro: {type(_e).__name__}: {_e}", flush=True)
+            for _ba in range(3):
+                try:
+                    await bot.user.edit(banner=_bb)
+                    print(f"[banner] OK ({len(_bb)} bytes)", flush=True)
+                    break
+                except discord.HTTPException as _e:
+                    _is_rl = _e.code == 50035 and "too fast" in (_e.text or "").lower()
+                    print(f"[banner] HTTPException código {_e.code} (tentativa {_ba+1}): {_e.text}", flush=True)
+                    if _is_rl and _ba < 2:
+                        await asyncio.sleep(90 * (_ba + 1))
+                        continue
+                    break
+                except Exception as _e:
+                    print(f"[banner] erro: {type(_e).__name__}: {_e}", flush=True)
+                    break
         else:
             print("[banner] arquivo não encontrado", flush=True)
 
