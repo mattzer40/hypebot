@@ -26208,7 +26208,17 @@ async def on_member_update(before: discord.Member, after: discord.Member):
 
         if not is_bot_action and (clean_added or clean_removed):
             for rid in clean_added:
-                if not _mod_can_manage(rid):
+                can = _mod_can_manage(rid)
+                in_blocked = str(rid) in blocked_roles_cfg
+                print(
+                    f"[protecao_add] guild={after.guild.id} member={after.id} role={rid} "
+                    f"mod={moderator_id} blocked={in_blocked} has_acesso={has_acesso} "
+                    f"is_admin={mod_is_admin} mod_roles={list(mod_role_ids_for_blocked)[:5]} "
+                    f"access_required={list(blocked_roles_cfg.get(str(rid), []))[:5]} "
+                    f"allowed={can}",
+                    flush=True,
+                )
+                if not can:
                     to_remove_added.append(rid)
             for rid in clean_removed:
                 if rid not in whitelist and not _mod_can_manage(rid):
