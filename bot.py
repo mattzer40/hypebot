@@ -4048,6 +4048,11 @@ def load_settings_from_disk() -> None:
             except ValueError:
                 continue
         print(f"[settings] carregado {len(bot_settings)} servidor(es) do disco.")
+        for _gid, _gs in bot_settings.items():
+            if _gs.get("protecao_cargos_enabled"):
+                _bl = _gs.get("protecao_cargo_bloqueado", {})
+                _ac = _gs.get("protecao_cargos_acesso", [])
+                print(f"[settings] guild={_gid} protecao=ON bloqueado={list(_bl.keys())[:10]} acesso={_ac[:5]}", flush=True)
     except Exception as e:
         print(f"[settings] erro ao carregar: {e}")
 
