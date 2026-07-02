@@ -22122,7 +22122,14 @@ async def _antraid_handle(
     ANTRAID_DEBOUNCE[_db_key] = _now
     # ─────────────────────────────────────────────────────────────────────────
 
-    whitelist = set(prot.get("whitelist", []))
+    # Whitelist é compartilhada por toda a categoria (criacao/edicao/exclusao do mesmo tipo)
+    _cat_subs = next(
+        (subs for subs in ANTRAID_SUB_PROTECTIONS.values() if prot_key in subs),
+        [prot_key],
+    )
+    whitelist: set[int] = set()
+    for _sub in _cat_subs:
+        whitelist |= set(settings.get(f"antraid_{_sub}", {}).get("whitelist", []))
     if whitelist & {r.id for r in member.roles}:
         return False
     if _antraid_check(guild.id, responsible_id, prot_key, prot):
