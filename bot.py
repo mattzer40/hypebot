@@ -58,6 +58,7 @@ _call_original_overwrites: dict[int, dict] = {}  # channel_id → snapshot compl
 _call_locked: set[int] = set()  # canais travados nessa sessão (reset no restart — evita auto-kick por lock stale)
 _call_auto_kick: set[int] = set()  # canais em modo privado (sem lock de permissão — bot expulsa quem entrar)
 _call_owner_grace: dict[int, asyncio.Task] = {}  # ch.id → task de grace period (60s antes de transferir ownership)
+_call_join_log: dict[int, list] = {}  # channel_id → [(timestamp, user_id, display_name, action)]
 _ig_verif_threads: dict[int, int] = {}  # thread_id → user_id (verificação Instagram)
 _ig_verif_vcs: dict[int, int] = {}     # thread_id → vc_id (canal de voz do Criar call)
 
@@ -26670,6 +26671,7 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
             # Membro ENTROU num canal monitorado
             if after.channel and after.channel.id in dc_monitored and (before.channel is None or before.channel != after.channel):
                 ch = after.channel
+                _call_join_log.setdefault(ch.id, []).append((time.time(), member.id, member.display_name, "entrou"))
                 _cur_owner = _call_owners.get(ch.id)
                 if _cur_owner == member.id and ch.id in _call_owner_grace:
                     # Dono voltou dentro do grace period — cancela timer e atualiza painel
@@ -26709,7 +26711,20 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
             # Membro SAIU de um canal monitorado
             if before.channel and before.channel.id in dc_monitored and before.channel != after.channel:
                 ch = before.channel
-                if ch.id in _call_owners:
+                # Anti-Mover: se a call está protegida (trancada ou modo privado) e o membro foi
+                # movido para outro canal (não desconectou), reverte a movimentação.
+                _anti_moved = False
+                if (after.channel is not None
+                        and (ch.id in _call_locked or ch.id in _call_auto_kick)
+                        and ch.id in _call_owners):
+                    try:
+                        await member.move_to(ch, reason="Anti-Mover — call protegida")
+                        _anti_moved = True
+                    except Exception:
+                        pass
+                if not _anti_moved:
+                    _call_join_log.setdefault(ch.id, []).append((time.time(), member.id, member.display_name, "saiu"))
+                if not _anti_moved and ch.id in _call_owners:
                     # Remove override individual do membro que saiu (bot adicionou durante lock/permitir entrada)
                     _ow_saiu = ch.overwrites_for(member)
                     if _ow_saiu.connect is True or _ow_saiu.send_messages is True:
@@ -32809,6 +32824,16 @@ class DonoCallPanelView(discord.ui.View):
         btn_permitir.callback = self._btn_permitir
         self.add_item(btn_permitir)
 
+        btn_registro = discord.ui.Button(
+            label="Registro de Call",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"dc_registro_{cid}",
+            emoji="📋",
+            row=3,
+        )
+        btn_registro.callback = self._btn_registro
+        self.add_item(btn_registro)
+
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         owner_id = _call_owners.get(self.channel_id)
@@ -33038,6 +33063,27 @@ class DonoCallPanelView(discord.ui.View):
         view = _DonoCallPermitirView(self.channel_id)
         await interaction.response.send_message(embed=_permitir_embed, view=view, ephemeral=True)
 
+    async def _btn_registro(self, interaction: discord.Interaction):
+        entries = _call_join_log.get(self.channel_id, [])
+        if not entries:
+            _e = discord.Embed(
+                description="<a:alerta:1518271939460857968> **Nenhum evento registrado ainda.**",
+                color=0xE74C3C,
+            )
+            await interaction.response.send_message(embed=_e, ephemeral=True)
+            return
+        lines = []
+        for ts, uid, name, action in entries[-25:]:
+            dt = datetime.fromtimestamp(ts).strftime("%H:%M:%S")
+            icon = "→" if action == "entrou" else "←"
+            lines.append(f"`{dt}` {icon} **{discord.utils.escape_markdown(name)}**")
+        _e = discord.Embed(
+            title="📋  Registro de Call",
+            description="\n".join(lines),
+            color=0x5865F2,
+        )
+        await interaction.response.send_message(embed=_e, ephemeral=True)
+
 
 class _DonoCallPermitirView(discord.ui.View):
     def __init__(self, channel_id: int):
@@ -33212,6 +33258,7 @@ async def _delete_call_panel(ch: discord.VoiceChannel):
     _call_pre_lock_connect.pop(ch.id, None)
     _call_locked.discard(ch.id)
     _call_auto_kick.discard(ch.id)
+    _call_join_log.pop(ch.id, None)
     if ch.id in _call_owner_grace:
         _call_owner_grace.pop(ch.id).cancel()
     settings = get_settings(ch.guild.id)
