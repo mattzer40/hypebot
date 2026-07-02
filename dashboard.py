@@ -495,13 +495,16 @@ class BotManager:
                 # Aqui chegamos quando:
                 # 1. proc is None (primeira vez) → inicia imediatamente
                 # 2. backoff expirou (next_restart <= now) → relança após crash
+                is_first_launch = proc is None
                 p = self._launch(c)
                 if p:
                     self._procs[cid]     = p
                     self._tokens[cid]    = token
                     self._launch_ts[cid] = now
                     self._next_restart.pop(cid, None)  # limpa backoff após reinício
-                    _time.sleep(3)  # espaçamento entre lançamentos
+                    # Primeiro lançamento: aguarda mais para evitar pico de memória
+                    # quando todos os bots sobem juntos. Restart pós-crash: 3s basta.
+                    _time.sleep(20 if is_first_launch else 3)
 
     def _launch(self, customer: dict):
         cid   = customer["id"]
@@ -696,6 +699,7 @@ class BotManager:
                     self._procs[c["id"]] = p
                     self._tokens[c["id"]] = token
                 results[c["id"]] = True
+                _time.sleep(20)  # escalonamento para evitar pico de memória no restart global
             else:
                 results[c["id"]] = False
         return results
