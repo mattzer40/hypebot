@@ -10425,15 +10425,31 @@ class IgVerifTicketView(discord.ui.LayoutView):
 
         if isinstance(interaction.channel, discord.Thread):
             thread = interaction.channel
-            async def _close_thread_f(t=thread):
-                await asyncio.sleep(10)
+            _color_ig = settings.get("embed_color", 0x2B2D31)
+            async def _close_thread_f(t=thread, _c=_color_ig):
+                import aiohttp as _ah_ig
+                _hdrs = {
+                    "Authorization": f"Bot {bot.http.token}",
+                    "Content-Type": "application/json",
+                }
+                _pay = {
+                    "flags": 32768,
+                    "components": [{"type": 17, "accent_color": _c, "components": [
+                        {"type": 10, "content": "**<:tickets:1518271952526250155> Excluindo ticket**"},
+                        {"type": 14, "divider": True, "spacing": 1},
+                        {"type": 10, "content": "Este ticket será excluído em **5 segundos**."},
+                    ]}],
+                }
                 try:
-                    await t.delete()
+                    async with _ah_ig.ClientSession() as _s:
+                        await _s.post(
+                            f"https://discord.com/api/v10/channels/{t.id}/messages",
+                            headers=_hdrs, json=_pay,
+                        )
                 except Exception:
-                    try:
-                        await t.edit(locked=True, archived=True)
-                    except Exception as _e:
-                        print(f"[ig_verif] erro ao fechar thread (fechar): {_e}", flush=True)
+                    pass
+                await asyncio.sleep(5)
+                await _delete_thread_raw(t.id)
             asyncio.create_task(_close_thread_f())
 
 
@@ -41138,6 +41154,23 @@ class TicketFecharMotivoModal(discord.ui.Modal):
         )
 
 
+async def _delete_thread_raw(thread_id: int) -> bool:
+    """Deleta um thread via raw HTTP DELETE. Retorna True se bem-sucedido."""
+    import aiohttp as _ah_del
+    _headers_del = {"Authorization": f"Bot {bot.http.token}"}
+    try:
+        async with _ah_del.ClientSession() as _sess:
+            async with _sess.delete(
+                f"https://discord.com/api/v10/channels/{thread_id}",
+                headers=_headers_del,
+            ) as _r:
+                print(f"[delete_thread] id={thread_id} status={_r.status}", flush=True)
+                return _r.status in (200, 204)
+    except Exception as _e:
+        print(f"[delete_thread] erro: {_e}", flush=True)
+        return False
+
+
 async def _fechar_ticket_thread(thread: discord.Thread, settings: dict, closer=None):
     """Avisa no thread, aguarda 5s, deleta e envia log."""
     color = settings.get("embed_color", 0x2B2D31)
@@ -41191,13 +41224,7 @@ async def _fechar_ticket_thread(thread: discord.Thread, settings: dict, closer=N
             except Exception:
                 pass
 
-    try:
-        await thread.delete()
-    except Exception:
-        try:
-            await thread.edit(archived=True, locked=True)
-        except Exception:
-            pass
+    await _delete_thread_raw(thread.id)
 
 
 class TicketThreadView(discord.ui.View):
