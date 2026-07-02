@@ -35027,17 +35027,8 @@ def build_panel_v2_layout(
     blocks = panel.get("blocks") or []
     layout = discord.ui.LayoutView(timeout=None)
 
-    panel_items = _build_v2_panel_items(blocks, color, _inner_action_row=_inner_action_row)
-    if not panel_items:
-        layout.add_item(discord.ui.Container(
-            discord.ui.TextDisplay("*Painel sem conteúdo.*"),
-            accent_colour=color,
-        ))
-    else:
-        for item in panel_items:
-            layout.add_item(item)
-
-    # Adicionar select menu do ticket, se configurado
+    # Monta ActionRow do select menu do ticket para inserir DENTRO do container
+    _ticket_select_row = None
     if ticket_panel and ticket_panel.get("menus_selecao") and ticket_panel.get("menu_opcoes"):
         opcoes   = ticket_panel.get("menu_opcoes", [])
         panel_id = str(ticket_panel.get("id", ""))
@@ -35056,7 +35047,20 @@ def build_panel_v2_layout(
                 options=tp_opts,
                 custom_id=f"ticket_panel_menu_{panel_id}",
             )
-            layout.add_item(discord.ui.ActionRow(ticket_select))
+            _ticket_select_row = discord.ui.ActionRow(ticket_select)
+
+    # _inner_action_row explícito tem prioridade; caso contrário usa o do ticket
+    inner = _inner_action_row or _ticket_select_row
+
+    panel_items = _build_v2_panel_items(blocks, color, _inner_action_row=inner)
+    if not panel_items:
+        layout.add_item(discord.ui.Container(
+            discord.ui.TextDisplay("*Painel sem conteúdo.*"),
+            accent_colour=color,
+        ))
+    else:
+        for item in panel_items:
+            layout.add_item(item)
 
     return layout
 
