@@ -309,7 +309,7 @@ async def _global_view_on_error(self, interaction: discord.Interaction, error: E
 discord.ui.View.on_error = _global_view_on_error  # type: ignore[method-assign]
 
 
-bot = commands.Bot(command_prefix=_resolve_prefix, intents=intents, help_command=None, chunk_guilds_at_startup=False)
+bot = commands.Bot(command_prefix=_resolve_prefix, intents=intents, help_command=None, chunk_guilds_at_startup=True)
 
 
 @tasks.loop(minutes=5)
