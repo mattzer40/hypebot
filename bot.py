@@ -5609,7 +5609,8 @@ class AppearanceView(discord.ui.View):
         except OSError:
             pass
 
-        # Busca a URL estável do CDN (não expira, diferente de attachment.url)
+        # Aguarda o CDN processar o novo banner antes de buscar a URL estável
+        await asyncio.sleep(3)
         try:
             updated_user = await bot.fetch_user(bot.user.id)
             stable_url = str(updated_user.banner.url) if updated_user.banner else attachment.url
