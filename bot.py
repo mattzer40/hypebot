@@ -41341,7 +41341,25 @@ async def _criar_ticket_thread(
             _parts.append(ei["description"])
         _v2_blocks.append({"type": 10, "content": "\n".join(_parts)})
     else:
-        _v2_blocks.append({"type": 10, "content": f"Ticket aberto por {user.mention}."})
+        # Default quando embed_interna não configurado
+        _panel_nome = (panel.get("name") or "Suporte").lstrip("#").strip()
+        _opcao_label = (opcao or {}).get("label", "")
+        _header = f"**{_panel_nome}**" + (f" — {_opcao_label}" if _opcao_label else "")
+        _v2_blocks.extend([
+            {
+                "type": 10,
+                "content": (
+                    f"{_header}\n\n"
+                    f"Olá, {user.mention}!\n"
+                    "Utilize esse canal para tirar suas dúvidas com nossa equipe de suporte."
+                ),
+            },
+            {"type": 14, "divider": True, "spacing": 1},
+            {
+                "type": 10,
+                "content": "**Ao finalizar, o ticket pode ser fechado utilizando o botão abaixo.**",
+            },
+        ])
 
     _v2_blocks.append(_action_row)
 
