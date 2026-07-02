@@ -61,6 +61,8 @@ _call_owner_grace: dict[int, asyncio.Task] = {}  # ch.id → task de grace perio
 _call_join_log: dict[int, list] = {}  # channel_id → [(timestamp, user_id, display_name, action)]
 _ig_verif_threads: dict[int, int] = {}  # thread_id → user_id (verificação Instagram)
 _ig_verif_vcs: dict[int, int] = {}     # thread_id → vc_id (canal de voz do Criar call)
+_ticket_assumed: dict[int, int] = {}         # thread_id → user_id (quem assumiu o ticket)
+_ticket_assume_counts: dict[tuple, int] = {}  # (guild_id, user_id) → total assumidos
 
 def _deco_make_token(user) -> tuple[str, int]:
     """Gera token base64-urlsafe com dados do usuário + expiração embutida.
@@ -41247,6 +41249,27 @@ async def _fechar_ticket_thread(thread: discord.Thread, settings: dict, closer=N
     await _delete_thread_raw(thread.id)
 
 
+def _is_ticket_staff(interaction: discord.Interaction) -> bool:
+    """Retorna True se o usuário tem permissão para gerenciar tickets (cargo responsável ou admin)."""
+    member = interaction.user
+    guild  = interaction.guild
+    if not guild or not isinstance(member, discord.Member):
+        return False
+    if guild.owner_id == member.id or member.guild_permissions.administrator:
+        return True
+    thread = interaction.channel
+    if isinstance(thread, discord.Thread):
+        settings = get_settings(guild.id)
+        for panel in settings.get("ticket_panels", []):
+            if panel.get("channel_id") == thread.parent_id:
+                resp_ids: set[int] = set(panel.get("responsible_roles", []))
+                for op in panel.get("menu_opcoes", []):
+                    resp_ids |= set(op.get("responsible_roles", []))
+                if resp_ids & {r.id for r in member.roles}:
+                    return True
+    return False
+
+
 class TicketThreadView(discord.ui.View):
     def __init__(self, lang: str = "pt-br"):
         super().__init__(timeout=None)
@@ -41260,6 +41283,14 @@ class TicketThreadView(discord.ui.View):
         add_btn.callback = self._add_remove_user
         self.add_item(add_btn)
 
+        assumir_btn = discord.ui.Button(
+            label="Assumir Ticket",
+            style=discord.ButtonStyle.secondary,
+            custom_id="ticket_assumir",
+        )
+        assumir_btn.callback = self._assumir_ticket
+        self.add_item(assumir_btn)
+
         close_btn = discord.ui.Button(
             label=t.get("btn_fechar_ticket", "Fechar Ticket"),
             style=discord.ButtonStyle.danger,
@@ -41267,6 +41298,10 @@ class TicketThreadView(discord.ui.View):
         )
         close_btn.callback = self._fechar_ticket
         self.add_item(close_btn)
+
+    async def _assumir_ticket(self, interaction: discord.Interaction):
+        # Delegate to on_interaction handler (não usado direto — handler faz o trabalho)
+        pass
 
     async def _add_remove_user(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id if interaction.guild else 0
@@ -41405,8 +41440,9 @@ async def _criar_ticket_thread(
     _action_row = {
         "type": 1,
         "components": [
-            {"type": 2, "style": 2, "label": btn_add_label,   "custom_id": "ticket_add_remove_user"},
-            {"type": 2, "style": 4, "label": btn_close_label, "custom_id": "ticket_fechar"},
+            {"type": 2, "style": 2, "label": btn_add_label,    "custom_id": "ticket_add_remove_user"},
+            {"type": 2, "style": 2, "label": "Assumir Ticket", "custom_id": "ticket_assumir"},
+            {"type": 2, "style": 4, "label": btn_close_label,  "custom_id": "ticket_fechar"},
         ],
     }
 
@@ -41514,6 +41550,12 @@ async def on_interaction(interaction: discord.Interaction):
     # ── Botões de gerenciamento de ticket (persistem após restart) ─────────────
     if cid == "ticket_add_remove_user":
         try:
+            if not _is_ticket_staff(interaction):
+                await interaction.response.send_message(
+                    "<a:alerta:1518271939460857968> Apenas a equipe de suporte pode adicionar ou remover membros.",
+                    ephemeral=True,
+                )
+                return
             guild_id = interaction.guild.id if interaction.guild else 0
             settings = get_settings(guild_id)
             t = TRANSLATIONS[settings["language"]]
@@ -41529,8 +41571,79 @@ async def on_interaction(interaction: discord.Interaction):
                     pass
         return
 
+    if cid == "ticket_assumir":
+        try:
+            if not _is_ticket_staff(interaction):
+                await interaction.response.send_message(
+                    "<a:alerta:1518271939460857968> Apenas a equipe de suporte pode assumir tickets.",
+                    ephemeral=True,
+                )
+                return
+            thread = interaction.channel
+            if not isinstance(thread, discord.Thread):
+                await interaction.response.defer()
+                return
+            # Bloqueia re-assume por outro membro
+            _already_uid = _ticket_assumed.get(thread.id)
+            if _already_uid and _already_uid != interaction.user.id:
+                _already_m = (interaction.guild.get_member(_already_uid) if interaction.guild else None)
+                _already_mention = _already_m.mention if _already_m else f"<@{_already_uid}>"
+                await interaction.response.send_message(
+                    f"<a:alerta:1518271939460857968> Este ticket já foi assumido por {_already_mention}.",
+                    ephemeral=True,
+                )
+                return
+            # Registra o assume
+            _ticket_assumed[thread.id] = interaction.user.id
+            guild_id = interaction.guild.id if interaction.guild else 0
+            _ak = (guild_id, interaction.user.id)
+            _ticket_assume_counts[_ak] = _ticket_assume_counts.get(_ak, 0) + 1
+            _personal = _ticket_assume_counts[_ak]
+            _total    = get_settings(guild_id).get("ticket_total_count", 0)
+            await interaction.response.defer()
+            import aiohttp as _ah_ass
+            _h_ass = {
+                "Authorization": f"Bot {bot.http.token}",
+                "Content-Type": "application/json",
+            }
+            _p_ass = {
+                "flags": 32768,
+                "components": [{
+                    "type": 17,
+                    "accent_color": 0x2ecc71,
+                    "components": [{
+                        "type": 10,
+                        "content": (
+                            f"<a:verificadoverde:1518272098290892810> Ticket assumido por: "
+                            f"{interaction.user.mention} ({_personal}/{_total})"
+                        ),
+                    }],
+                }],
+            }
+            async with _ah_ass.ClientSession() as _sess_ass:
+                await _sess_ass.post(
+                    f"https://discord.com/api/v10/channels/{thread.id}/messages",
+                    json=_p_ass,
+                    headers=_h_ass,
+                )
+        except Exception as _te:
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.send_message(
+                        "<a:alerta:1518271939460857968> Erro ao assumir ticket.", ephemeral=True
+                    )
+                except Exception:
+                    pass
+        return
+
     if cid == "ticket_fechar":
         try:
+            if not _is_ticket_staff(interaction):
+                await interaction.response.send_message(
+                    "<a:alerta:1518271939460857968> Apenas a equipe de suporte pode fechar tickets.",
+                    ephemeral=True,
+                )
+                return
             guild_id = interaction.guild.id if interaction.guild else 0
             settings = get_settings(guild_id)
             t = TRANSLATIONS[settings["language"]]
