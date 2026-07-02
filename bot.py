@@ -4053,6 +4053,8 @@ def load_settings_from_disk() -> None:
                 _bl = _gs.get("protecao_cargo_bloqueado", {})
                 _ac = _gs.get("protecao_cargos_acesso", [])
                 print(f"[settings] guild={_gid} protecao=ON bloqueado={list(_bl.keys())[:10]} acesso={_ac[:5]}", flush=True)
+                for _rid, _racesso in list(_bl.items())[:10]:
+                    print(f"[settings]   cargo={_rid} acesso_especifico={_racesso[:5]}", flush=True)
     except Exception as e:
         print(f"[settings] erro ao carregar: {e}")
 
