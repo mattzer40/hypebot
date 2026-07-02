@@ -8755,6 +8755,22 @@ def build_ticket_painel_leia_embed(author: discord.Member, settings: dict) -> di
     return embed
 
 
+_TICKET_MENU_DEFAULT_EMOJIS = [
+    "<:tickets:1518271952526250155>",
+    "<a:online:1518271945550856295>",
+    "<:estrela:1518272022093877309>",
+    "<:Mov_chat:1518271970008105031>",
+]
+
+
+def _ticket_menu_emoji(op: dict, index: int) -> "discord.PartialEmoji | None":
+    e = _parse_menu_emoji(op.get("emoji"))
+    if isinstance(e, discord.PartialEmoji):
+        return e
+    fallback = _parse_menu_emoji(_TICKET_MENU_DEFAULT_EMOJIS[index % len(_TICKET_MENU_DEFAULT_EMOJIS)])
+    return fallback if isinstance(fallback, discord.PartialEmoji) else None
+
+
 def _build_ticket_panel_menu_view(panel: dict) -> discord.ui.View | None:
     """Builds the persistent select menu view for the ticket panel channel message."""
     opcoes = panel.get("menu_opcoes", [])
@@ -8762,12 +8778,11 @@ def _build_ticket_panel_menu_view(panel: dict) -> discord.ui.View | None:
         return None
     panel_id = str(panel.get("id", ""))
     options = []
-    for op in opcoes[:25]:
-        emoji = _parse_menu_emoji(op.get("emoji"))
+    for i, op in enumerate(opcoes[:25]):
         options.append(discord.SelectOption(
             label=op.get("label", "Opção")[:100],
             description=(op.get("description") or "")[:100] or None,
-            emoji=emoji if isinstance(emoji, discord.PartialEmoji) else None,
+            emoji=_ticket_menu_emoji(op, i),
             value=op.get("id", op.get("label", "opcao")),
         ))
     if not options:
@@ -35050,12 +35065,11 @@ def build_panel_v2_layout(
         opcoes   = ticket_panel.get("menu_opcoes", [])
         panel_id = str(ticket_panel.get("id", ""))
         tp_opts  = []
-        for op in opcoes[:25]:
-            emoji = _parse_menu_emoji(op.get("emoji"))
+        for i, op in enumerate(opcoes[:25]):
             tp_opts.append(discord.SelectOption(
                 label=(op.get("label") or "Opção")[:100],
                 description=((op.get("description") or "")[:100]) or None,
-                emoji=emoji if isinstance(emoji, discord.PartialEmoji) else None,
+                emoji=_ticket_menu_emoji(op, i),
                 value=op.get("id", op.get("label", "opcao")),
             ))
         if tp_opts:
@@ -41439,7 +41453,10 @@ async def _criar_ticket_thread(
         # Default quando embed_interna não configurado
         _panel_nome = (panel.get("name") or "Suporte").lstrip("#").strip()
         _opcao_label = (opcao or {}).get("label", "")
-        _header = f"**{_panel_nome}**" + (f" — {_opcao_label}" if _opcao_label else "")
+        _header = (
+            f"<:tickets:1518271952526250155> **{_panel_nome}**"
+            + (f" — {_opcao_label}" if _opcao_label else "")
+        )
         _v2_blocks.extend([
             {
                 "type": 10,
@@ -41452,7 +41469,7 @@ async def _criar_ticket_thread(
             {"type": 14, "divider": True, "spacing": 1},
             {
                 "type": 10,
-                "content": "**Ao finalizar, o ticket pode ser fechado utilizando o botão abaixo.**",
+                "content": "<:Mov_chat:1518271970008105031> **Ao finalizar, o ticket pode ser fechado utilizando o botão abaixo.**",
             },
         ])
 
