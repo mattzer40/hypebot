@@ -41284,23 +41284,83 @@ async def _criar_ticket_thread(
     color = settings.get("embed_color", 0x2B2D31)
 
     lang = settings.get("language", "pt-br")
-    ticket_view = TicketThreadView(lang)
+    t2   = TRANSLATIONS[lang]
+    btn_add_label   = t2.get("btn_add_remove_user", "Adicionar/Remover Usuário")
+    btn_close_label = t2.get("btn_fechar_ticket",   "Fechar Ticket")
+
+    # Monta payload dos botões (ActionRow)
+    _action_row = {
+        "type": 1,
+        "components": [
+            {"type": 2, "style": 2, "label": btn_add_label,   "custom_id": "ticket_add_remove_user"},
+            {"type": 2, "style": 4, "label": btn_close_label, "custom_id": "ticket_fechar"},
+        ],
+    }
+
+    # Usa raw HTTP (igual ao IG verif) para garantir envio no thread
+    import aiohttp as _aiohttp_ticket
+
+    _headers = {
+        "Authorization": f"Bot {bot.http.token}",
+        "Content-Type": "application/json",
+    }
+
+    async def _post_to_thread(payload: dict):
+        async with _aiohttp_ticket.ClientSession() as _sess:
+            async with _sess.post(
+                f"https://discord.com/api/v10/channels/{thread.id}/messages",
+                headers=_headers,
+                json=payload,
+            ) as _resp:
+                if _resp.status not in (200, 201):
+                    _err = await _resp.json()
+                    raise Exception(f"Discord API {_resp.status}: {_err}")
 
     try:
         if ei_v2 and (ei_v2.get("blocks") or ei_v2.get("title") or ei_v2.get("description")):
-            # V2: envia o layout + view de gerenciamento separada (Discord não permite misturar)
-            interna_layout = build_panel_v2_layout(ei_v2, settings)
-            await thread.send(content=ping_content, view=interna_layout)
-            await thread.send(view=ticket_view)
-        elif ei and (ei.get("title") or ei.get("description")):
-            embed = _draft_to_embed(ei, color)
-            await thread.send(content=ping_content, embed=embed, view=ticket_view)
+            # V2: container com conteúdo + action row de botões no mesmo payload
+            _v2_blocks = []
+            for b in (ei_v2.get("blocks") or []):
+                btype = b.get("type")
+                if btype == "text":
+                    txt = b.get("text") or ""
+                    if b.get("thumbnail"):
+                        _v2_blocks.append({
+                            "type": 9, "components": [
+                                {"type": 10, "content": txt},
+                                {"type": 11, "media": {"url": b["thumbnail"]}, "description": ""},
+                            ],
+                        })
+                    else:
+                        _v2_blocks.append({"type": 10, "content": txt})
+                elif btype == "separator":
+                    _v2_blocks.append({"type": 14, "divider": True, "spacing": 1})
+            _v2_blocks.append(_action_row)
+            _payload_v2: dict = {
+                "flags": 32768,
+                "allowed_mentions": {"parse": ["roles", "users"]},
+                "components": [{"type": 17, "accent_color": color, "components": _v2_blocks}],
+            }
+            if ping_content:
+                _payload_v2["content"] = ping_content
+            await _post_to_thread(_payload_v2)
         else:
-            fallback_embed = discord.Embed(
-                description=f"Ticket aberto por {user.mention}.",
-                color=color,
-            )
-            await thread.send(content=ping_content, embed=fallback_embed, view=ticket_view)
+            # Embed clássico
+            if ei and (ei.get("title") or ei.get("description")):
+                _embed_obj = _draft_to_embed(ei, color)
+            else:
+                _embed_obj = discord.Embed(
+                    description=f"Ticket aberto por {user.mention}.",
+                    color=color,
+                )
+            _payload_classic: dict = {
+                "embeds": [_embed_obj.to_dict()],
+                "components": [_action_row],
+                "allowed_mentions": {"parse": ["roles", "users"]},
+            }
+            if ping_content:
+                _payload_classic["content"] = ping_content
+            await _post_to_thread(_payload_classic)
     except Exception as e:
         print(f"[ticket_criado] Erro ao enviar embed no thread: {e}", flush=True)
 
