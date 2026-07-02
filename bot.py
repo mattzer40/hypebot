@@ -1743,6 +1743,25 @@ TRANSLATIONS = {
         "desmute_deactivated": "Desmute Automático desativado!",
         "desmute_reset_done": "Desmute Automático resetado!",
         "desmute_log_message": "<a:online:1518271945550856295> {member} foi desmutado automaticamente ao entrar em {channel}.",
+        "contador_call_panel_title": "Contador em Call - NATA®",
+        "contador_call_funcoes": "Funções",
+        "contador_call_funcoes_text": "`{contador}` — Retorna a quantidade de membros em call.",
+        "contador_call_info": "Informações",
+        "contador_call_estado_label": "Estado",
+        "contador_call_canal_label": "Canal",
+        "contador_call_mensagem_label": "Mensagem",
+        "btn_contador_call_canal": "Alterar Canal",
+        "btn_contador_call_mensagem": "Alterar Mensagem",
+        "btn_contador_call_reset": "Resetar Canal",
+        "contador_call_activated": "Contador em Call ativado!",
+        "contador_call_deactivated": "Contador em Call desativado!",
+        "contador_call_canal_set": "Canal definido: {channel}",
+        "contador_call_reset_done": "Contador em Call resetado!",
+        "contador_call_select_canal": "Selecione o canal de exibição...",
+        "contador_call_mensagem_modal_title": "Alterar Mensagem",
+        "contador_call_mensagem_label_input": "Mensagem (use {contador})",
+        "contador_call_mensagem_set": "Mensagem atualizada!",
+        "contador_call_mensagem_invalid": "A mensagem deve conter `{contador}`.",
         "cal_panel_title": "Painel do Calendário - NATA®",
         "cal_canal_cal_label": "Canal do Calendário",
         "cal_canal_parabens_label": "Canal do Parabéns",
@@ -3430,6 +3449,25 @@ TRANSLATIONS = {
         "desmute_deactivated": "Auto Unmute disabled!",
         "desmute_reset_done": "Auto Unmute reset!",
         "desmute_log_message": "<a:online:1518271945550856295> {member} was automatically unmuted upon joining {channel}.",
+        "contador_call_panel_title": "Call Counter - NATA®",
+        "contador_call_funcoes": "Functions",
+        "contador_call_funcoes_text": "`{contador}` — Returns the number of members in voice calls.",
+        "contador_call_info": "Information",
+        "contador_call_estado_label": "State",
+        "contador_call_canal_label": "Channel",
+        "contador_call_mensagem_label": "Message",
+        "btn_contador_call_canal": "Change Channel",
+        "btn_contador_call_mensagem": "Change Message",
+        "btn_contador_call_reset": "Reset Channel",
+        "contador_call_activated": "Call Counter enabled!",
+        "contador_call_deactivated": "Call Counter disabled!",
+        "contador_call_canal_set": "Channel set: {channel}",
+        "contador_call_reset_done": "Call Counter reset!",
+        "contador_call_select_canal": "Select the display channel...",
+        "contador_call_mensagem_modal_title": "Change Message",
+        "contador_call_mensagem_label_input": "Message (use {contador})",
+        "contador_call_mensagem_set": "Message updated!",
+        "contador_call_mensagem_invalid": "The message must contain `{contador}`.",
         "cal_panel_title": "Calendar Panel - NATA®",
         "cal_canal_cal_label": "Calendar Channel",
         "cal_canal_parabens_label": "Birthday Channel",
@@ -4365,6 +4403,9 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("desmute_channel", None)
     settings.setdefault("desmute_log_channel", None)
     settings.setdefault("desmute_roles", [])
+    settings.setdefault("contador_call_enabled", False)
+    settings.setdefault("contador_call_channel", None)
+    settings.setdefault("contador_call_message", "users in call: {contador}")
     settings.setdefault("calendar_enabled", False)
     settings.setdefault("calendar_calendar_channel", None)
     settings.setdefault("calendar_birthday_channel", None)
@@ -6021,6 +6062,12 @@ class ServidorMenuOne(discord.ui.Select):
         if selected == "mencao":
             embed = build_mencao_embed(interaction.user, settings)
             view = MencaoView(interaction.user)
+            await interaction.response.edit_message(embed=embed, view=view)
+            return
+
+        if selected == "contador_call":
+            embed = build_contador_call_embed(interaction.user, settings)
+            view = ContadorCallView(interaction.user)
             await interaction.response.edit_message(embed=embed, view=view)
             return
 
@@ -26824,6 +26871,10 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                     _sess["mute_start"] = None
                     _save_voice_time()
 
+    # ── Contador em Call ──────────────────────────────────────────────────────
+    if before.channel != after.channel:
+        asyncio.create_task(_update_contador_call(member.guild))
+
 
 @bot.event
 async def on_member_join(member: discord.Member):
@@ -28303,6 +28354,9 @@ async def clonar_config_cmd(ctx: commands.Context, source_guild_id: int = None):
     tgt["desmute_channel"]     = mc(src.get("desmute_channel"))
     tgt["desmute_log_channel"] = mc(src.get("desmute_log_channel"))
     tgt["desmute_roles"]       = mrl(src.get("desmute_roles", []))
+    tgt["contador_call_enabled"] = src.get("contador_call_enabled", False)
+    tgt["contador_call_channel"] = mc(src.get("contador_call_channel"))
+    tgt["contador_call_message"] = src.get("contador_call_message", "users in call: {contador}")
 
     # Dono de Call
     tgt["dono_call_channels"]   = mcl(src.get("dono_call_channels", []))
@@ -34492,6 +34546,209 @@ class DesmuteView(discord.ui.View):
         view = DesmuteView(self.author)
         await interaction.response.edit_message(embed=embed, view=view)
         await interaction.followup.send(embed=_notif_embed(t["desmute_reset_done"]), ephemeral=True)
+
+
+# =============================================================================
+# Contador em Call
+# =============================================================================
+
+async def _update_contador_call(guild: discord.Guild):
+    settings = get_settings(guild.id)
+    if not settings.get("contador_call_enabled"):
+        return
+    channel_id = settings.get("contador_call_channel")
+    if not channel_id:
+        return
+    ch = guild.get_channel(channel_id)
+    if ch is None:
+        return
+    total = sum(
+        len([m for m in vc.members if not m.bot])
+        for vc in guild.channels
+        if isinstance(vc, discord.VoiceChannel)
+    )
+    template = settings.get("contador_call_message", "users in call: {contador}")
+    new_name = template.format(contador=total)
+    try:
+        await ch.edit(name=new_name)
+    except Exception:
+        pass
+
+
+def build_contador_call_embed(author: discord.Member, settings: dict) -> discord.Embed:
+    t = TRANSLATIONS[settings["language"]]
+    guild = author.guild
+    color = settings.get("embed_color", 0x2B2D31)
+    icon_url = bot.user.display_avatar.url if bot.user else None
+
+    enabled = settings.get("contador_call_enabled", False)
+    status_value = ("<a:on_:1518272007624802375> Ativado" if enabled
+                    else "<a:off_:1518272060870778910> Desativado")
+
+    channel_id = settings.get("contador_call_channel")
+    nd = "<:erro:1518271951914606593> Não definido"
+    if channel_id and guild:
+        ch = guild.get_channel(channel_id)
+        canal_value = ch.mention if ch else nd
+    else:
+        canal_value = nd
+
+    msg_template = settings.get("contador_call_message", "users in call: {contador}")
+
+    embed = discord.Embed(title=t["contador_call_panel_title"], color=color)
+    embed.add_field(
+        name=f"<:ferramentas_:1518271998613131274>  {t['contador_call_funcoes']}",
+        value=t["contador_call_funcoes_text"],
+        inline=False,
+    )
+    embed.add_field(
+        name=f"<:entretenimento_:1518271992191779038>  {t['contador_call_info']}",
+        value=(
+            f"┃ **{t['contador_call_estado_label']}:** {status_value}\n"
+            f"<:mov_call:1518271964077232150> **{t['contador_call_canal_label']}:** {canal_value}\n"
+            f"<:comunidade_:1518272016971595807> **{t['contador_call_mensagem_label']}:** `{discord.utils.escape_markdown(msg_template)}`"
+        ),
+        inline=False,
+    )
+    embed.set_footer(
+        text=f"NATA® • {t['solicitado_por']} {author.name}",
+        icon_url=icon_url,
+    )
+    embed.timestamp = datetime.now()
+    return embed
+
+
+class ContadorCallCanalSelect(GuildChannelSelect):
+    def __init__(self, parent_view: "ContadorCallView", placeholder: str):
+        super().__init__(
+            placeholder=placeholder, min_values=1, max_values=1,
+            channel_types=[discord.ChannelType.voice],
+        )
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        ch = self.values[0]
+        settings["contador_call_channel"] = ch.id
+        embed = build_contador_call_embed(self.parent_view.author, settings)
+        view = ContadorCallView(self.parent_view.author)
+        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.followup.send(
+            embed=_notif_embed(t["contador_call_canal_set"].format(channel=ch.mention)),
+            ephemeral=True,
+        )
+
+
+class ContadorCallMensagemModal(discord.ui.Modal):
+    def __init__(self, parent_view: "ContadorCallView"):
+        settings = get_settings(parent_view.author.guild.id if parent_view.author.guild else 0)
+        t = TRANSLATIONS[settings["language"]]
+        super().__init__(title=t["contador_call_mensagem_modal_title"])
+        self.parent_view = parent_view
+        self.msg_input = discord.ui.TextInput(
+            label=t["contador_call_mensagem_label_input"],
+            placeholder="users in call: {contador}",
+            default=settings.get("contador_call_message", "users in call: {contador}"),
+            max_length=100,
+            required=True,
+        )
+        self.add_item(self.msg_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        value = self.msg_input.value.strip()
+        if "{contador}" not in value:
+            await interaction.response.send_message(
+                embed=_notif_embed(t["contador_call_mensagem_invalid"]), ephemeral=True
+            )
+            return
+        settings["contador_call_message"] = value
+        embed = build_contador_call_embed(self.parent_view.author, settings)
+        view = ContadorCallView(self.parent_view.author)
+        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.followup.send(
+            embed=_notif_embed(t["contador_call_mensagem_set"]), ephemeral=True
+        )
+
+
+class ContadorCallView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=None)
+        self.author = author
+        self._build()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            guild_id = interaction.guild.id if interaction.guild else 0
+            lang = get_settings(guild_id)["language"]
+            await interaction.response.send_message(
+                TRANSLATIONS[lang]["only_author"], ephemeral=True
+            )
+            return False
+        return True
+
+    def _build(self):
+        self.clear_items()
+        settings = get_settings(self.author.guild.id if self.author.guild else 0)
+        t = TRANSLATIONS[settings["language"]]
+
+        enabled = settings.get("contador_call_enabled", False)
+        toggle_label = t["btn_deactivate"] if enabled else t["btn_activate"]
+        toggle_style = discord.ButtonStyle.danger if enabled else discord.ButtonStyle.success
+
+        row0 = [
+            (t["back"], discord.ButtonStyle.primary, self._back),
+            (toggle_label, toggle_style, self._toggle),
+            (t["btn_contador_call_canal"], discord.ButtonStyle.secondary, self._canal),
+            (t["btn_contador_call_mensagem"], discord.ButtonStyle.secondary, self._mensagem),
+            (t["btn_contador_call_reset"], discord.ButtonStyle.danger, self._reset),
+        ]
+        for label, style, cb in row0:
+            btn = discord.ui.Button(label=label, style=style, row=0, emoji=_button_emoji(style))
+            btn.callback = cb
+            self.add_item(btn)
+
+    async def _back(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_servidor_embed(self.author, settings)
+        view = ServidorView(self.author)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    async def _toggle(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        settings["contador_call_enabled"] = not settings.get("contador_call_enabled", False)
+        embed = build_contador_call_embed(self.author, settings)
+        view = ContadorCallView(self.author)
+        await interaction.response.edit_message(embed=embed, view=view)
+        msg = t["contador_call_activated"] if settings["contador_call_enabled"] else t["contador_call_deactivated"]
+        await interaction.followup.send(embed=_notif_embed(msg), ephemeral=True)
+        if interaction.guild:
+            asyncio.create_task(_update_contador_call(interaction.guild))
+
+    async def _canal(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        view = _SingleSelectView(ContadorCallCanalSelect(self, t["contador_call_select_canal"]))
+        await interaction.response.send_message(
+            embed=_notif_embed(t["contador_call_select_canal"]), view=view, ephemeral=True
+        )
+
+    async def _mensagem(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(ContadorCallMensagemModal(self))
+
+    async def _reset(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        settings["contador_call_enabled"] = False
+        settings["contador_call_channel"] = None
+        settings["contador_call_message"] = "users in call: {contador}"
+        embed = build_contador_call_embed(self.author, settings)
+        view = ContadorCallView(self.author)
+        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.followup.send(embed=_notif_embed(t["contador_call_reset_done"]), ephemeral=True)
 
 
 # =============================================================================
