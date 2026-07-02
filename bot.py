@@ -309,7 +309,7 @@ async def _global_view_on_error(self, interaction: discord.Interaction, error: E
 discord.ui.View.on_error = _global_view_on_error  # type: ignore[method-assign]
 
 
-bot = commands.Bot(command_prefix=_resolve_prefix, intents=intents, help_command=None, chunk_guilds_at_startup=True)
+bot = commands.Bot(command_prefix=_resolve_prefix, intents=intents, help_command=None, chunk_guilds_at_startup=False)
 
 
 @tasks.loop(minutes=5)
@@ -26047,14 +26047,40 @@ async def _log_kick(member: discord.Member, channel_id: int, title: str, descrip
 
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
+    added: set[int] = set()
+    removed: set[int] = set()
     if before.roles == after.roles:
-        return
-    before_ids = {r.id for r in before.roles}
-    after_ids = {r.id for r in after.roles}
-    added = after_ids - before_ids
-    removed = before_ids - after_ids
-    if not added and not removed:
-        return
+        if before is not after:
+            return  # cargo não mudou (membro em cache)
+        # Membro fora do cache — discord.py despacha o mesmo objeto para before e after.
+        # Reconstruímos a mudança de cargo a partir do audit log.
+        try:
+            from datetime import timezone as _tz_mu
+            await asyncio.sleep(2)
+            async for entry in after.guild.audit_logs(
+                limit=5, action=discord.AuditLogAction.member_role_update
+            ):
+                if not (entry.target and entry.target.id == after.id):
+                    continue
+                age = (datetime.now(_tz_mu.utc) - entry.created_at).total_seconds()
+                if age > 20:
+                    break
+                _bl = getattr(entry.before, 'roles', [])
+                _al = getattr(entry.after, 'roles', [])
+                added = {r.id for r in _al} - {r.id for r in _bl}
+                removed = {r.id for r in _bl} - {r.id for r in _al}
+                break
+        except Exception:
+            return
+        if not added and not removed:
+            return
+    else:
+        before_ids = {r.id for r in before.roles}
+        after_ids = {r.id for r in after.roles}
+        added = after_ids - before_ids
+        removed = before_ids - after_ids
+        if not added and not removed:
+            return
 
     # ── Blacklist de cargos permanente ────────────────────────────────────────
     if added:
