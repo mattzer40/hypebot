@@ -32823,9 +32823,8 @@ def _build_call_panel_v2_payload(
     else:
         membros_str = "*Ninguém na call*"
 
-    color      = settings.get("embed_color", 0x2B2D31)
-    guild_icon = ch.guild.icon.url if ch.guild.icon else owner.display_avatar.url
-    cid        = ch.id
+    color = settings.get("embed_color", 0x2B2D31)
+    cid   = ch.id
 
     blocks: list = []
 
@@ -32834,14 +32833,6 @@ def _build_call_panel_v2_payload(
     if effective_banner:
         blocks.append({"type": 12, "items": [{"media": {"url": effective_banner}}]})
         blocks.append({"type": 14, "divider": True, "spacing": 1})
-
-    # Cabeçalho: nome do canal + ícone do servidor
-    blocks.append({
-        "type": 9,
-        "components": [{"type": 10, "content": f"**<:mov_call:1518271964077232150> {ch.name}**"}],
-        "accessory": {"type": 11, "media": {"url": guild_icon}},
-    })
-    blocks.append({"type": 14, "divider": True, "spacing": 1})
 
     # Info (abaixo do banner)
     blocks.append({"type": 10, "content": (
