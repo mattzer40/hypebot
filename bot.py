@@ -32857,31 +32857,27 @@ def _build_call_panel_v2_payload(
 
     # Membros
     container_blocks.append({"type": 10, "content": f"**Membros na call — {total}**\n{membros_str}"})
+    container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
-    # Botões fora do container (mesma posição que os buttons do embed antigo)
-    btn_row0 = {"type": 1, "components": [
+    # Botões dentro do container (ficam junto com a embed, igual ao padrão antigo)
+    container_blocks.append({"type": 1, "components": [
         {"type": 2, "style": 2, "label": "Alterar Nome",   "custom_id": f"dc_nome_{cid}"},
         {"type": 2, "style": 2, "label": "Alterar Limite", "custom_id": f"dc_limite_{cid}"},
         {"type": 2, "style": 2, "label": "Abrir Call" if is_locked else "Trancar Call", "custom_id": f"dc_status_{cid}"},
-    ]}
-    btn_row1 = {"type": 1, "components": [
+    ]})
+    container_blocks.append({"type": 1, "components": [
         {"type": 2, "style": 2, "label": "Expulsar da Call", "custom_id": f"dc_expulsar_{cid}"},
         {"type": 2, "style": 4 if is_auto_kick else 2, "label": "Desativar Privado" if is_auto_kick else "Modo Privado", "custom_id": f"dc_privado_{cid}"},
         {"type": 2, "style": 2, "label": "Permitir Entrada", "custom_id": f"dc_permitir_{cid}"},
-    ]}
-    btn_row2 = {"type": 1, "components": [
+    ]})
+    container_blocks.append({"type": 1, "components": [
         {"type": 2, "style": 2, "label": "Registro de Call", "custom_id": f"dc_registro_{cid}",
          "emoji": {"id": "1518271952526250155", "name": "tickets"}},
-    ]}
+    ]})
 
     return {
         "flags": 32768,
-        "components": [
-            {"type": 17, "accent_color": color, "components": container_blocks},
-            btn_row0,
-            btn_row1,
-            btn_row2,
-        ],
+        "components": [{"type": 17, "accent_color": color, "components": container_blocks}],
     }
 
 
