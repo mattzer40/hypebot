@@ -8911,6 +8911,16 @@ class TicketPainelLeiaView(discord.ui.View):
             menu_view = None
             if panel.get("menus_selecao") and panel.get("menu_opcoes"):
                 menu_view = _build_ticket_panel_menu_view(panel)
+            elif panel.get("usar_botao") and not panel.get("menus_selecao"):
+                _pb_id    = str(panel.get("id", ""))
+                _pb_label = (panel.get("nome") or "Abrir Ticket")[:80]
+                _pb_btn   = discord.ui.Button(
+                    label=_pb_label,
+                    style=discord.ButtonStyle.primary,
+                    custom_id=f"ticket_panel_btn_{_pb_id}",
+                )
+                menu_view = discord.ui.View(timeout=None)
+                menu_view.add_item(_pb_btn)
             if has_v2:
                 # Envia como LayoutView V2 com separadores nativos
                 layout = build_panel_v2_layout(v2_data, settings, ticket_panel=panel)
@@ -35388,6 +35398,15 @@ def build_panel_v2_layout(
                 custom_id=f"ticket_panel_menu_{panel_id}",
             )
             _ticket_select_row = discord.ui.ActionRow(ticket_select)
+    elif ticket_panel and ticket_panel.get("usar_botao") and not ticket_panel.get("menus_selecao"):
+        panel_id = str(ticket_panel.get("id", ""))
+        _btn_label = (ticket_panel.get("nome") or "Abrir Ticket")[:80]
+        _ticket_btn = discord.ui.Button(
+            label=_btn_label,
+            style=discord.ButtonStyle.primary,
+            custom_id=f"ticket_panel_btn_{panel_id}",
+        )
+        _ticket_select_row = discord.ui.ActionRow(_ticket_btn)
 
     # _inner_action_row explícito tem prioridade; caso contrário usa o do ticket
     inner = _inner_action_row or _ticket_select_row
@@ -42128,6 +42147,37 @@ async def on_interaction(interaction: discord.Interaction):
                 try:
                     await interaction.response.send_message(
                         "<a:alerta:1518271939460857968> Erro no ticket.", ephemeral=True
+                    )
+                except Exception:
+                    pass
+        return
+
+    # ── Handler para botão "Abrir Ticket" do painel (usar_botao=True) ──────────
+    if cid.startswith("ticket_panel_btn_"):
+        try:
+            panel_id = cid[len("ticket_panel_btn_"):]
+            guild_id = interaction.guild.id if interaction.guild else 0
+            settings = get_settings(guild_id)
+            t = TRANSLATIONS[settings["language"]]
+            panel = _find_panel(settings, panel_id)
+            if not panel:
+                await interaction.response.defer(ephemeral=True)
+                return
+            await interaction.response.defer(ephemeral=True)
+            await _criar_ticket_thread(interaction, panel, None, settings, t)
+        except Exception as _tbe:
+            print(f"[ticket_btn] ERRO: {type(_tbe).__name__}: {_tbe}", flush=True)
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.send_message(
+                        "<a:alerta:1518271939460857968> Erro ao criar ticket. Tente novamente.", ephemeral=True
+                    )
+                except Exception:
+                    pass
+            elif not interaction.is_expired():
+                try:
+                    await interaction.followup.send(
+                        "<a:alerta:1518271939460857968> Erro ao criar ticket. Tente novamente.", ephemeral=True
                     )
                 except Exception:
                     pass
