@@ -1747,6 +1747,14 @@ TRANSLATIONS = {
         "ticket_ja_aberto": "<a:alerta:1518271939460857968> Você já tem um ticket aberto: {thread}",
         "ticket_canal_invalido": "<a:alerta:1518271939460857968> Canal do painel não encontrado. Avise um administrador.",
         "ticket_erro_criar": "<a:alerta:1518271939460857968> Erro ao criar ticket: {erro}",
+        "btn_fechar_ticket": "Fechar Ticket",
+        "btn_add_remove_user": "Adicionar/Remover Usuário",
+        "ticket_fechado": "Ticket fechado.",
+        "ticket_fechar_motivo_title": "Motivo para Fechar",
+        "ticket_fechar_motivo_label": "Descreva o motivo do fechamento",
+        "ticket_add_user_placeholder": "Selecione um usuário...",
+        "ticket_user_added": "{user} adicionado ao ticket.",
+        "ticket_user_removed": "{user} removido do ticket.",
         "contador_call_panel_title": "Contador em Call - NATA®",
         "contador_call_funcoes": "Funções",
         "contador_call_funcoes_text": "`{contador}` — Retorna a quantidade de membros em call.",
@@ -3457,6 +3465,14 @@ TRANSLATIONS = {
         "ticket_ja_aberto": "<a:alerta:1518271939460857968> You already have an open ticket: {thread}",
         "ticket_canal_invalido": "<a:alerta:1518271939460857968> Panel channel not found. Contact an administrator.",
         "ticket_erro_criar": "<a:alerta:1518271939460857968> Error creating ticket: {erro}",
+        "btn_fechar_ticket": "Close Ticket",
+        "btn_add_remove_user": "Add/Remove User",
+        "ticket_fechado": "Ticket closed.",
+        "ticket_fechar_motivo_title": "Reason to Close",
+        "ticket_fechar_motivo_label": "Describe the reason for closing",
+        "ticket_add_user_placeholder": "Select a user...",
+        "ticket_user_added": "{user} added to the ticket.",
+        "ticket_user_removed": "{user} removed from the ticket.",
         "contador_call_panel_title": "Call Counter - NATA®",
         "contador_call_funcoes": "Functions",
         "contador_call_funcoes_text": "`{contador}` — Returns the number of members in voice calls.",
@@ -41022,6 +41038,155 @@ async def on_resumed():
     await _set_streaming_prefix(_stream_prefix_current or "n!")
 
 
+class TicketAddUserSelect(discord.ui.UserSelect):
+    def __init__(self, placeholder: str):
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id if interaction.guild else 0
+        settings = get_settings(guild_id)
+        t = TRANSLATIONS[settings["language"]]
+        thread = interaction.channel
+        target = self.values[0]
+        if not isinstance(thread, discord.Thread):
+            await interaction.response.defer()
+            return
+        members = await thread.fetch_members()
+        member_ids = {m.id for m in members}
+        if target.id in member_ids:
+            try:
+                await thread.remove_user(target)
+            except Exception:
+                pass
+            await interaction.response.send_message(
+                t.get("ticket_user_removed", "{user} removido.").format(user=target.mention),
+                ephemeral=True,
+            )
+        else:
+            try:
+                await thread.add_user(target)
+            except Exception:
+                pass
+            await interaction.response.send_message(
+                t.get("ticket_user_added", "{user} adicionado.").format(user=target.mention),
+                ephemeral=True,
+            )
+
+
+class TicketFecharMotivoModal(discord.ui.Modal):
+    def __init__(self, thread: discord.Thread, lang: str):
+        t = TRANSLATIONS[lang]
+        super().__init__(title=t.get("ticket_fechar_motivo_title", "Motivo para Fechar"))
+        self.thread = thread
+        self.motivo_inp = discord.ui.TextInput(
+            label=t.get("ticket_fechar_motivo_label", "Motivo"),
+            style=discord.TextStyle.paragraph,
+            required=True,
+            max_length=500,
+        )
+        self.add_item(self.motivo_inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id if interaction.guild else 0
+        settings = get_settings(guild_id)
+        t = TRANSLATIONS[settings["language"]]
+        motivo = self.motivo_inp.value.strip()
+        color = settings.get("embed_color", 0x2B2D31)
+        embed = discord.Embed(
+            description=f"**Motivo:** {motivo}\n\nTicket fechado por {interaction.user.mention}.",
+            color=color,
+        )
+        try:
+            await self.thread.send(embed=embed)
+        except Exception:
+            pass
+        await _fechar_ticket_thread(self.thread, settings, interaction.user)
+        await interaction.response.send_message(
+            t.get("ticket_fechado", "Ticket fechado."), ephemeral=True
+        )
+
+
+async def _fechar_ticket_thread(thread: discord.Thread, settings: dict, closer=None):
+    """Arquiva o thread e envia log."""
+    # Log
+    log_ch_id = settings.get("ticket_log_channel")
+    if log_ch_id and thread.guild:
+        log_ch = thread.guild.get_channel(log_ch_id)
+        if log_ch:
+            color = settings.get("embed_color", 0x2B2D31)
+            embed = discord.Embed(
+                title="🎫 Ticket Fechado",
+                description=(
+                    f"**Thread:** {thread.mention} (`{thread.name}`)\n"
+                    + (f"**Fechado por:** {closer.mention}" if closer else "")
+                ),
+                color=color,
+            )
+            embed.timestamp = datetime.now()
+            try:
+                await log_ch.send(embed=embed)
+            except Exception:
+                pass
+    try:
+        await thread.edit(archived=True, locked=True)
+    except Exception:
+        try:
+            await thread.edit(archived=True)
+        except Exception:
+            pass
+
+
+class TicketThreadView(discord.ui.View):
+    def __init__(self, lang: str = "pt-br"):
+        super().__init__(timeout=None)
+        t = TRANSLATIONS[lang]
+
+        add_btn = discord.ui.Button(
+            label=t.get("btn_add_remove_user", "Adicionar/Remover Usuário"),
+            style=discord.ButtonStyle.secondary,
+            custom_id="ticket_add_remove_user",
+        )
+        add_btn.callback = self._add_remove_user
+        self.add_item(add_btn)
+
+        close_btn = discord.ui.Button(
+            label=t.get("btn_fechar_ticket", "Fechar Ticket"),
+            style=discord.ButtonStyle.danger,
+            custom_id="ticket_fechar",
+        )
+        close_btn.callback = self._fechar_ticket
+        self.add_item(close_btn)
+
+    async def _add_remove_user(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id if interaction.guild else 0
+        settings = get_settings(guild_id)
+        t = TRANSLATIONS[settings["language"]]
+        view = _SingleSelectView(TicketAddUserSelect(t.get("ticket_add_user_placeholder", "Selecione um usuário...")))
+        await interaction.response.send_message(
+            embed=_notif_embed(t.get("ticket_add_user_placeholder", "Selecione um usuário...")),
+            view=view, ephemeral=True,
+        )
+
+    async def _fechar_ticket(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id if interaction.guild else 0
+        settings = get_settings(guild_id)
+        t = TRANSLATIONS[settings["language"]]
+        thread = interaction.channel
+        if not isinstance(thread, discord.Thread):
+            await interaction.response.defer()
+            return
+        if settings.get("ticket_motivo_fechar", False):
+            await interaction.response.send_modal(
+                TicketFecharMotivoModal(thread, settings["language"])
+            )
+        else:
+            await interaction.response.defer(ephemeral=True)
+            await _fechar_ticket_thread(thread, settings, interaction.user)
+            await interaction.followup.send(
+                t.get("ticket_fechado", "Ticket fechado."), ephemeral=True
+            )
+
+
 async def _criar_ticket_thread(
     interaction: discord.Interaction,
     panel: dict,
@@ -41118,19 +41283,24 @@ async def _criar_ticket_thread(
     ei    = (opcao or {}).get("embed_interna")    or panel.get("embed_interna")
     color = settings.get("embed_color", 0x2B2D31)
 
+    lang = settings.get("language", "pt-br")
+    ticket_view = TicketThreadView(lang)
+
     try:
         if ei_v2 and (ei_v2.get("blocks") or ei_v2.get("title") or ei_v2.get("description")):
+            # V2: envia o layout + view de gerenciamento separada (Discord não permite misturar)
             interna_layout = build_panel_v2_layout(ei_v2, settings)
             await thread.send(content=ping_content, view=interna_layout)
+            await thread.send(view=ticket_view)
         elif ei and (ei.get("title") or ei.get("description")):
             embed = _draft_to_embed(ei, color)
-            await thread.send(content=ping_content, embed=embed)
+            await thread.send(content=ping_content, embed=embed, view=ticket_view)
         else:
             fallback_embed = discord.Embed(
                 description=f"Ticket aberto por {user.mention}.",
                 color=color,
             )
-            await thread.send(content=ping_content, embed=fallback_embed)
+            await thread.send(content=ping_content, embed=fallback_embed, view=ticket_view)
     except Exception as e:
         print(f"[ticket_criado] Erro ao enviar embed no thread: {e}", flush=True)
 
@@ -41147,8 +41317,44 @@ async def on_interaction(interaction: discord.Interaction):
     if interaction.type != discord.InteractionType.component:
         return
 
-    # ── Handler para botões de embed customizados ──────────────────────────────
     cid = interaction.custom_id or ""
+
+    # ── Botões de gerenciamento de ticket (persistem após restart) ─────────────
+    if cid == "ticket_add_remove_user":
+        try:
+            guild_id = interaction.guild.id if interaction.guild else 0
+            settings = get_settings(guild_id)
+            t = TRANSLATIONS[settings["language"]]
+            _tv = TicketThreadView(settings["language"])
+            await _tv._add_remove_user(interaction)
+        except Exception as _te:
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.send_message(
+                        "<a:alerta:1518271939460857968> Erro ao processar.", ephemeral=True
+                    )
+                except Exception:
+                    pass
+        return
+
+    if cid == "ticket_fechar":
+        try:
+            guild_id = interaction.guild.id if interaction.guild else 0
+            settings = get_settings(guild_id)
+            t = TRANSLATIONS[settings["language"]]
+            _tv = TicketThreadView(settings["language"])
+            await _tv._fechar_ticket(interaction)
+        except Exception as _te:
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.send_message(
+                        "<a:alerta:1518271939460857968> Erro ao fechar ticket.", ephemeral=True
+                    )
+                except Exception:
+                    pass
+        return
+
+    # ── Handler para botões de embed customizados ──────────────────────────────
     if cid.startswith("embed_btn_"):
         try:
             idx = int(cid.split("_")[-1])
