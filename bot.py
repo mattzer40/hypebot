@@ -26068,7 +26068,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
         # Reconstruímos a mudança de cargo a partir do audit log.
         try:
             from datetime import timezone as _tz_mu
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.3)
             async for entry in after.guild.audit_logs(
                 limit=5, action=discord.AuditLogAction.member_role_update
             ):
@@ -26114,10 +26114,42 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     history = settings.setdefault("role_history", [])
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
 
+    # ── Fast-path: cargos bloqueados são revertidos imediatamente sem esperar audit log ──
+    _fast_handled: set[int] = set()
+    if settings.get("protecao_cargos_enabled") and added:
+        _bl_cfg_fast = settings.get("protecao_cargo_bloqueado", {})
+        if _bl_cfg_fast:
+            _fast_remove_roles: list[discord.Role] = []
+            for _rid in list(added):
+                if str(_rid) not in _bl_cfg_fast:
+                    continue
+                if _consume_bot_role_action(after.id, _rid, "add"):
+                    # bot fez esta ação (ex: /groles) — não rebocar
+                    _fast_handled.add(_rid)
+                    continue
+                _r = after.guild.get_role(_rid)
+                if _r and _r.position < after.guild.me.top_role.position:
+                    _fast_remove_roles.append(_r)
+                _fast_handled.add(_rid)
+            if _fast_remove_roles:
+                try:
+                    await after.remove_roles(
+                        *_fast_remove_roles,
+                        reason="Proteção de Cargos: cargo bloqueado",
+                    )
+                    print(
+                        f"[protecao_fast] guild={after.guild.id} member={after.id} "
+                        f"removidos={[r.id for r in _fast_remove_roles]}",
+                        flush=True,
+                    )
+                except Exception as _fe:
+                    print(f"[protecao_fast] erro ao remover: {_fe}", flush=True)
+        added -= _fast_handled  # retira do added para o slow-path não reprocessar
+
     moderator_id = None
     moderator_name = "Sistema"
     moderator_obj = None
-    await asyncio.sleep(2)  # aguarda Discord registrar o audit log
+    await asyncio.sleep(0.3)  # reduzido de 2s — Discord regista audit log em <300ms
     try:
         from datetime import timezone as _tz
         async for entry in after.guild.audit_logs(limit=15, action=discord.AuditLogAction.member_role_update):
