@@ -61,6 +61,7 @@ _call_owner_grace: dict[int, asyncio.Task] = {}  # ch.id → task de grace perio
 _call_join_log: dict[int, list] = {}  # channel_id → [(timestamp, user_id, display_name, action)]
 _ig_verif_threads: dict[int, int] = {}  # thread_id → user_id (verificação Instagram)
 _ig_verif_vcs: dict[int, int] = {}     # thread_id → vc_id (canal de voz do Criar call)
+_ig_verif_photos: dict[int, str] = {}  # thread_id → URL da foto enviada no ticket de IG
 _ticket_assumed: dict[int, int] = {}         # thread_id → user_id (quem assumiu o ticket)
 _ticket_assume_counts: dict[tuple, int] = {}  # (guild_id, user_id) → total assumidos
 
@@ -10367,6 +10368,15 @@ class IgVerifTicketView(discord.ui.LayoutView):
                 except Exception:
                     pass
 
+        # Auto-posta o card do Instagram com a foto enviada no ticket
+        if target:
+            _ig_photo = _ig_verif_photos.pop(interaction.channel.id if interaction.channel else 0, None)
+            if _ig_photo:
+                try:
+                    await _send_ig_card(guild, target, _ig_photo, settings)
+                except Exception as _igce:
+                    print(f"[ig_verif] erro ao postar card: {_igce}", flush=True)
+
         name = target.display_name if target else f"Usuário {self.user_id}"
 
         close_emb = discord.Embed(
@@ -15959,26 +15969,18 @@ class CalendarioView(discord.ui.View):
 # Entretenimento — Instagram
 # -----------------------------------------------------------------------------
 
-async def _process_ig_post(message: discord.Message, settings: dict) -> None:
-    """Recebe uma foto de usuário verificado e publica o card estilizado nos canais configurados."""
-    guild  = message.guild
-    author = message.author
-
-    # Pega primeira imagem ou vídeo do post
-    media_url: str | None = None
-    for att in message.attachments:
-        ct = att.content_type or ""
-        if ct.startswith("image/") or ct.startswith("video/"):
-            media_url = att.url
-            break
-    if not media_url:
-        return
-
+async def _send_ig_card(
+    guild: "discord.Guild",
+    author: "discord.Member",
+    media_url: str,
+    settings: dict,
+    fallback_channel_id: int | None = None,
+) -> None:
+    """Monta o card V2 do Instagram e envia para os canais configurados."""
     guild_icon = str(guild.icon.url) if (guild and guild.icon) else None
     guild_name = guild.name if guild else "Instagram"
     color      = 0xE1306C  # Instagram pink
 
-    # Card V2
     _components: list = [
         {
             "type": 9,  # Section
@@ -16005,7 +16007,6 @@ async def _process_ig_post(message: discord.Message, settings: dict) -> None:
             ],
         },
     ]
-    # Adiciona thumbnail da guild no Section se existir
     if guild_icon:
         _components[0]["accessory"] = {
             "type": 11,
@@ -16022,14 +16023,13 @@ async def _process_ig_post(message: discord.Message, settings: dict) -> None:
     _h = {"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"}
 
     ig_channels = settings.get("ig_channels", [])
-    post_ids: list[int] = []
 
     async with _ah_ig.ClientSession() as _s:
         if ig_channels:
             for _ch in ig_channels:
-                _pid = _ch.get("post_channel_id")
-                _hid = _ch.get("highlight_channel_id")
-                _rid = _ch.get("role_id")
+                _pid  = _ch.get("post_channel_id")
+                _hid  = _ch.get("highlight_channel_id")
+                _rid  = _ch.get("role_id")
                 _clear = _ch.get("clear_highlight", False)
 
                 _send = dict(_payload)
@@ -16044,11 +16044,9 @@ async def _process_ig_post(message: discord.Message, settings: dict) -> None:
                         f"https://discord.com/api/v10/channels/{_pid}/messages",
                         json=_send, headers=_h,
                     ) as _r:
-                        if _r.status in (200, 201):
-                            post_ids.append(_pid)
+                        pass
 
                 if _hid:
-                    # Limpa highlight anterior se configurado
                     if _clear:
                         _last = settings.get("ig_last_highlight", {})
                         _prev = _last.get(str(_hid))
@@ -16069,15 +16067,43 @@ async def _process_ig_post(message: discord.Message, settings: dict) -> None:
                             _rd = await _r2.json()
                             settings.setdefault("ig_last_highlight", {})[str(_hid)] = _rd.get("id")
                             save_settings_to_disk()
-        else:
-            # Sem canais configurados — posta no mesmo canal da submissão
+        elif fallback_channel_id:
+            # Sem canais configurados — posta no canal de fallback
             async with _s.post(
-                f"https://discord.com/api/v10/channels/{message.channel.id}/messages",
+                f"https://discord.com/api/v10/channels/{fallback_channel_id}/messages",
                 json=_payload, headers=_h,
             ) as _r:
                 pass
+        else:
+            # Tenta encontrar canal com "insta" no nome
+            _insta_ch = discord.utils.find(
+                lambda c: "insta" in c.name.lower() and isinstance(c, discord.TextChannel),
+                guild.channels,
+            ) if guild else None
+            if _insta_ch:
+                async with _s.post(
+                    f"https://discord.com/api/v10/channels/{_insta_ch.id}/messages",
+                    json=_payload, headers=_h,
+                ) as _r:
+                    pass
 
-    # Deleta mensagem original
+
+async def _process_ig_post(message: discord.Message, settings: dict) -> None:
+    """Recebe uma foto de usuário verificado e publica o card estilizado nos canais configurados."""
+    guild  = message.guild
+    author = message.author
+
+    media_url: str | None = None
+    for att in message.attachments:
+        ct = att.content_type or ""
+        if ct.startswith("image/") or ct.startswith("video/"):
+            media_url = att.url
+            break
+    if not media_url:
+        return
+
+    await _send_ig_card(guild, author, media_url, settings, fallback_channel_id=message.channel.id)
+
     try:
         await message.delete()
     except Exception:
@@ -26204,6 +26230,12 @@ async def on_message(message: discord.Message):
         _igv_parent = getattr(message.channel, 'parent_id', None)
         _igv_ch_id = settings.get("ig_verif_channel")
         if _igv_parent and _igv_ch_id and _igv_parent == _igv_ch_id:
+            # Guarda a URL da foto para auto-postar após aprovação
+            for _att in message.attachments:
+                _ct = _att.content_type or ""
+                if _ct.startswith("image/") or _ct.startswith("video/"):
+                    _ig_verif_photos[message.channel.id] = _att.url
+                    break
             try:
                 icon_url = bot.user.display_avatar.url if bot.user else None
                 auto_emb = discord.Embed(
