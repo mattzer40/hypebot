@@ -1743,6 +1743,10 @@ TRANSLATIONS = {
         "desmute_deactivated": "Desmute Automático desativado!",
         "desmute_reset_done": "Desmute Automático resetado!",
         "desmute_log_message": "<a:online:1518271945550856295> {member} foi desmutado automaticamente ao entrar em {channel}.",
+        "ticket_criado": "<a:online:1518271945550856295> Ticket criado! {thread}",
+        "ticket_ja_aberto": "<a:alerta:1518271939460857968> Você já tem um ticket aberto: {thread}",
+        "ticket_canal_invalido": "<a:alerta:1518271939460857968> Canal do painel não encontrado. Avise um administrador.",
+        "ticket_erro_criar": "<a:alerta:1518271939460857968> Erro ao criar ticket: {erro}",
         "contador_call_panel_title": "Contador em Call - NATA®",
         "contador_call_funcoes": "Funções",
         "contador_call_funcoes_text": "`{contador}` — Retorna a quantidade de membros em call.",
@@ -3449,6 +3453,10 @@ TRANSLATIONS = {
         "desmute_deactivated": "Auto Unmute disabled!",
         "desmute_reset_done": "Auto Unmute reset!",
         "desmute_log_message": "<a:online:1518271945550856295> {member} was automatically unmuted upon joining {channel}.",
+        "ticket_criado": "<a:online:1518271945550856295> Ticket created! {thread}",
+        "ticket_ja_aberto": "<a:alerta:1518271939460857968> You already have an open ticket: {thread}",
+        "ticket_canal_invalido": "<a:alerta:1518271939460857968> Panel channel not found. Contact an administrator.",
+        "ticket_erro_criar": "<a:alerta:1518271939460857968> Error creating ticket: {erro}",
         "contador_call_panel_title": "Call Counter - NATA®",
         "contador_call_funcoes": "Functions",
         "contador_call_funcoes_text": "`{contador}` — Returns the number of members in voice calls.",
@@ -4367,6 +4375,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("ticket_panels", [])
     settings.setdefault("ticket_ia_configs", {})
     settings.setdefault("ticket_aval_configs", {})
+    settings.setdefault("ticket_total_count", 0)
     settings.setdefault("auto_cargo_enabled", False)
     settings.setdefault("auto_cargo_membro_role", None)
     settings.setdefault("auto_cargo_bot_role", None)
@@ -28316,6 +28325,7 @@ async def clonar_config_cmd(ctx: commands.Context, source_guild_id: int = None):
         _nc["atendentes"]      = mrl(cfg.get("atendentes", []))
         new_aval[pid] = _nc
     tgt["ticket_aval_configs"] = new_aval
+    tgt["ticket_total_count"]  = src.get("ticket_total_count", 0)
 
     # Tellonym
     tgt["tellonym_allowed_roles"]    = mrl(src.get("tellonym_allowed_roles", []))
@@ -41012,6 +41022,125 @@ async def on_resumed():
     await _set_streaming_prefix(_stream_prefix_current or "n!")
 
 
+async def _criar_ticket_thread(
+    interaction: discord.Interaction,
+    panel: dict,
+    opcao: dict | None,
+    settings: dict,
+    t: dict,
+):
+    """Cria um thread de ticket e envia o embed_interna dentro dele."""
+    guild = interaction.guild
+    user  = interaction.user
+
+    # Canal onde o painel foi enviado (é onde a thread é criada)
+    channel_id = panel.get("channel_id")
+    channel = guild.get_channel(channel_id) if (guild and channel_id) else None
+    if channel is None:
+        channel = interaction.channel
+
+    if not isinstance(channel, discord.TextChannel):
+        await interaction.followup.send(t.get("ticket_canal_invalido", "Canal inválido."), ephemeral=True)
+        return
+
+    # Verificar ticket duplicado (busca threads abertas do usuário nesse canal)
+    for thread in channel.threads:
+        if (not thread.archived
+                and thread.owner_id == user.id
+                and str(panel.get("id", "")) in (thread.name or "")):
+            await interaction.followup.send(
+                t.get("ticket_ja_aberto", "Você já tem um ticket aberto.").format(thread=thread.mention),
+                ephemeral=True,
+            )
+            return
+    # Verifica também pelo nome contendo o display_name do usuário
+    for thread in channel.threads:
+        if not thread.archived and user.display_name in (thread.name or ""):
+            await interaction.followup.send(
+                t.get("ticket_ja_aberto", "Você já tem um ticket aberto.").format(thread=thread.mention),
+                ephemeral=True,
+            )
+            return
+
+    # Incrementa o contador global de tickets
+    settings["ticket_total_count"] = settings.get("ticket_total_count", 0) + 1
+    ticket_num = settings["ticket_total_count"]
+    thread_name = f"{user.display_name} • Nº{ticket_num}"
+
+    # Cria o thread (private_thread, fallback para public)
+    thread = None
+    try:
+        thread = await channel.create_thread(
+            name=thread_name,
+            type=discord.ChannelType.private_thread,
+            invitable=False,
+            reason=f"Ticket aberto por {user}",
+        )
+    except discord.Forbidden:
+        try:
+            thread = await channel.create_thread(
+                name=thread_name,
+                type=discord.ChannelType.public_thread,
+                reason=f"Ticket aberto por {user}",
+            )
+        except Exception as e:
+            await interaction.followup.send(
+                t.get("ticket_erro_criar", "Erro ao criar ticket: {erro}").format(erro=str(e)[:200]),
+                ephemeral=True,
+            )
+            return
+    except Exception as e:
+        await interaction.followup.send(
+            t.get("ticket_erro_criar", "Erro ao criar ticket: {erro}").format(erro=str(e)[:200]),
+            ephemeral=True,
+        )
+        return
+
+    # Adiciona o usuário ao thread
+    try:
+        await thread.add_user(user)
+    except Exception:
+        pass
+
+    # Monta string de menção (membro + cargos responsáveis)
+    marcar = settings.get("ticket_marcar", True)
+    pings: list[str] = []
+    if marcar:
+        pings.append(user.mention)
+        for rid in panel.get("cargos_resp", []):
+            role = guild.get_role(rid) if guild else None
+            if role:
+                pings.append(role.mention)
+    ping_content = " ".join(pings) or None
+
+    # Obtém embed_interna (da opcao ou do painel)
+    ei_v2 = (opcao or {}).get("embed_interna_v2") or panel.get("embed_interna_v2")
+    ei    = (opcao or {}).get("embed_interna")    or panel.get("embed_interna")
+    color = settings.get("embed_color", 0x2B2D31)
+
+    try:
+        if ei_v2 and (ei_v2.get("blocks") or ei_v2.get("title") or ei_v2.get("description")):
+            interna_layout = build_panel_v2_layout(ei_v2, settings)
+            await thread.send(content=ping_content, view=interna_layout)
+        elif ei and (ei.get("title") or ei.get("description")):
+            embed = _draft_to_embed(ei, color)
+            await thread.send(content=ping_content, embed=embed)
+        else:
+            fallback_embed = discord.Embed(
+                description=f"Ticket aberto por {user.mention}.",
+                color=color,
+            )
+            await thread.send(content=ping_content, embed=fallback_embed)
+    except Exception as e:
+        print(f"[ticket_criado] Erro ao enviar embed no thread: {e}", flush=True)
+
+    # Responde ao usuário com link para o thread
+    await interaction.followup.send(
+        t.get("ticket_criado", "Ticket criado! {thread}").format(thread=thread.mention),
+        ephemeral=True,
+    )
+
+
 @bot.event
 async def on_interaction(interaction: discord.Interaction):
     """Fallback para interações de componentes sem handler (ex: após restart do bot)."""
@@ -41207,34 +41336,26 @@ async def on_interaction(interaction: discord.Interaction):
                     if op.get("id") == selected_option_id or op.get("label") == selected_option_id:
                         opcao = op
                         break
-            if not opcao:
+            if not opcao or not panel:
                 print(f"[ticket_menu] opcao=None panel_opcoes={[o.get('id') for o in (panel or {}).get('menu_opcoes', [])]}", flush=True)
-                await interaction.response.defer()
+                await interaction.response.defer(ephemeral=True)
                 return
-            # Prioridade: embed_interna_v2 (novo formato V2) > embed_interna (formato clássico)
-            ei_v2 = opcao.get("embed_interna_v2") or (panel.get("embed_interna_v2") if panel else None)
-            ei    = opcao.get("embed_interna")    or (panel.get("embed_interna")    if panel else None)
-            color = settings.get("embed_color", 0x2B2D31)
-            if ei_v2 and (ei_v2.get("blocks") or ei_v2.get("title") or ei_v2.get("description")):
-                interna_layout = build_panel_v2_layout(ei_v2, settings)
-                await interaction.response.send_message(view=interna_layout, ephemeral=True)
-            elif ei and (ei.get("title") or ei.get("description")):
-                embed = _draft_to_embed(ei, color)
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-            else:
-                icon_url = bot.user.display_avatar.url if bot.user else None
-                embed = discord.Embed(
-                    description=f"@{interaction.user.name}, configurações da embed interna do ticket não foram encontradas, avise um administrador!",
-                    color=color,
-                )
-                embed.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+            # Defer first — a criação do thread pode demorar
+            await interaction.response.defer(ephemeral=True)
+            await _criar_ticket_thread(interaction, panel, opcao, settings, t)
         except Exception as _te:
             print(f"[ticket_menu] ERRO: {type(_te).__name__}: {_te}", flush=True)
             if not interaction.response.is_done():
                 try:
                     await interaction.response.send_message(
                         "<a:alerta:1518271939460857968> Erro ao processar seleção. Tente novamente.", ephemeral=True
+                    )
+                except Exception:
+                    pass
+            elif not interaction.is_expired():
+                try:
+                    await interaction.followup.send(
+                        "<a:alerta:1518271939460857968> Erro ao criar ticket. Tente novamente.", ephemeral=True
                     )
                 except Exception:
                     pass
