@@ -41549,36 +41549,21 @@ async def _fechar_ticket_thread(thread: discord.Thread, settings: dict, closer=N
 
 
 async def _patch_ticket_remove_assumir(thread_id: int) -> None:
-    """Remove o botão 'Assumir Ticket' do embed original do ticket via PATCH."""
-    import copy as _copy_pa
+    """Remove o botão 'Assumir Ticket' editando a view do embed do ticket."""
     _info = _ticket_msg_ids.get(thread_id)
-    _orig = _ticket_msg_payloads.get(thread_id)
-    if not _info or not _orig:
+    if not _info:
         return
     _ch_id, _msg_id = _info
     if not _msg_id:
         return
-    _new = _copy_pa.deepcopy(_orig)
-    for _container in _new.get("components", []):
-        if _container.get("type") == 17:
-            for _comp in _container.get("components", []):
-                if _comp.get("type") == 1:
-                    _comp["components"] = [
-                        c for c in _comp.get("components", [])
-                        if c.get("custom_id") != "ticket_assumir"
-                    ]
-    _new.pop("allowed_mentions", None)
     try:
-        import aiohttp as _ah_pa
-        async with _ah_pa.ClientSession() as _s_pa:
-            _r_pa = await _s_pa.patch(
-                f"https://discord.com/api/v10/channels/{_ch_id}/messages/{_msg_id}",
-                json=_new,
-                headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
-            )
-            if _r_pa.status not in (200, 204):
-                _rb_pa = await _r_pa.json()
-                print(f"[ticket_patch] {_r_pa.status}: {_rb_pa}", flush=True)
+        _thread_ch = bot.get_channel(_ch_id)
+        if _thread_ch is None:
+            return
+        _msg = await _thread_ch.fetch_message(_msg_id)
+        _guild = getattr(_thread_ch, "guild", None)
+        _lang = get_settings(_guild.id)["language"] if _guild else "pt-br"
+        await _msg.edit(view=TicketThreadView(lang=_lang, show_assumir=False))
     except Exception as _pe:
         print(f"[ticket_patch] {_pe}", flush=True)
 
@@ -41606,7 +41591,7 @@ def _is_ticket_staff(interaction: discord.Interaction) -> bool:
 
 
 class TicketThreadView(discord.ui.View):
-    def __init__(self, lang: str = "pt-br"):
+    def __init__(self, lang: str = "pt-br", show_assumir: bool = True):
         super().__init__(timeout=None)
         t = TRANSLATIONS[lang]
 
@@ -41618,13 +41603,14 @@ class TicketThreadView(discord.ui.View):
         add_btn.callback = self._add_remove_user
         self.add_item(add_btn)
 
-        assume_btn = discord.ui.Button(
-            label="Assumir Ticket",
-            style=discord.ButtonStyle.primary,
-            custom_id="ticket_assumir",
-        )
-        assume_btn.callback = self._assumir_ticket
-        self.add_item(assume_btn)
+        if show_assumir:
+            assume_btn = discord.ui.Button(
+                label="Assumir Ticket",
+                style=discord.ButtonStyle.primary,
+                custom_id="ticket_assumir",
+            )
+            assume_btn.callback = self._assumir_ticket
+            self.add_item(assume_btn)
 
         close_btn = discord.ui.Button(
             label=t.get("btn_fechar_ticket", "Fechar Ticket"),
@@ -41805,108 +41791,55 @@ async def _criar_ticket_thread(
     color = settings.get("embed_color", 0x2B2D31)
 
     lang = settings.get("language", "pt-br")
-    t2   = TRANSLATIONS[lang]
-    btn_add_label   = t2.get("btn_add_remove_user", "Adicionar/Remover Usuário")
-    btn_close_label = t2.get("btn_fechar_ticket",   "Fechar Ticket")
 
-    # Monta payload dos botões (ActionRow)
-    _action_row = {
-        "type": 1,
-        "components": [
-            {"type": 2, "style": 2, "label": btn_add_label,   "custom_id": "ticket_add_remove_user"},
-            {"type": 2, "style": 1, "label": "Assumir Ticket", "custom_id": "ticket_assumir"},
-            {"type": 2, "style": 4, "label": btn_close_label, "custom_id": "ticket_fechar"},
-        ],
-    }
-
-    # Usa raw HTTP — sempre V2 (flags=32768), mesmo padrão que IG verif
-    import aiohttp as _aiohttp_ticket
-
-    _headers = {
-        "Authorization": f"Bot {bot.http.token}",
-        "Content-Type": "application/json",
-    }
-
-    # Monta blocos V2 do container
-    _v2_blocks: list = []
-
-    # Menções como primeiro bloco de texto (mesmo padrão IG verif)
-    if ping_content:
-        _v2_blocks.append({"type": 10, "content": ping_content})
+    # Monta embed clássico com o conteúdo do ticket
+    _icon_url = bot.user.display_avatar.url if bot.user else None
+    _embed = discord.Embed(color=color)
 
     if ei_v2 and (ei_v2.get("blocks") or ei_v2.get("title") or ei_v2.get("description")):
-        for b in (ei_v2.get("blocks") or []):
-            btype = b.get("type")
-            if btype == "text":
-                txt = b.get("text") or ""
-                if b.get("thumbnail"):
-                    _v2_blocks.append({
-                        "type": 9, "components": [
-                            {"type": 10, "content": txt},
-                            {"type": 11, "media": {"url": b["thumbnail"]}, "description": ""},
-                        ],
-                    })
-                else:
-                    _v2_blocks.append({"type": 10, "content": txt})
-            elif btype == "separator":
-                _v2_blocks.append({"type": 14, "divider": True, "spacing": 1})
+        _texts: list[str] = []
+        _thumb_url: str | None = None
+        for _b in (ei_v2.get("blocks") or []):
+            if _b.get("type") == "text":
+                _texts.append(_b.get("text") or "")
+                if _b.get("thumbnail") and not _thumb_url:
+                    _thumb_url = _b["thumbnail"]
+        if _texts:
+            _first = _texts[0]
+            if _first.startswith("**") and "**" in _first[2:]:
+                _te = _first.index("**", 2)
+                _embed.title = _first[2:_te]
+                _rest = _first[_te + 2:].strip()
+                _texts = ([_rest] if _rest else []) + _texts[1:]
+            _embed.description = "\n\n".join(t for t in _texts if t)
+        if _thumb_url:
+            _embed.set_thumbnail(url=_thumb_url)
     elif ei and (ei.get("title") or ei.get("description")):
-        # Converte embed clássico para texto V2
-        _parts: list[str] = []
-        if ei.get("title"):
-            _parts.append(f"**{ei['title']}**")
-        if ei.get("description"):
-            _parts.append(ei["description"])
-        _v2_blocks.append({"type": 10, "content": "\n".join(_parts)})
+        _embed.title = ei.get("title") or ""
+        _embed.description = ei.get("description") or ""
+        if ei.get("thumbnail"):
+            _embed.set_thumbnail(url=ei["thumbnail"])
     else:
-        # Default quando embed_interna não configurado
         _panel_nome = (panel.get("name") or "Suporte").lstrip("#").strip()
         _opcao_label = (opcao or {}).get("label", "")
-        _header = (
-            f"<:tickets:1518271952526250155> **{_panel_nome}**"
-            + (f" — {_opcao_label}" if _opcao_label else "")
+        _embed.title = _panel_nome + (f" — {_opcao_label}" if _opcao_label else "")
+        _embed.description = (
+            f"Olá, {user.mention}!\n"
+            "Utilize esse canal para discutir sobre relatos de infrações, abusos ou quebra de regras.\n\n"
+            "**Ao finalizar, o ticket pode ser fechado utilizando o botão abaixo.**"
         )
-        _v2_blocks.extend([
-            {
-                "type": 10,
-                "content": (
-                    f"{_header}\n\n"
-                    f"Olá, {user.mention}!\n"
-                    "Utilize esse canal para tirar suas dúvidas com nossa equipe de suporte."
-                ),
-            },
-            {"type": 14, "divider": True, "spacing": 1},
-            {
-                "type": 10,
-                "content": "<:Mov_chat:1518271970008105031> **Ao finalizar, o ticket pode ser fechado utilizando o botão abaixo.**",
-            },
-        ])
 
-    _v2_blocks.append(_action_row)
+    if _icon_url and not _embed.thumbnail.url:
+        _embed.set_thumbnail(url=_icon_url)
+    _embed.set_footer(text=_footer_name(guild, settings), icon_url=_icon_url)
+    _embed.timestamp = datetime.now()
 
-    _payload_v2: dict = {
-        "flags": 32768,
-        "allowed_mentions": {"parse": ["roles", "users"]},
-        "components": [{"type": 17, "accent_color": color, "components": _v2_blocks}],
-    }
-
+    _view = TicketThreadView(lang=lang)
     try:
-        async with _aiohttp_ticket.ClientSession() as _sess:
-            async with _sess.post(
-                f"https://discord.com/api/v10/channels/{thread.id}/messages",
-                headers=_headers,
-                json=_payload_v2,
-            ) as _resp:
-                _body = await _resp.json()
-                if _resp.status not in (200, 201):
-                    print(f"[ticket_criado] Discord API {_resp.status}: {_body}", flush=True)
-                else:
-                    print(f"[ticket_criado] embed enviado no thread {thread.id}", flush=True)
-                    _tmid = int(_body.get("id", 0))
-                    if _tmid:
-                        import copy as _copy_tk
-                        _ticket_msg_ids[thread.id] = (thread.id, _tmid)
-                        _ticket_msg_payloads[thread.id] = _copy_tk.deepcopy(_payload_v2)
+        _sent_msg = await thread.send(content=ping_content, embed=_embed, view=_view)
+        print(f"[ticket_criado] embed enviado no thread {thread.id}", flush=True)
+        _ticket_msg_ids[thread.id] = (thread.id, _sent_msg.id)
+        _ticket_msg_payloads.pop(thread.id, None)
     except Exception as e:
         print(f"[ticket_criado] Erro ao enviar embed no thread: {e}", flush=True)
 
