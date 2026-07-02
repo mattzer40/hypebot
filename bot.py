@@ -41106,17 +41106,48 @@ class TicketFecharMotivoModal(discord.ui.Modal):
 
 
 async def _fechar_ticket_thread(thread: discord.Thread, settings: dict, closer=None):
-    """Arquiva o thread e envia log."""
-    # Log
+    """Avisa no thread, aguarda 5s, deleta e envia log."""
+    color = settings.get("embed_color", 0x2B2D31)
+
+    # Mensagem de aviso dentro do thread (raw HTTP — thread.send() falha em discord.py-self)
+    import aiohttp as _ah_fechar
+    _headers_f = {
+        "Authorization": f"Bot {bot.http.token}",
+        "Content-Type": "application/json",
+    }
+    _payload_fechar = {
+        "flags": 32768,
+        "components": [{
+            "type": 17,
+            "accent_color": color,
+            "components": [
+                {"type": 10, "content": "**<:tickets:1518271952526250155> Excluindo ticket**"},
+                {"type": 14, "divider": True, "spacing": 1},
+                {"type": 10, "content": "Este ticket será excluído em **5 segundos**."},
+            ],
+        }],
+    }
+    try:
+        async with _ah_fechar.ClientSession() as _sess:
+            await _sess.post(
+                f"https://discord.com/api/v10/channels/{thread.id}/messages",
+                headers=_headers_f,
+                json=_payload_fechar,
+            )
+    except Exception:
+        pass
+
+    await asyncio.sleep(5)
+
+    # Log no canal configurado
     log_ch_id = settings.get("ticket_log_channel")
     if log_ch_id and thread.guild:
         log_ch = thread.guild.get_channel(log_ch_id)
         if log_ch:
-            color = settings.get("embed_color", 0x2B2D31)
             embed = discord.Embed(
                 title="🎫 Ticket Fechado",
                 description=(
-                    f"**Thread:** {thread.mention} (`{thread.name}`)\n"
+                    f"**Thread:** `{thread.name}`\n"
                     + (f"**Fechado por:** {closer.mention}" if closer else "")
                 ),
                 color=color,
@@ -41126,6 +41157,7 @@ async def _fechar_ticket_thread(thread: discord.Thread, settings: dict, closer=N
                 await log_ch.send(embed=embed)
             except Exception:
                 pass
+
     try:
         await thread.delete()
     except Exception:
