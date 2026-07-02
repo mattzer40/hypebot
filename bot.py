@@ -32777,9 +32777,8 @@ async def _refresh_guild_call_panels(guild: discord.Guild, settings: dict) -> in
             continue
 
         try:
-            panel_embed = _build_call_panel_embed(ch, owner, settings)
-            panel_msg = await ch.fetch_message(msg_id)
-            await panel_msg.edit(embed=panel_embed, view=DonoCallPanelView(ch_id))
+            panel_payload = _build_call_panel_v2_payload(ch, owner, settings)
+            await _edit_call_panel_raw(ch_id, msg_id, panel_payload)
             updated += 1
             print(f"[refresh_panels] ch={ch_id} atualizado (banner={bool(settings.get('dono_call_banner_url'))})", flush=True)
         except Exception as e:
@@ -32790,13 +32789,13 @@ async def _refresh_guild_call_panels(guild: discord.Guild, settings: dict) -> in
 
 # ── Painel enviado no canal de voz ────────────────────────────────────────────
 
-def _build_call_panel_embed(
+def _build_call_panel_v2_payload(
     ch: discord.VoiceChannel,
     owner: discord.Member,
     settings: dict,
     banner_url: str | None = None,
     force_locked: bool | None = None,
-) -> discord.Embed:
+) -> dict:
     everyone = ch.guild.default_role
     overw = ch.overwrites_for(everyone)
     is_locked    = (overw.connect is False) if force_locked is None else force_locked
@@ -32824,28 +32823,95 @@ def _build_call_panel_embed(
     else:
         membros_str = "*Ninguém na call*"
 
-    embed = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
-
+    color      = settings.get("embed_color", 0x2B2D31)
     guild_icon = ch.guild.icon.url if ch.guild.icon else owner.display_avatar.url
-    embed.set_author(
-        name=f"  {ch.name}",
-        icon_url=guild_icon,
-    )
-    embed.description = (
+    cid        = ch.id
+
+    blocks: list = []
+
+    # Banner no topo (se configurado)
+    effective_banner = banner_url or settings.get("dono_call_banner_url", "")
+    if effective_banner:
+        blocks.append({"type": 12, "items": [{"media": {"url": effective_banner}}]})
+        blocks.append({"type": 14, "divider": True, "spacing": 1})
+
+    # Cabeçalho: nome do canal + ícone do servidor
+    blocks.append({
+        "type": 9,
+        "components": [{"type": 10, "content": f"**<:mov_call:1518271964077232150> {ch.name}**"}],
+        "accessory": {"type": 11, "media": {"url": guild_icon}},
+    })
+    blocks.append({"type": 14, "divider": True, "spacing": 1})
+
+    # Info (abaixo do banner)
+    blocks.append({"type": 10, "content": (
         f"**Proprietário** › {owner.mention}\n"
         f"**Canal** › {ch.mention}\n"
         f"**Limite** › {limite_val}\n\n"
         f"{status_emoji} **{status_text}**"
-    )
-    embed.add_field(
-        name=f"Membros na call — {total}",
-        value=membros_str,
-        inline=False,
-    )
-    effective_banner = banner_url or settings.get("dono_call_banner_url", "")
-    if effective_banner:
-        embed.set_image(url=effective_banner)
-    return embed
+    )})
+    blocks.append({"type": 14, "divider": True, "spacing": 1})
+
+    # Membros
+    blocks.append({"type": 10, "content": f"**Membros na call — {total}**\n{membros_str}"})
+    blocks.append({"type": 14, "divider": True, "spacing": 1})
+
+    # Botões — linha 0
+    blocks.append({"type": 1, "components": [
+        {"type": 2, "style": 2, "label": "Alterar Nome",   "custom_id": f"dc_nome_{cid}"},
+        {"type": 2, "style": 2, "label": "Alterar Limite", "custom_id": f"dc_limite_{cid}"},
+        {"type": 2, "style": 2, "label": "Abrir Call" if is_locked else "Trancar Call", "custom_id": f"dc_status_{cid}"},
+    ]})
+    # Botões — linha 1
+    blocks.append({"type": 1, "components": [
+        {"type": 2, "style": 2, "label": "Expulsar da Call", "custom_id": f"dc_expulsar_{cid}"},
+        {"type": 2, "style": 4 if is_auto_kick else 2, "label": "Desativar Privado" if is_auto_kick else "Modo Privado", "custom_id": f"dc_privado_{cid}"},
+        {"type": 2, "style": 2, "label": "Permitir Entrada", "custom_id": f"dc_permitir_{cid}"},
+    ]})
+    # Botões — linha 2
+    blocks.append({"type": 1, "components": [
+        {"type": 2, "style": 2, "label": "Registro de Call", "custom_id": f"dc_registro_{cid}", "emoji": {"name": "📋"}},
+    ]})
+
+    return {
+        "flags": 32768,
+        "components": [{"type": 17, "accent_color": color, "components": blocks}],
+    }
+
+
+async def _edit_call_panel_raw(ch_id: int, msg_id: int, payload: dict) -> None:
+    try:
+        import aiohttp as _ah_cp
+        async with _ah_cp.ClientSession() as _s_cp:
+            _r_cp = await _s_cp.patch(
+                f"https://discord.com/api/v10/channels/{ch_id}/messages/{msg_id}",
+                json=payload,
+                headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
+            )
+            if _r_cp.status not in (200, 204):
+                _rb_cp = await _r_cp.json()
+                print(f"[call_panel_edit] {_r_cp.status}: {_rb_cp}", flush=True)
+    except Exception as _e_cp:
+        print(f"[call_panel_edit] {_e_cp}", flush=True)
+
+
+async def _refresh_call_panel(
+    ch: discord.VoiceChannel,
+    owner: discord.Member,
+    settings: dict,
+    banner_url: str | None = None,
+    force_locked: bool | None = None,
+) -> None:
+    msg_id = _call_panels.get(ch.id)
+    if not msg_id:
+        raw = settings.get("active_call_panels", {}).get(str(ch.id))
+        if raw:
+            msg_id = int(raw)
+            _call_panels[ch.id] = msg_id
+    if not msg_id:
+        return
+    payload = _build_call_panel_v2_payload(ch, owner, settings, banner_url=banner_url, force_locked=force_locked)
+    await _edit_call_panel_raw(ch.id, msg_id, payload)
 
 
 class DonoCallNomeModal(discord.ui.Modal):
@@ -32874,15 +32940,7 @@ class DonoCallNomeModal(discord.ui.Modal):
         settings = get_settings(interaction.guild.id)
         owner_id = _call_owners.get(self.channel_id)
         owner = interaction.guild.get_member(owner_id) if owner_id else interaction.user
-        embed = _build_call_panel_embed(ch, owner or interaction.user, settings)
-        msg_id = _call_panels.get(self.channel_id)
-        if msg_id:
-            try:
-                msg = await ch.fetch_message(msg_id)
-                view = DonoCallPanelView(self.channel_id)
-                await msg.edit(embed=embed, view=view)
-            except Exception:
-                pass
+        asyncio.create_task(_refresh_call_panel(ch, owner or interaction.user, settings))
         await interaction.response.send_message(embed=_notif_embed(t["dono_call_nome_ok"]), ephemeral=True)
 
 
@@ -32919,15 +32977,7 @@ class DonoCallLimiteModal(discord.ui.Modal):
         settings = get_settings(interaction.guild.id)
         owner_id = _call_owners.get(self.channel_id)
         owner = interaction.guild.get_member(owner_id) if owner_id else interaction.user
-        embed = _build_call_panel_embed(ch, owner or interaction.user, settings)
-        msg_id = _call_panels.get(self.channel_id)
-        if msg_id:
-            try:
-                msg = await ch.fetch_message(msg_id)
-                view = DonoCallPanelView(self.channel_id)
-                await msg.edit(embed=embed, view=view)
-            except Exception:
-                pass
+        asyncio.create_task(_refresh_call_panel(ch, owner or interaction.user, settings))
         await interaction.response.send_message(embed=_notif_embed(t["dono_call_limite_ok"]), ephemeral=True)
 
 
@@ -32961,15 +33011,7 @@ class DonoCallStatusSelect(discord.ui.Select):
         settings = get_settings(interaction.guild.id)
         owner_id = _call_owners.get(self.channel_id)
         owner = interaction.guild.get_member(owner_id) if owner_id else interaction.user
-        embed = _build_call_panel_embed(ch, owner or interaction.user, settings)
-        msg_id = _call_panels.get(self.channel_id)
-        if msg_id:
-            try:
-                msg = await ch.fetch_message(msg_id)
-                view = DonoCallPanelView(self.channel_id)
-                await msg.edit(embed=embed, view=view)
-            except Exception:
-                pass
+        asyncio.create_task(_refresh_call_panel(ch, owner or interaction.user, settings))
         await interaction.response.send_message(embed=_notif_embed(t["dono_call_status_ok"]), ephemeral=True)
 
 
@@ -33047,14 +33089,7 @@ class _DonoCallNomeModal(discord.ui.Modal, title="Alterar Nome da Call"):
         settings = get_settings(interaction.guild.id)
         owner_id = _call_owners.get(self.channel_id)
         owner = interaction.guild.get_member(owner_id) if owner_id else interaction.user
-        panel_embed = _build_call_panel_embed(ch, owner or interaction.user, settings)
-        msg_id = _call_panels.get(self.channel_id)
-        if msg_id:
-            try:
-                panel_msg = await ch.fetch_message(msg_id)
-                await panel_msg.edit(embed=panel_embed, view=DonoCallPanelView(self.channel_id))
-            except Exception:
-                pass
+        asyncio.create_task(_refresh_call_panel(ch, owner or interaction.user, settings))
         await interaction.response.send_message(
             embed=discord.Embed(
                 description=f"<a:verificadoverde:1518272098290892810> **Nome alterado para** `{novo_nome}`",
@@ -33106,14 +33141,7 @@ class _DonoCallLimiteModal(discord.ui.Modal, title="Alterar Limite da Call"):
         settings = get_settings(interaction.guild.id)
         owner_id = _call_owners.get(self.channel_id)
         owner = interaction.guild.get_member(owner_id) if owner_id else interaction.user
-        panel_embed = _build_call_panel_embed(ch, owner or interaction.user, settings)
-        msg_id = _call_panels.get(self.channel_id)
-        if msg_id:
-            try:
-                panel_msg = await ch.fetch_message(msg_id)
-                await panel_msg.edit(embed=panel_embed, view=DonoCallPanelView(self.channel_id))
-            except Exception:
-                pass
+        asyncio.create_task(_refresh_call_panel(ch, owner or interaction.user, settings))
         limite_str = f"**{n}** usuários" if n else "**∞** livre"
         await interaction.response.send_message(
             embed=discord.Embed(
@@ -33293,21 +33321,7 @@ class DonoCallPanelView(discord.ui.View):
             await interaction.followup.send(embed=_notif_embed(t["dono_call_status_error"]), ephemeral=True)
             return
 
-        embed = _build_call_panel_embed(ch, owner or interaction.user, settings, force_locked=new_is_locked)
-        new_view = DonoCallPanelView(self.channel_id, force_locked=new_is_locked)
-        try:
-            msg_id = _call_panels.get(self.channel_id)
-            if not msg_id:
-                _gs = get_settings(interaction.guild.id)
-                _raw = _gs.get("active_call_panels", {}).get(str(self.channel_id))
-                if _raw:
-                    msg_id = _raw
-                    _call_panels[self.channel_id] = msg_id
-            if msg_id:
-                msg = await ch.fetch_message(msg_id)
-                await msg.edit(embed=embed, view=new_view)
-        except Exception as _e:
-            print(f"[btn_status] falha ao editar painel ch={self.channel_id}: {_e}", flush=True)
+        asyncio.create_task(_refresh_call_panel(ch, owner or interaction.user, settings, force_locked=new_is_locked))
         if new_is_locked:
             _fb_embed = discord.Embed(
                 title="<a:alerta:1518271939460857968>  Call Trancada",
@@ -33380,21 +33394,7 @@ class DonoCallPanelView(discord.ui.View):
             _call_auto_kick.add(self.channel_id)
         new_active = not now_active
 
-        # Atualiza painel principal
-        embed = _build_call_panel_embed(ch, owner or interaction.user, settings)
-        new_view = DonoCallPanelView(self.channel_id)
-        try:
-            msg_id = _call_panels.get(self.channel_id)
-            if not msg_id:
-                _raw = settings.get("active_call_panels", {}).get(str(self.channel_id))
-                if _raw:
-                    msg_id = _raw
-                    _call_panels[self.channel_id] = msg_id
-            if msg_id:
-                msg = await ch.fetch_message(msg_id)
-                await msg.edit(embed=embed, view=new_view)
-        except Exception as _e:
-            print(f"[btn_privado] falha ao editar painel ch={self.channel_id}: {_e}", flush=True)
+        asyncio.create_task(_refresh_call_panel(ch, owner or interaction.user, settings))
 
         if new_active:
             _fb_embed = discord.Embed(
@@ -33584,13 +33584,10 @@ async def _restore_all_call_panels():
 
 
 async def _send_call_panel(ch: discord.VoiceChannel, owner: discord.Member):
-    """Envia o embed de controle no chat do canal de voz."""
+    """Envia o painel V2 de controle no chat do canal de voz."""
     try:
         settings = get_settings(ch.guild.id)
-        # Remove overrides residuais de sessões anteriores do canal real antes de registrar o estado original.
-        # Garante que connect=False (lock stale) não persista na sessão nova.
         await _clean_stale_call_overwrites(ch)
-        # Snapshot do estado real pós-limpeza
         _orig_clean: dict = {}
         for _t in list(ch.overwrites.keys()):
             _ow = ch.overwrites_for(_t)
@@ -33599,22 +33596,33 @@ async def _send_call_panel(ch: discord.VoiceChannel, owner: discord.Member):
         _call_original_name[ch.id]        = ch.name
         _call_original_limit[ch.id]       = ch.user_limit
         _call_original_overwrites[ch.id]  = _orig_clean
-        # Envia o painel
-        embed = _build_call_panel_embed(ch, owner, settings)
-        view = DonoCallPanelView(ch.id)
-        msg = await ch.send(embed=embed, view=view)
-        _call_panels[ch.id] = msg.id
-        _call_owners[ch.id] = owner.id
-        # Persiste no disco para sobreviver a restarts
-        panels_map = settings.setdefault("active_call_panels", {})
-        panels_map[str(ch.id)] = msg.id
-        owners_map = settings.setdefault("active_call_owners", {})
-        owners_map[str(ch.id)] = owner.id
-        orig_names = settings.setdefault("active_call_orig_names", {})
-        orig_names[str(ch.id)] = ch.name
-        orig_limits = settings.setdefault("active_call_orig_limits", {})
-        orig_limits[str(ch.id)] = ch.user_limit
-        save_settings_to_disk()
+        # Envia via raw HTTP (V2)
+        payload = _build_call_panel_v2_payload(ch, owner, settings)
+        import aiohttp as _ah_scp
+        async with _ah_scp.ClientSession() as _s_scp:
+            _r_scp = await _s_scp.post(
+                f"https://discord.com/api/v10/channels/{ch.id}/messages",
+                json=payload,
+                headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
+            )
+            if _r_scp.status in (200, 201):
+                _body_scp = await _r_scp.json()
+                _mid = int(_body_scp.get("id", 0))
+                _call_panels[ch.id]  = _mid
+                _call_owners[ch.id]  = owner.id
+                bot.add_view(DonoCallPanelView(ch.id))
+                panels_map = settings.setdefault("active_call_panels", {})
+                panels_map[str(ch.id)] = _mid
+                owners_map = settings.setdefault("active_call_owners", {})
+                owners_map[str(ch.id)] = owner.id
+                orig_names = settings.setdefault("active_call_orig_names", {})
+                orig_names[str(ch.id)] = ch.name
+                orig_limits = settings.setdefault("active_call_orig_limits", {})
+                orig_limits[str(ch.id)] = ch.user_limit
+                save_settings_to_disk()
+            else:
+                _body_scp = await _r_scp.json()
+                print(f"[call_panel_send] {_r_scp.status}: {_body_scp}", flush=True)
     except (discord.Forbidden, discord.HTTPException):
         pass
 
@@ -33695,16 +33703,9 @@ async def _update_call_panel(ch: discord.VoiceChannel, new_owner: discord.Member
             await ch.set_permissions(new_owner, connect=True, reason="Dono de Call — novo dono mantém acesso")
         except Exception:
             pass
-    try:
-        embed = _build_call_panel_embed(ch, new_owner, settings)
-        msg = await ch.fetch_message(msg_id)
-        view = DonoCallPanelView(ch.id)
-        await msg.edit(embed=embed, view=view)
-        # Sincroniza cache em memória
-        _call_panels[ch.id] = msg_id
-        _call_owners[ch.id] = new_owner.id
-    except Exception:
-        pass
+    _call_panels[ch.id] = msg_id
+    _call_owners[ch.id] = new_owner.id
+    asyncio.create_task(_refresh_call_panel(ch, new_owner, settings))
 
 
 async def _restore_call_permissions(ch: discord.VoiceChannel):
