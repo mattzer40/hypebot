@@ -32850,37 +32850,24 @@ def _build_call_panel_v2_payload(
     container_blocks: list = []
     effective_banner = banner_url or settings.get("dono_call_banner_url", "")
 
-    # ── Info principal + status ───────────────────────────────────────────────
+    # ── Info principal ────────────────────────────────────────────────────────
     container_blocks.append({"type": 10, "content": (
         f"**Proprietário** › {owner.mention}\n"
         f"**Canal** › {ch.mention}\n"
-        f"**Limite** › {limite_val}\n\n"
-        f"{status_emoji} **{status_text}**"
+        f"**Limite** › {limite_val}"
     )})
     container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
-    # ── Registro de call (preview + botão perto do status) ───────────────────
-    _reg_entries = _call_join_log.get(ch.id, [])
-    _reg_count   = len(_reg_entries)
-    if _reg_entries:
-        _prev_lines: list[str] = []
-        for _ts, _uid, _name, _action in _reg_entries[-4:]:
-            _dt   = datetime.fromtimestamp(_ts).strftime("%H:%M:%S")
-            _icon = "→" if _action == "entrou" else "←"
-            _prev_lines.append(f"`{_dt}` {_icon} **{discord.utils.escape_markdown(_name)}**")
-        _reg_text = (
-            f"📋 **Registro de Call — {_reg_count} evento{'s' if _reg_count != 1 else ''}**\n"
-            + "\n".join(_prev_lines)
-            + (f"\n*...e mais {_reg_count - 4}*" if _reg_count > 4 else "")
-        )
-    else:
-        _reg_text = "📋 **Registro de Call**\n*Nenhum evento registrado ainda.*"
-
-    container_blocks.append({"type": 10, "content": _reg_text})
-    container_blocks.append({"type": 1, "components": [
-        {"type": 2, "style": 2, "label": "Ver Registro Completo", "custom_id": f"dc_registro_{cid}",
-         "emoji": {"id": "1518271952526250155", "name": "tickets"}},
-    ]})
+    # ── Status + botão Registro lado a lado ───────────────────────────────────
+    container_blocks.append({
+        "type": 9,
+        "components": [{"type": 10, "content": f"{status_emoji} **{status_text}**"}],
+        "accessory": {
+            "type": 2, "style": 2, "label": "Ver Registro",
+            "custom_id": f"dc_registro_{cid}",
+            "emoji": {"id": "1518271952526250155", "name": "tickets"},
+        },
+    })
     container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
     # ── Membros ───────────────────────────────────────────────────────────────
