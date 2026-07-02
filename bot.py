@@ -26191,12 +26191,15 @@ async def on_member_update(before: discord.Member, after: discord.Member):
         mod_is_admin = bool(moderator_member and moderator_member.guild_permissions.administrator)
 
         def _mod_can_manage(rid: int) -> bool:
-            if is_bot_action or mod_is_admin:
+            if is_bot_action:
                 return True
             if str(rid) in blocked_roles_cfg:
+                # Cargo bloqueado: apenas cargos de acesso específicos permitem,
+                # mesmo administradores precisam ter o cargo de acesso configurado.
                 access = set(blocked_roles_cfg[str(rid)])
                 return bool(access and mod_role_ids_for_blocked.intersection(access))
-            return has_acesso
+            # Cargo não bloqueado: admin pode, ou quem tem acesso geral
+            return mod_is_admin or has_acesso
 
         if not is_bot_action and (clean_added or clean_removed):
             for rid in clean_added:
