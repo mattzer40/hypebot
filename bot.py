@@ -33370,15 +33370,10 @@ async def _delete_call_panel(ch: discord.VoiceChannel):
         except Exception:
             pass
 
-    # Restaura todas as permissões originais do canal
-    orig_overwrites = _call_original_overwrites.pop(ch.id, None)
-    if orig_overwrites is not None:
-        try:
-            await ch.edit(overwrites=orig_overwrites, reason="Dono de Call — encerrado, permissões restauradas")
-        except Exception:
-            pass
-    else:
-        await _clean_stale_call_overwrites(ch)
+    # Limpa apenas overwrites que o bot criou — não restaura snapshot completo
+    # (evita reverter permissões configuradas por admin após o painel ser ativado)
+    _call_original_overwrites.pop(ch.id, None)
+    await _clean_stale_call_overwrites(ch)
 
     # Remove da persistência
     settings.get("active_call_panels", {}).pop(str(ch.id), None)
@@ -33448,16 +33443,9 @@ async def _restore_call_permissions(ch: discord.VoiceChannel):
         except Exception:
             pass
 
-    # Restaura permissões
-    orig_overwrites = _call_original_overwrites.pop(ch.id, None)
-    if orig_overwrites is not None:
-        try:
-            await ch.edit(overwrites=orig_overwrites, reason="Dono de Call — dono saiu, permissões restauradas")
-        except Exception:
-            pass
-    else:
-        # Sem snapshot: usa cleanup direto (remove tudo que o bot pode ter adicionado)
-        await _clean_stale_call_overwrites(ch)
+    # Limpa apenas overwrites que o bot criou — não restaura snapshot completo
+    _call_original_overwrites.pop(ch.id, None)
+    await _clean_stale_call_overwrites(ch)
 
 
 async def _call_owner_grace_expire(ch: discord.VoiceChannel, owner: discord.Member):
