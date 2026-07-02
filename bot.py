@@ -41127,10 +41127,10 @@ async def _fechar_ticket_thread(thread: discord.Thread, settings: dict, closer=N
             except Exception:
                 pass
     try:
-        await thread.edit(archived=True, locked=True)
+        await thread.delete()
     except Exception:
         try:
-            await thread.edit(archived=True)
+            await thread.edit(archived=True, locked=True)
         except Exception:
             pass
 
@@ -41271,7 +41271,9 @@ async def _criar_ticket_thread(
     pings: list[str] = []
     if marcar:
         pings.append(user.mention)
-        for rid in panel.get("cargos_resp", []):
+        # Prioridade: cargos da opcao, senão cargos do painel
+        _resp_ids = (opcao or {}).get("responsible_roles", []) or panel.get("responsible_roles", [])
+        for rid in _resp_ids:
             role = guild.get_role(rid) if guild else None
             if role:
                 pings.append(role.mention)
