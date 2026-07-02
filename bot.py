@@ -8391,9 +8391,9 @@ class TicketMenuGerenciarOpcaoView(discord.ui.View):
 
     async def _embed_interna(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
-        embed = build_ticket_menu_embed_interna_embed(settings)
-        view  = TicketMenuEmbedInternaView(self.author, self.panel_id, self.opcao_id)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        panel = _find_panel(settings, self.panel_id) or {}
+        view  = TicketOpcaoInternaV2View(self.author, panel, self.panel_id, self.opcao_id)
+        await interaction.response.send_message(view=view, ephemeral=True)
 
 
 class TicketMenuOpcoesSelect(discord.ui.Select):
@@ -35711,6 +35711,39 @@ class TicketInternaV2View(PanelV2BuilderView):
 
     def _rebuild(self) -> "PanelV2BuilderView":
         return TicketInternaV2View(self.author, self._ticket_panel_ref, self._ticket_panel_id)
+
+    async def _salvar(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        save_settings_to_disk()
+        saved_layout = discord.ui.LayoutView(timeout=None)
+        saved_layout.add_item(discord.ui.Container(
+            discord.ui.TextDisplay(f"✅ {t.get('panelv2_saved', 'Embed interna salva!')}"),
+            accent_colour=settings.get("embed_color", 0x5865F2),
+        ))
+        try:
+            await interaction.response.edit_message(view=saved_layout)
+        except discord.HTTPException:
+            await interaction.response.defer()
+
+
+class TicketOpcaoInternaV2View(PanelV2BuilderView):
+    """PanelV2BuilderView para a embed_interna de uma opcao individual do menu de ticket."""
+
+    def __init__(self, author: discord.Member, panel_ref: dict, panel_id: str, opcao_id: str):
+        self._panel_ref = panel_ref
+        self._panel_id  = panel_id
+        self._opcao_id  = opcao_id
+        opcao = next((op for op in panel_ref.get("menu_opcoes", []) if op.get("id") == opcao_id), None)
+        if opcao is None:
+            opcao = {}
+            panel_ref.setdefault("menu_opcoes", []).append(opcao)
+        self._opcao_ref = opcao
+        v2_data = opcao.setdefault("embed_interna_v2", _empty_panel_v2())
+        super().__init__(author, v2_data)
+
+    def _rebuild(self) -> "PanelV2BuilderView":
+        return TicketOpcaoInternaV2View(self.author, self._panel_ref, self._panel_id, self._opcao_id)
 
     async def _salvar(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
