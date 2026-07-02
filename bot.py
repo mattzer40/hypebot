@@ -152,11 +152,13 @@ class GuildChannelSelect(discord.ui.Select):
 
     def __init__(self, placeholder: str = "Selecione um canal...",
                  min_values: int = 1, max_values: int = 1,
-                 channel_types=None, row: int | None = None, **kw):
+                 channel_types=None, row: int | None = None,
+                 guild: "discord.Guild | None" = None, **kw):
         self._raw_values: list[str] = []          # inicializa ANTES do super()
-        # Determina o guild alvo: dev override → guild da interação atual → None
-        guild_id = _dev_guild_ctx.get(0) or _interaction_guild_ctx.get(0)
-        guild    = bot.get_guild(guild_id) if guild_id else None
+        # Determina o guild alvo: explícito → dev override → guild da interação → None
+        if not guild:
+            guild_id = _dev_guild_ctx.get(0) or _interaction_guild_ctx.get(0)
+            guild    = bot.get_guild(guild_id) if guild_id else None
         if guild:
             want_voice = channel_types and discord.ChannelType.voice in channel_types
             if want_voice:
@@ -284,6 +286,33 @@ async def _patched_modal_task(self, interaction, components, resolved):  # type:
 
 
 discord.ui.Modal._scheduled_task = _patched_modal_task  # type: ignore[method-assign]
+
+# Patch de LayoutView._scheduled_task — mesmo motivo do Modal: tem _scheduled_task próprio
+if hasattr(discord.ui, "LayoutView") and hasattr(discord.ui.LayoutView, "_scheduled_task"):
+    _orig_layout_task = discord.ui.LayoutView._scheduled_task  # type: ignore[attr-defined]
+
+    async def _patched_layout_task(self, item, interaction):  # type: ignore[override]
+        _cur_gid = getattr(getattr(interaction, "guild", None), "id", 0)
+        ig_token = _interaction_guild_ctx.set(_cur_gid) if _cur_gid else None
+        uid  = getattr(getattr(interaction, "user", None), "id", 0)
+        tgid = _dev_guild_override.get(uid, 0)
+        try:
+            if tgid:
+                _s = _dev_sessions.get(uid)
+                if _s:
+                    _s["expires"] = time.time() + _DEV_SESSION_TTL
+                token = _dev_guild_ctx.set(tgid)
+                try:
+                    await _orig_layout_task(self, item, interaction)
+                finally:
+                    _dev_guild_ctx.reset(token)
+            else:
+                await _orig_layout_task(self, item, interaction)
+        finally:
+            if ig_token is not None:
+                _interaction_guild_ctx.reset(ig_token)
+
+    discord.ui.LayoutView._scheduled_task = _patched_layout_task  # type: ignore[method-assign]
 
 # ── Patch global: discord.ui.ChannelSelect = GuildChannelSelect ──────────────
 # Garante que TODA função nova adicionada ao menu que use ChannelSelect
@@ -35132,10 +35161,12 @@ class PanelV2TopSelect(discord.ui.Select):
 
 
 class PanelV2EnviarChannelSelect(GuildChannelSelect):
-    def __init__(self, parent_view: "PanelV2BuilderView", placeholder: str):
+    def __init__(self, parent_view: "PanelV2BuilderView", placeholder: str,
+                 guild: "discord.Guild | None" = None):
         super().__init__(
             placeholder=placeholder, min_values=1, max_values=1,
             channel_types=[discord.ChannelType.text],
+            guild=guild,
         )
         self.parent_view = parent_view
 
@@ -35161,9 +35192,10 @@ class PanelV2EnviarChannelSelect(GuildChannelSelect):
 
 
 class PanelV2EnviarView(discord.ui.View):
-    def __init__(self, parent_view: "PanelV2BuilderView", placeholder: str):
+    def __init__(self, parent_view: "PanelV2BuilderView", placeholder: str,
+                 guild: "discord.Guild | None" = None):
         super().__init__(timeout=120)
-        self.add_item(PanelV2EnviarChannelSelect(parent_view, placeholder))
+        self.add_item(PanelV2EnviarChannelSelect(parent_view, placeholder, guild=guild))
 
 
 class PanelV2BuilderView(discord.ui.LayoutView):
@@ -35280,7 +35312,7 @@ class PanelV2BuilderView(discord.ui.LayoutView):
         if not self.panel.get("blocks"):
             await interaction.response.send_message(embed=_notif_embed(t["panelv2_send_empty"]), ephemeral=True)
             return
-        view = PanelV2EnviarView(self, t["panelv2_enviar_placeholder"])
+        view = PanelV2EnviarView(self, t["panelv2_enviar_placeholder"], guild=interaction.guild)
         await interaction.response.send_message(embed=_notif_embed(t["panelv2_enviar_prompt"]), view=view, ephemeral=True)
 
     async def _atualizar(self, interaction: discord.Interaction):
