@@ -25357,6 +25357,7 @@ async def on_ready():
         (lambda: MenuView(author_id=0),           "MenuView"),
         (GifsView,                                "GifsView"),
         (_FecharCanalView,                        "FecharCanalView"),
+        (TicketThreadView,                        "TicketThreadView"),
     ]:
         try:
             bot.add_view(_view_cls())
@@ -41331,8 +41332,16 @@ class TicketThreadView(discord.ui.View):
         close_btn.callback = self._fechar_ticket
         self.add_item(close_btn)
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if _is_ticket_staff(interaction):
+            return True
+        await interaction.response.send_message(
+            "<a:alerta:1518271939460857968> Apenas a equipe de suporte pode usar este painel.",
+            ephemeral=True,
+        )
+        return False
+
     async def _assumir_ticket(self, interaction: discord.Interaction):
-        # Delegate to on_interaction handler (não usado direto — handler faz o trabalho)
         pass
 
     async def _add_remove_user(self, interaction: discord.Interaction):
