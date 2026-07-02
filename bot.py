@@ -26014,6 +26014,46 @@ async def on_message(message: discord.Message):
 
     settings = get_settings(message.guild.id)
 
+    # Auto-assume ticket: primeiro staff a mandar mensagem assume automaticamente
+    if (
+        isinstance(message.channel, discord.Thread)
+        and isinstance(message.author, discord.Member)
+        and _ticket_assumed.get(message.channel.id) is None
+    ):
+        _thr = message.channel
+        _is_tkt = any(p.get("channel_id") == _thr.parent_id for p in settings.get("ticket_panels", []))
+        if _is_tkt:
+            _m = message.author
+            _is_staff = _m.guild_permissions.administrator or message.guild.owner_id == _m.id
+            if not _is_staff:
+                for _p in settings.get("ticket_panels", []):
+                    if _p.get("channel_id") == _thr.parent_id:
+                        _rids: set[int] = set(_p.get("responsible_roles", []))
+                        for _op in _p.get("menu_opcoes", []):
+                            _rids |= set(_op.get("responsible_roles", []))
+                        if _rids & {r.id for r in _m.roles}:
+                            _is_staff = True
+                            break
+            if _is_staff:
+                _ticket_assumed[_thr.id] = _m.id
+                _ak_auto = (message.guild.id, _m.id)
+                _ticket_assume_counts[_ak_auto] = _ticket_assume_counts.get(_ak_auto, 0) + 1
+                _cnt_p = _ticket_assume_counts[_ak_auto]
+                _cnt_t = settings.get("ticket_total_count", 0)
+                import aiohttp as _ah_auto_msg
+                try:
+                    async with _ah_auto_msg.ClientSession() as _s_auto:
+                        await _s_auto.post(
+                            f"https://discord.com/api/v10/channels/{_thr.id}/messages",
+                            json={
+                                "flags": 32768,
+                                "components": [{"type": 17, "accent_color": 0x2ecc71, "components": [{"type": 10, "content": f"<a:verificadoverde:1518272098290892810> Ticket assumido por: {_m.mention} ({_cnt_p}/{_cnt_t})"}]}],
+                            },
+                            headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
+                        )
+                except Exception as _ae:
+                    print(f"[ticket_auto_assume] {_ae}", flush=True)
+
     # Verificação Instagram — auto-resposta quando foto é enviada no ticket
     if message.attachments and isinstance(message.channel, discord.Thread):
         _igv_parent = getattr(message.channel, 'parent_id', None)
@@ -41283,14 +41323,6 @@ class TicketThreadView(discord.ui.View):
         add_btn.callback = self._add_remove_user
         self.add_item(add_btn)
 
-        assumir_btn = discord.ui.Button(
-            label="Assumir Ticket",
-            style=discord.ButtonStyle.secondary,
-            custom_id="ticket_assumir",
-        )
-        assumir_btn.callback = self._assumir_ticket
-        self.add_item(assumir_btn)
-
         close_btn = discord.ui.Button(
             label=t.get("btn_fechar_ticket", "Fechar Ticket"),
             style=discord.ButtonStyle.danger,
@@ -41440,9 +41472,8 @@ async def _criar_ticket_thread(
     _action_row = {
         "type": 1,
         "components": [
-            {"type": 2, "style": 2, "label": btn_add_label,    "custom_id": "ticket_add_remove_user"},
-            {"type": 2, "style": 2, "label": "Assumir Ticket", "custom_id": "ticket_assumir"},
-            {"type": 2, "style": 4, "label": btn_close_label,  "custom_id": "ticket_fechar"},
+            {"type": 2, "style": 2, "label": btn_add_label,   "custom_id": "ticket_add_remove_user"},
+            {"type": 2, "style": 4, "label": btn_close_label, "custom_id": "ticket_fechar"},
         ],
     }
 
