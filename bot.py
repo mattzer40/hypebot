@@ -64,6 +64,8 @@ _ig_verif_vcs: dict[int, int] = {}     # thread_id → vc_id (canal de voz do Cr
 _ig_verif_photos: dict[int, str] = {}  # thread_id → URL da foto enviada no ticket de IG
 _ticket_assumed: dict[int, int] = {}         # thread_id → user_id (quem assumiu o ticket)
 _ticket_assume_counts: dict[tuple, int] = {}  # (guild_id, user_id) → total assumidos
+_ticket_msg_ids: dict[int, tuple] = {}        # thread_id → (channel_id, message_id) do embed do ticket
+_ticket_msg_payloads: dict[int, dict] = {}    # thread_id → payload V2 original (para PATCH after assume)
 
 def _deco_make_token(user) -> tuple[str, int]:
     """Gera token base64-urlsafe com dados do usuário + expiração embutida.
@@ -26218,12 +26220,16 @@ async def on_message(message: discord.Message):
                             f"https://discord.com/api/v10/channels/{_thr.id}/messages",
                             json={
                                 "flags": 32768,
-                                "components": [{"type": 17, "accent_color": 0x2ecc71, "components": [{"type": 10, "content": f"Ticket assumido por:{_m.mention} ({_cnt_p}/{_cnt_t})"}]}],
+                                "components": [{"type": 17, "accent_color": 0x2ecc71, "components": [{"type": 10, "content": f"Ticket assumido por: {_m.mention} ({_cnt_p}/{_cnt_t})"}]}],
                             },
                             headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
                         )
                 except Exception as _ae:
                     print(f"[ticket_auto_assume] {_ae}", flush=True)
+                try:
+                    await _patch_ticket_remove_assumir(_thr.id)
+                except Exception as _ae2:
+                    print(f"[ticket_auto_assume_patch] {_ae2}", flush=True)
 
     # Verificação Instagram — auto-resposta quando foto é enviada no ticket
     if message.attachments and isinstance(message.channel, discord.Thread):
@@ -41466,10 +41472,46 @@ async def _fechar_ticket_thread(thread: discord.Thread, settings: dict, closer=N
     await _delete_thread_raw(thread.id)
 
 
+async def _patch_ticket_remove_assumir(thread_id: int) -> None:
+    """Remove o botão 'Assumir Ticket' do embed original do ticket via PATCH."""
+    import copy as _copy_pa
+    _info = _ticket_msg_ids.get(thread_id)
+    _orig = _ticket_msg_payloads.get(thread_id)
+    if not _info or not _orig:
+        return
+    _ch_id, _msg_id = _info
+    if not _msg_id:
+        return
+    _new = _copy_pa.deepcopy(_orig)
+    for _container in _new.get("components", []):
+        if _container.get("type") == 17:
+            for _comp in _container.get("components", []):
+                if _comp.get("type") == 1:
+                    _comp["components"] = [
+                        c for c in _comp.get("components", [])
+                        if c.get("custom_id") != "ticket_assumir"
+                    ]
+    _new.pop("allowed_mentions", None)
+    try:
+        import aiohttp as _ah_pa
+        async with _ah_pa.ClientSession() as _s_pa:
+            _r_pa = await _s_pa.patch(
+                f"https://discord.com/api/v10/channels/{_ch_id}/messages/{_msg_id}",
+                json=_new,
+                headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
+            )
+            if _r_pa.status not in (200, 204):
+                _rb_pa = await _r_pa.json()
+                print(f"[ticket_patch] {_r_pa.status}: {_rb_pa}", flush=True)
+    except Exception as _pe:
+        print(f"[ticket_patch] {_pe}", flush=True)
+
+
 def _is_ticket_staff(interaction: discord.Interaction) -> bool:
     """Retorna True se o usuário tem permissão para gerenciar tickets (cargo responsável ou admin)."""
     member = interaction.user
     guild  = interaction.guild
+
     if not guild or not isinstance(member, discord.Member):
         return False
     if guild.owner_id == member.id or member.guild_permissions.administrator:
@@ -41500,6 +41542,14 @@ class TicketThreadView(discord.ui.View):
         add_btn.callback = self._add_remove_user
         self.add_item(add_btn)
 
+        assume_btn = discord.ui.Button(
+            label="Assumir Ticket",
+            style=discord.ButtonStyle.primary,
+            custom_id="ticket_assumir",
+        )
+        assume_btn.callback = self._assumir_ticket
+        self.add_item(assume_btn)
+
         close_btn = discord.ui.Button(
             label=t.get("btn_fechar_ticket", "Fechar Ticket"),
             style=discord.ButtonStyle.danger,
@@ -41518,7 +41568,37 @@ class TicketThreadView(discord.ui.View):
         return False
 
     async def _assumir_ticket(self, interaction: discord.Interaction):
-        pass
+        thread = interaction.channel
+        if not isinstance(thread, discord.Thread):
+            await interaction.response.defer()
+            return
+        _already_uid = _ticket_assumed.get(thread.id)
+        if _already_uid and _already_uid != interaction.user.id:
+            _already_m = interaction.guild.get_member(_already_uid) if interaction.guild else None
+            _already_mention = _already_m.mention if _already_m else f"<@{_already_uid}>"
+            await interaction.response.send_message(
+                f"<a:alerta:1518271939460857968> Este ticket já foi assumido por {_already_mention}.",
+                ephemeral=True,
+            )
+            return
+        _ticket_assumed[thread.id] = interaction.user.id
+        guild_id = interaction.guild.id if interaction.guild else 0
+        _ak = (guild_id, interaction.user.id)
+        _ticket_assume_counts[_ak] = _ticket_assume_counts.get(_ak, 0) + 1
+        _personal = _ticket_assume_counts[_ak]
+        _total = get_settings(guild_id).get("ticket_total_count", 0)
+        await interaction.response.defer()
+        import aiohttp as _ah_ass
+        async with _ah_ass.ClientSession() as _sess_ass:
+            await _sess_ass.post(
+                f"https://discord.com/api/v10/channels/{thread.id}/messages",
+                json={
+                    "flags": 32768,
+                    "components": [{"type": 17, "accent_color": 0x2ecc71, "components": [{"type": 10, "content": f"Ticket assumido por: {interaction.user.mention} ({_personal}/{_total})"}]}],
+                },
+                headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
+            )
+        await _patch_ticket_remove_assumir(thread.id)
 
     async def _add_remove_user(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id if interaction.guild else 0
@@ -41658,6 +41738,7 @@ async def _criar_ticket_thread(
         "type": 1,
         "components": [
             {"type": 2, "style": 2, "label": btn_add_label,   "custom_id": "ticket_add_remove_user"},
+            {"type": 2, "style": 1, "label": "Assumir Ticket", "custom_id": "ticket_assumir"},
             {"type": 2, "style": 4, "label": btn_close_label, "custom_id": "ticket_fechar"},
         ],
     }
@@ -41745,6 +41826,11 @@ async def _criar_ticket_thread(
                     print(f"[ticket_criado] Discord API {_resp.status}: {_body}", flush=True)
                 else:
                     print(f"[ticket_criado] embed enviado no thread {thread.id}", flush=True)
+                    _tmid = int(_body.get("id", 0))
+                    if _tmid:
+                        import copy as _copy_tk
+                        _ticket_msg_ids[thread.id] = (thread.id, _tmid)
+                        _ticket_msg_payloads[thread.id] = _copy_tk.deepcopy(_payload_v2)
     except Exception as e:
         print(f"[ticket_criado] Erro ao enviar embed no thread: {e}", flush=True)
 
@@ -41795,53 +41881,8 @@ async def on_interaction(interaction: discord.Interaction):
                     ephemeral=True,
                 )
                 return
-            thread = interaction.channel
-            if not isinstance(thread, discord.Thread):
-                await interaction.response.defer()
-                return
-            # Bloqueia re-assume por outro membro
-            _already_uid = _ticket_assumed.get(thread.id)
-            if _already_uid and _already_uid != interaction.user.id:
-                _already_m = (interaction.guild.get_member(_already_uid) if interaction.guild else None)
-                _already_mention = _already_m.mention if _already_m else f"<@{_already_uid}>"
-                await interaction.response.send_message(
-                    f"<a:alerta:1518271939460857968> Este ticket já foi assumido por {_already_mention}.",
-                    ephemeral=True,
-                )
-                return
-            # Registra o assume
-            _ticket_assumed[thread.id] = interaction.user.id
-            guild_id = interaction.guild.id if interaction.guild else 0
-            _ak = (guild_id, interaction.user.id)
-            _ticket_assume_counts[_ak] = _ticket_assume_counts.get(_ak, 0) + 1
-            _personal = _ticket_assume_counts[_ak]
-            _total    = get_settings(guild_id).get("ticket_total_count", 0)
-            await interaction.response.defer()
-            import aiohttp as _ah_ass
-            _h_ass = {
-                "Authorization": f"Bot {bot.http.token}",
-                "Content-Type": "application/json",
-            }
-            _p_ass = {
-                "flags": 32768,
-                "components": [{
-                    "type": 17,
-                    "accent_color": 0x2ecc71,
-                    "components": [{
-                        "type": 10,
-                        "content": (
-                            f"Ticket assumido por:"
-                            f"{interaction.user.mention} ({_personal}/{_total})"
-                        ),
-                    }],
-                }],
-            }
-            async with _ah_ass.ClientSession() as _sess_ass:
-                await _sess_ass.post(
-                    f"https://discord.com/api/v10/channels/{thread.id}/messages",
-                    json=_p_ass,
-                    headers=_h_ass,
-                )
+            _tv_ass = TicketThreadView()
+            await _tv_ass._assumir_ticket(interaction)
         except Exception as _te:
             if not interaction.response.is_done():
                 try:
