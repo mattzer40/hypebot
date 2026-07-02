@@ -32840,37 +32840,49 @@ def _build_call_panel_v2_payload(
     container_blocks: list = []
     effective_banner = banner_url or settings.get("dono_call_banner_url", "")
 
-    # Registro de call inline
-    _reg_entries = _call_join_log.get(ch.id, [])
-    _reg_count   = len(_reg_entries)
-    if _reg_count:
-        _last = _reg_entries[-1]
-        _last_dt   = datetime.fromtimestamp(_last[0]).strftime("%H:%M")
-        _last_icon = "→" if _last[3] == "entrou" else "←"
-        _last_name = discord.utils.escape_markdown(_last[2])
-        _reg_inline = f"  ·  📋 **{_reg_count}** eventos *(último: `{_last_dt}` {_last_icon} {_last_name})*"
-    else:
-        _reg_inline = "  ·  📋 *Sem registros*"
-
-    # Info no topo
+    # ── Info principal + status ───────────────────────────────────────────────
     container_blocks.append({"type": 10, "content": (
         f"**Proprietário** › {owner.mention}\n"
         f"**Canal** › {ch.mention}\n"
         f"**Limite** › {limite_val}\n\n"
-        f"{status_emoji} **{status_text}**{_reg_inline}"
+        f"{status_emoji} **{status_text}**"
     )})
     container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
-    # Membros
+    # ── Registro de call (preview + botão perto do status) ───────────────────
+    _reg_entries = _call_join_log.get(ch.id, [])
+    _reg_count   = len(_reg_entries)
+    if _reg_entries:
+        _prev_lines: list[str] = []
+        for _ts, _uid, _name, _action in _reg_entries[-4:]:
+            _dt   = datetime.fromtimestamp(_ts).strftime("%H:%M:%S")
+            _icon = "→" if _action == "entrou" else "←"
+            _prev_lines.append(f"`{_dt}` {_icon} **{discord.utils.escape_markdown(_name)}**")
+        _reg_text = (
+            f"📋 **Registro de Call — {_reg_count} evento{'s' if _reg_count != 1 else ''}**\n"
+            + "\n".join(_prev_lines)
+            + (f"\n*...e mais {_reg_count - 4}*" if _reg_count > 4 else "")
+        )
+    else:
+        _reg_text = "📋 **Registro de Call**\n*Nenhum evento registrado ainda.*"
+
+    container_blocks.append({"type": 10, "content": _reg_text})
+    container_blocks.append({"type": 1, "components": [
+        {"type": 2, "style": 2, "label": "Ver Registro Completo", "custom_id": f"dc_registro_{cid}",
+         "emoji": {"id": "1518271952526250155", "name": "tickets"}},
+    ]})
+    container_blocks.append({"type": 14, "divider": True, "spacing": 1})
+
+    # ── Membros ───────────────────────────────────────────────────────────────
     container_blocks.append({"type": 10, "content": f"**Membros na call — {total}**\n{membros_str}"})
     container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
-    # Banner embaixo (se configurado)
+    # ── Banner ────────────────────────────────────────────────────────────────
     if effective_banner:
         container_blocks.append({"type": 12, "items": [{"media": {"url": effective_banner}}]})
         container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
-    # Botões dentro do container (ficam junto com a embed, igual ao padrão antigo)
+    # ── Botões de controle ────────────────────────────────────────────────────
     container_blocks.append({"type": 1, "components": [
         {"type": 2, "style": 2, "label": "Alterar Nome",   "custom_id": f"dc_nome_{cid}"},
         {"type": 2, "style": 2, "label": "Alterar Limite", "custom_id": f"dc_limite_{cid}"},
@@ -32880,10 +32892,6 @@ def _build_call_panel_v2_payload(
         {"type": 2, "style": 2, "label": "Expulsar da Call", "custom_id": f"dc_expulsar_{cid}"},
         {"type": 2, "style": 4 if is_auto_kick else 2, "label": "Desativar Privado" if is_auto_kick else "Modo Privado", "custom_id": f"dc_privado_{cid}"},
         {"type": 2, "style": 2, "label": "Permitir Entrada", "custom_id": f"dc_permitir_{cid}"},
-    ]})
-    container_blocks.append({"type": 1, "components": [
-        {"type": 2, "style": 2, "label": "Registro de Call", "custom_id": f"dc_registro_{cid}",
-         "emoji": {"id": "1518271952526250155", "name": "tickets"}},
     ]})
 
     return {
