@@ -32837,16 +32837,10 @@ def _build_call_panel_v2_payload(
     color = settings.get("embed_color", 0x2B2D31)
     cid   = ch.id
 
-    # Conteúdo do container (banner + info + membros)
     container_blocks: list = []
-
-    # Banner no topo (se configurado)
     effective_banner = banner_url or settings.get("dono_call_banner_url", "")
-    if effective_banner:
-        container_blocks.append({"type": 12, "items": [{"media": {"url": effective_banner}}]})
-        container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
-    # Info (abaixo do banner)
+    # Info no topo
     container_blocks.append({"type": 10, "content": (
         f"**Proprietário** › {owner.mention}\n"
         f"**Canal** › {ch.mention}\n"
@@ -32858,6 +32852,11 @@ def _build_call_panel_v2_payload(
     # Membros
     container_blocks.append({"type": 10, "content": f"**Membros na call — {total}**\n{membros_str}"})
     container_blocks.append({"type": 14, "divider": True, "spacing": 1})
+
+    # Banner embaixo (se configurado)
+    if effective_banner:
+        container_blocks.append({"type": 12, "items": [{"media": {"url": effective_banner}}]})
+        container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
     # Botões dentro do container (ficam junto com a embed, igual ao padrão antigo)
     container_blocks.append({"type": 1, "components": [
