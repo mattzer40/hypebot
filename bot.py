@@ -336,6 +336,9 @@ async def _global_view_on_error(self, interaction: discord.Interaction, error: E
         pass
 
 discord.ui.View.on_error = _global_view_on_error  # type: ignore[method-assign]
+# LayoutView tem on_error próprio — precisa patch separado
+if hasattr(discord.ui, "LayoutView"):
+    discord.ui.LayoutView.on_error = _global_view_on_error  # type: ignore[method-assign]
 
 
 bot = commands.Bot(command_prefix=_resolve_prefix, intents=intents, help_command=None, chunk_guilds_at_startup=False)
@@ -5104,7 +5107,7 @@ class MenuView(discord.ui.View):
 
 class AppearanceView(discord.ui.View):
     def __init__(self, author: discord.Member):
-        super().__init__(timeout=3600)
+        super().__init__(timeout=None)
         self.author = author
         self._build_buttons()
 
@@ -35194,14 +35197,14 @@ class PanelV2EnviarChannelSelect(GuildChannelSelect):
 class PanelV2EnviarView(discord.ui.View):
     def __init__(self, parent_view: "PanelV2BuilderView", placeholder: str,
                  guild: "discord.Guild | None" = None):
-        super().__init__(timeout=120)
+        super().__init__(timeout=None)
         self.add_item(PanelV2EnviarChannelSelect(parent_view, placeholder, guild=guild))
 
 
 class PanelV2BuilderView(discord.ui.LayoutView):
     def __init__(self, author: discord.Member, panel: dict | None = None,
                  edit_message_id: int | None = None, edit_channel=None):
-        super().__init__(timeout=900)
+        super().__init__(timeout=None)
         self.author = author
         self.panel = panel or _empty_panel_v2()
         self.edit_message_id = edit_message_id
@@ -36398,7 +36401,7 @@ class EmbedSubSelect(discord.ui.Select):
 
 class EmbedButtonsView(discord.ui.View):
     def __init__(self, parent_view: "EmbedBuilderView"):
-        super().__init__(timeout=3600)
+        super().__init__(timeout=None)
         self.parent_view = parent_view
         self._build()
 
@@ -36544,7 +36547,7 @@ class EmbedNewButtonModal(discord.ui.Modal):
 
 class EmbedNewButtonView(discord.ui.View):
     def __init__(self, parent_view: "EmbedBuilderView", edit_idx: int | None):
-        super().__init__(timeout=3600)
+        super().__init__(timeout=None)
         self.parent_view = parent_view
         self.edit_idx = edit_idx
         if edit_idx is not None:
@@ -36910,7 +36913,7 @@ class EmbedNewButtonView(discord.ui.View):
 class EmbedBuilderView(discord.ui.View):
     def __init__(self, author: discord.Member, target_channel: discord.TextChannel,
                  draft: dict | None = None, edit_message_id: int | None = None):
-        super().__init__(timeout=3600)  # 1 hora
+        super().__init__(timeout=None)  # 1 hora
         self.author = author
         self.target_channel = target_channel
         self.draft = draft or _empty_embed_draft()
