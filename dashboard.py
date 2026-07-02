@@ -266,6 +266,7 @@ class BotManager:
         self._next_restart:  dict[str, float] = {}  # cid → timestamp mínimo p/ próximo restart
         self._launch_ts:     dict[str, float] = {}  # cid → quando foi lançado (para reset do contador)
         self._bad_token:     set[str]          = set()  # cids com token inválido (exit 4) — não reiniciar
+        self._ready_events:  dict[str, threading.Event] = {}  # cid → evento sinalizado quando bot está online
 
     def start_loop(self):
         t = threading.Thread(target=self._loop, daemon=True)
@@ -502,9 +503,14 @@ class BotManager:
                     self._tokens[cid]    = token
                     self._launch_ts[cid] = now
                     self._next_restart.pop(cid, None)  # limpa backoff após reinício
-                    # Primeiro lançamento: aguarda mais para evitar pico de memória
-                    # quando todos os bots sobem juntos. Restart pós-crash: 3s basta.
-                    _time.sleep(20 if is_first_launch else 3)
+                    if is_first_launch:
+                        # Aguarda o bot sinalizar "online" (ou timeout 25s) antes de
+                        # lançar o próximo, evitando pico de memória simultâneo.
+                        ev = self._ready_events.get(cid)
+                        if ev:
+                            ev.wait(timeout=25)
+                    else:
+                        _time.sleep(3)
 
     def _launch(self, customer: dict):
         cid   = customer["id"]
@@ -567,21 +573,27 @@ class BotManager:
 
             # Encaminha a saída do bot tanto para o log-file quanto para o stdout do dashboard
             # (Railway captura o stdout do processo principal — gunicorn)
-            def _relay(p, lf, prefix):
+            ready_event = threading.Event()
+            self._ready_events[cid] = ready_event
+
+            def _relay(p, lf, prefix, ev):
                 try:
                     for line in iter(p.stdout.readline, b""):
                         decoded = line.decode("utf-8", errors="replace").rstrip()
                         lf.write(decoded + "\n")
                         lf.flush()
                         print(f"[bot:{prefix}] {decoded}", flush=True)
+                        if not ev.is_set() and "Bot online como" in decoded:
+                            ev.set()
                 except Exception:
                     pass
                 finally:
+                    ev.set()  # garante que o waiter não fica bloqueado se o processo morrer
                     try: lf.close()
                     except Exception: pass
 
             _relay_thread = threading.Thread(
-                target=_relay, args=(proc, log_f, cid[:8]), daemon=True
+                target=_relay, args=(proc, log_f, cid[:8], ready_event), daemon=True
             )
             _relay_thread.start()
             return proc
@@ -699,7 +711,10 @@ class BotManager:
                     self._procs[c["id"]] = p
                     self._tokens[c["id"]] = token
                 results[c["id"]] = True
-                _time.sleep(20)  # escalonamento para evitar pico de memória no restart global
+                # Aguarda o bot sinalizar "online" (ou timeout 25s) antes do próximo
+                ev = self._ready_events.get(c["id"])
+                if ev:
+                    ev.wait(timeout=25)
             else:
                 results[c["id"]] = False
         return results
