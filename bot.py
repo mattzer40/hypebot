@@ -15959,6 +15959,131 @@ class CalendarioView(discord.ui.View):
 # Entretenimento — Instagram
 # -----------------------------------------------------------------------------
 
+async def _process_ig_post(message: discord.Message, settings: dict) -> None:
+    """Recebe uma foto de usuário verificado e publica o card estilizado nos canais configurados."""
+    guild  = message.guild
+    author = message.author
+
+    # Pega primeira imagem ou vídeo do post
+    media_url: str | None = None
+    for att in message.attachments:
+        ct = att.content_type or ""
+        if ct.startswith("image/") or ct.startswith("video/"):
+            media_url = att.url
+            break
+    if not media_url:
+        return
+
+    guild_icon = str(guild.icon.url) if (guild and guild.icon) else None
+    guild_name = guild.name if guild else "Instagram"
+    color      = 0xE1306C  # Instagram pink
+
+    # Card V2
+    _components: list = [
+        {
+            "type": 9,  # Section
+            "components": [{"type": 10, "content": f"**{guild_name} · Instagram**"}],
+        },
+        {
+            "type": 10,
+            "content": f"<:comunidade_:1518272016971595807> @{author.display_name}",
+        },
+        {
+            "type": 12,  # MediaGallery
+            "items": [{"media": {"url": media_url}}],
+        },
+        {
+            "type": 1,
+            "components": [
+                {
+                    "type": 2,
+                    "style": 4,
+                    "label": "Deletar",
+                    "custom_id": f"ig_post_delete_{author.id}",
+                    "emoji": {"name": "🗑️"},
+                }
+            ],
+        },
+    ]
+    # Adiciona thumbnail da guild no Section se existir
+    if guild_icon:
+        _components[0]["accessory"] = {
+            "type": 11,
+            "media": {"url": guild_icon},
+            "description": guild_name,
+        }
+
+    _payload = {
+        "flags": 32768,
+        "components": [{"type": 17, "accent_color": color, "components": _components}],
+    }
+
+    import aiohttp as _ah_ig
+    _h = {"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"}
+
+    ig_channels = settings.get("ig_channels", [])
+    post_ids: list[int] = []
+
+    async with _ah_ig.ClientSession() as _s:
+        if ig_channels:
+            for _ch in ig_channels:
+                _pid = _ch.get("post_channel_id")
+                _hid = _ch.get("highlight_channel_id")
+                _rid = _ch.get("role_id")
+                _clear = _ch.get("clear_highlight", False)
+
+                _send = dict(_payload)
+                if _rid and guild:
+                    _role = guild.get_role(_rid)
+                    if _role:
+                        _send["content"] = _role.mention
+                        _send["allowed_mentions"] = {"roles": [_rid]}
+
+                if _pid:
+                    async with _s.post(
+                        f"https://discord.com/api/v10/channels/{_pid}/messages",
+                        json=_send, headers=_h,
+                    ) as _r:
+                        if _r.status in (200, 201):
+                            post_ids.append(_pid)
+
+                if _hid:
+                    # Limpa highlight anterior se configurado
+                    if _clear:
+                        _last = settings.get("ig_last_highlight", {})
+                        _prev = _last.get(str(_hid))
+                        if _prev:
+                            try:
+                                async with _s.delete(
+                                    f"https://discord.com/api/v10/channels/{_hid}/messages/{_prev}",
+                                    headers={"Authorization": f"Bot {bot.http.token}"},
+                                ) as _dr:
+                                    pass
+                            except Exception:
+                                pass
+                    async with _s.post(
+                        f"https://discord.com/api/v10/channels/{_hid}/messages",
+                        json=_send, headers=_h,
+                    ) as _r2:
+                        if _r2.status in (200, 201):
+                            _rd = await _r2.json()
+                            settings.setdefault("ig_last_highlight", {})[str(_hid)] = _rd.get("id")
+                            save_settings_to_disk()
+        else:
+            # Sem canais configurados — posta no mesmo canal da submissão
+            async with _s.post(
+                f"https://discord.com/api/v10/channels/{message.channel.id}/messages",
+                json=_payload, headers=_h,
+            ) as _r:
+                pass
+
+    # Deleta mensagem original
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+
 def build_instagram_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
@@ -26014,6 +26139,25 @@ async def on_message(message: discord.Message):
             return  # ignora sem responder
 
     settings = get_settings(message.guild.id)
+
+    # Instagram post — usuário verificado envia foto/vídeo no canal configurado
+    if (
+        message.attachments
+        and isinstance(message.channel, discord.TextChannel)
+        and settings.get("ig_enabled")
+        and settings.get("ig_verif_role")
+        and isinstance(message.author, discord.Member)
+    ):
+        _ig_post_ch = settings.get("ig_verif_post_channel")
+        if _ig_post_ch and message.channel.id == _ig_post_ch:
+            _ig_role = message.guild.get_role(settings["ig_verif_role"])
+            if _ig_role and _ig_role in message.author.roles:
+                try:
+                    await _process_ig_post(message, settings)
+                except Exception as _igp_e:
+                    print(f"[ig_post] erro: {_igp_e}", flush=True)
+                await bot.process_commands(message)
+                return
 
     # Auto-assume ticket: primeiro staff a mandar mensagem assume automaticamente
     if (
@@ -41697,6 +41841,41 @@ async def on_interaction(interaction: discord.Interaction):
                     )
                 except Exception:
                     pass
+        return
+
+    # ── Deletar post de Instagram ──────────────────────────────────────────────
+    if cid.startswith("ig_post_delete_"):
+        try:
+            _author_id = int(cid.split("_")[-1])
+        except (ValueError, IndexError):
+            _author_id = 0
+        member = interaction.user
+        guild  = interaction.guild
+        _is_adm = (
+            isinstance(member, discord.Member)
+            and (member.guild_permissions.administrator or (guild and guild.owner_id == member.id))
+        )
+        if not (_is_adm or member.id == _author_id):
+            try:
+                await interaction.response.send_message(
+                    "<a:alerta:1518271939460857968> Apenas o autor ou administradores podem deletar este post.",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+            return
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+        msg = interaction.message
+        if msg:
+            import aiohttp as _ah_ig_del
+            async with _ah_ig_del.ClientSession() as _s_del:
+                await _s_del.delete(
+                    f"https://discord.com/api/v10/channels/{msg.channel.id}/messages/{msg.id}",
+                    headers={"Authorization": f"Bot {bot.http.token}"},
+                )
         return
 
     # ── Handler para botões de embed customizados ──────────────────────────────
