@@ -40929,41 +40929,58 @@ async def on_interaction(interaction: discord.Interaction):
 
     # ── Handler para select menu do painel de ticket ───────────────────────────
     if cid.startswith("ticket_panel_menu_"):
-        panel_id = cid[len("ticket_panel_menu_"):]
-        guild_id = interaction.guild.id if interaction.guild else 0
-        settings = get_settings(guild_id)
-        t = TRANSLATIONS[settings["language"]]
-        panel = _find_panel(settings, panel_id)
-        selected_option_id = (interaction.data.get("values") or [""])[0] if hasattr(interaction.data, "get") else ""
-        opcao = None
-        if panel and selected_option_id:
-            for op in panel.get("menu_opcoes", []):
-                if op.get("id") == selected_option_id or op.get("label") == selected_option_id:
-                    opcao = op
-                    break
-        if not opcao:
-            await interaction.response.defer()
-            return
-        # Show embed_interna if configured for this option, else default
-        # Prioridade: embed_interna_v2 (novo formato V2) > embed_interna (formato clássico)
-        ei_v2 = opcao.get("embed_interna_v2") or (panel.get("embed_interna_v2") if panel else None)
-        ei    = opcao.get("embed_interna")    or (panel.get("embed_interna")    if panel else None)
-        color = settings.get("embed_color", 0x2B2D31)
-        if ei_v2 and (ei_v2.get("blocks") or ei_v2.get("title") or ei_v2.get("description")):
-            # Embed interna V2 — envia como LayoutView com separadores nativos
-            interna_layout = build_panel_v2_layout(ei_v2, settings)
-            await interaction.response.send_message(view=interna_layout, ephemeral=True)
-        elif ei and (ei.get("title") or ei.get("description")):
-            embed = _draft_to_embed(ei, color)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            icon_url = bot.user.display_avatar.url if bot.user else None
-            embed = discord.Embed(
-                description=f"@{interaction.user.name}, configurações da embed interna do ticket não foram encontradas, avise um administrador!",
-                color=color,
-            )
-            embed.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+        try:
+            panel_id = cid[len("ticket_panel_menu_"):]
+            guild_id = interaction.guild.id if interaction.guild else 0
+            settings = get_settings(guild_id)
+            t = TRANSLATIONS[settings["language"]]
+            panel = _find_panel(settings, panel_id)
+            # Extrai valores selecionados com compatibilidade para dict e objetos
+            _idata = interaction.data
+            if isinstance(_idata, dict):
+                selected_option_id = (_idata.get("values") or [""])[0]
+            elif hasattr(_idata, "values") and _idata.values:
+                selected_option_id = _idata.values[0]
+            else:
+                selected_option_id = ""
+            print(f"[ticket_menu] cid={cid} panel_found={panel is not None} selected={selected_option_id!r}", flush=True)
+            opcao = None
+            if panel and selected_option_id:
+                for op in panel.get("menu_opcoes", []):
+                    if op.get("id") == selected_option_id or op.get("label") == selected_option_id:
+                        opcao = op
+                        break
+            if not opcao:
+                print(f"[ticket_menu] opcao=None panel_opcoes={[o.get('id') for o in (panel or {}).get('menu_opcoes', [])]}", flush=True)
+                await interaction.response.defer()
+                return
+            # Prioridade: embed_interna_v2 (novo formato V2) > embed_interna (formato clássico)
+            ei_v2 = opcao.get("embed_interna_v2") or (panel.get("embed_interna_v2") if panel else None)
+            ei    = opcao.get("embed_interna")    or (panel.get("embed_interna")    if panel else None)
+            color = settings.get("embed_color", 0x2B2D31)
+            if ei_v2 and (ei_v2.get("blocks") or ei_v2.get("title") or ei_v2.get("description")):
+                interna_layout = build_panel_v2_layout(ei_v2, settings)
+                await interaction.response.send_message(view=interna_layout, ephemeral=True)
+            elif ei and (ei.get("title") or ei.get("description")):
+                embed = _draft_to_embed(ei, color)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                icon_url = bot.user.display_avatar.url if bot.user else None
+                embed = discord.Embed(
+                    description=f"@{interaction.user.name}, configurações da embed interna do ticket não foram encontradas, avise um administrador!",
+                    color=color,
+                )
+                embed.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as _te:
+            print(f"[ticket_menu] ERRO: {type(_te).__name__}: {_te}", flush=True)
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.send_message(
+                        "<a:alerta:1518271939460857968> Erro ao processar seleção. Tente novamente.", ephemeral=True
+                    )
+                except Exception:
+                    pass
         return
 
     async def _fallback():
