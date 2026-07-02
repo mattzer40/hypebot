@@ -10582,13 +10582,7 @@ async def _varredura_verif(guild: discord.Guild, settings: dict) -> None:
     if not _role_objs:
         return
 
-    # Garante cache completo de membros antes de varrer
-    if not guild.chunked:
-        try:
-            await guild.chunk(cache=True)
-        except Exception as _ce:
-            print(f"[varredura] erro ao chunkar {guild_id}: {_ce}", flush=True)
-
+    # Usa apenas membros em cache — não faz chunk completo para evitar OOM em servidores grandes
     _exempt_set = set(settings.get("verif_exempt_users", []))
     targets = [
         m for m in guild.members
