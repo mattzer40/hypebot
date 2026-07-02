@@ -5561,39 +5561,31 @@ class AppearanceView(discord.ui.View):
         proc_embed.set_author(name=bot_name, icon_url=icon_url)
         await interaction.followup.send(embed=proc_embed, ephemeral=True)
 
-        # Tenta aplicar o banner — com retry em caso de rate limit (erro 50035)
-        banner_applied = False
-        for _attempt in range(2):
-            try:
-                await bot.user.edit(banner=image_bytes)
-                banner_applied = True
-                break
-            except discord.HTTPException as e:
-                if e.code == 50035 and _attempt == 0:
-                    wait_embed = discord.Embed(
-                        description="<a:alerta:1518271939460857968> Discord solicitou aguardar antes de alterar o banner. Tentando novamente em 60s...",
-                        color=color,
-                    )
-                    await interaction.followup.send(embed=wait_embed, ephemeral=True)
-                    await asyncio.sleep(60)
-                    continue
-                err_embed = discord.Embed(
-                    description=f"❌ {t['banner_error'].format(error=str(e))} (código {e.code})",
-                    color=0xED4245,
-                )
-                await interaction.followup.send(embed=err_embed, ephemeral=True)
-                return
-            except Exception as e:
-                err_embed = discord.Embed(
-                    description=f"❌ Erro inesperado ao alterar o banner: `{type(e).__name__}: {e}`",
-                    color=0xED4245,
-                )
-                await interaction.followup.send(embed=err_embed, ephemeral=True)
-                return
-
-        if not banner_applied:
+        # Rejeita imagens muito grandes (limite Discord ~8 MB para banners)
+        _MAX_BANNER = 8 * 1024 * 1024
+        if len(image_bytes) > _MAX_BANNER:
+            size_mb = len(image_bytes) / 1024 / 1024
             err_embed = discord.Embed(
-                description="❌ Não foi possível alterar o banner após 2 tentativas.",
+                description=f"❌ Imagem muito grande ({size_mb:.1f} MB). O limite para banner é 8 MB. Comprima a imagem e tente novamente.",
+                color=0xED4245,
+            )
+            await interaction.followup.send(embed=err_embed, ephemeral=True)
+            return
+
+        try:
+            await bot.user.edit(banner=image_bytes)
+        except discord.HTTPException as e:
+            _detalhe = (e.text or str(e))[:300]
+            print(f"[banner] erro HTTP {e.code}: {e.text}", flush=True)
+            err_embed = discord.Embed(
+                description=f"❌ {t['banner_error'].format(error=str(e))} (código {e.code})\n```{_detalhe}```",
+                color=0xED4245,
+            )
+            await interaction.followup.send(embed=err_embed, ephemeral=True)
+            return
+        except Exception as e:
+            err_embed = discord.Embed(
+                description=f"❌ Erro inesperado ao alterar o banner: `{type(e).__name__}: {e}`",
                 color=0xED4245,
             )
             await interaction.followup.send(embed=err_embed, ephemeral=True)
