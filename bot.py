@@ -26490,6 +26490,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
 
     # ── Fast-path: cargos bloqueados são revertidos imediatamente sem esperar audit log ──
     _fast_handled: set[int] = set()
+    _fast_removed_protected: list[int] = []  # IDs removidos pelo fast-path; slow-path verifica se deve restaurar
     if settings.get("protecao_cargos_enabled") and added:
         _bl_cfg_fast = settings.get("protecao_cargo_bloqueado", {})
         if _bl_cfg_fast:
@@ -26504,6 +26505,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 _r = after.guild.get_role(_rid)
                 if _r and _r.position < after.guild.me.top_role.position:
                     _fast_remove_roles.append(_r)
+                    _fast_removed_protected.append(_rid)  # slow-path vai checar se deve restaurar
                 _fast_handled.add(_rid)
             if _fast_remove_roles:
                 try:
@@ -26612,12 +26614,38 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             if is_bot_action:
                 return True
             if str(rid) in blocked_roles_cfg:
-                # Cargo bloqueado: apenas cargos de acesso específicos permitem,
-                # mesmo administradores precisam ter o cargo de acesso configurado.
                 access = set(blocked_roles_cfg[str(rid)])
-                return bool(access and mod_role_ids_for_blocked.intersection(access))
+                if access:
+                    # Acesso específico configurado: apenas quem tem o cargo de acesso
+                    return bool(mod_role_ids_for_blocked.intersection(access))
+                # Nenhum acesso configurado: somente administradores
+                return mod_is_admin
             # Cargo não bloqueado: admin pode, ou quem tem acesso geral
             return mod_is_admin or has_acesso
+
+        # Restaura cargos protegidos removidos pelo fast-path se o moderador tiver acesso
+        if _fast_removed_protected and not is_bot_action:
+            _to_readd_fast: list[discord.Role] = []
+            for _frid in _fast_removed_protected:
+                if _mod_can_manage(_frid):
+                    _fr_obj = after.guild.get_role(_frid)
+                    if _fr_obj:
+                        _to_readd_fast.append(_fr_obj)
+            if _to_readd_fast:
+                try:
+                    for _fro in _to_readd_fast:
+                        _register_bot_role_action(after.id, _fro.id, "add")
+                    await after.add_roles(
+                        *_to_readd_fast,
+                        reason="Proteção de Cargos: acesso verificado — cargo restaurado",
+                    )
+                    print(
+                        f"[protecao_fast_restore] guild={after.guild.id} member={after.id} "
+                        f"mod={moderator_id} restored={[r.id for r in _to_readd_fast]}",
+                        flush=True,
+                    )
+                except Exception as _fre:
+                    print(f"[protecao_fast_restore] erro: {_fre}", flush=True)
 
         if not is_bot_action and (clean_added or clean_removed):
             for rid in clean_added:
