@@ -26048,7 +26048,7 @@ async def on_message(message: discord.Message):
                             f"https://discord.com/api/v10/channels/{_thr.id}/messages",
                             json={
                                 "flags": 32768,
-                                "components": [{"type": 17, "accent_color": 0x2ecc71, "components": [{"type": 10, "content": f"<a:verificadoverde:1518272098290892810> Ticket assumido por: {_m.mention} ({_cnt_p}/{_cnt_t})"}]}],
+                                "components": [{"type": 17, "accent_color": 0x2ecc71, "components": [{"type": 10, "content": f"Ticket assumido por:{_m.mention} ({_cnt_p}/{_cnt_t})"}]}],
                             },
                             headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
                         )
@@ -41654,7 +41654,7 @@ async def on_interaction(interaction: discord.Interaction):
                     "components": [{
                         "type": 10,
                         "content": (
-                            f"<a:verificadoverde:1518272098290892810> Ticket assumido por: "
+                            f"Ticket assumido por:"
                             f"{interaction.user.mention} ({_personal}/{_total})"
                         ),
                     }],
