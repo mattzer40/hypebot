@@ -8877,7 +8877,13 @@ class TicketPainelLeiaView(discord.ui.View):
             return
         has_interna_v2 = bool(ei_v2 and (ei_v2.get("blocks") or ei_v2.get("title") or ei_v2.get("description")))
         has_interna    = bool(ei    and (ei.get("title")      or ei.get("description")))
-        if not (has_interna_v2 or has_interna):
+        # Aceita se alguma opcao do menu já tem embed_interna própria
+        has_opcao_interna = any(
+            (op.get("embed_interna_v2") and op["embed_interna_v2"].get("blocks"))
+            or (op.get("embed_interna") and (op["embed_interna"].get("title") or op["embed_interna"].get("description")))
+            for op in panel.get("menu_opcoes", [])
+        )
+        if not (has_interna_v2 or has_interna or has_opcao_interna):
             await interaction.response.send_message(embed=_notif_embed(t["ticket_painel_missing"]), ephemeral=True)
             return
 
