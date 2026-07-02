@@ -9839,9 +9839,10 @@ class IgVerifRoleRmSelect(discord.ui.RoleSelect):
 
 
 class IgVerifView(discord.ui.View):
-    def __init__(self, author: discord.Member):
+    def __init__(self, author: discord.Member, from_entretenimento: bool = False):
         super().__init__(timeout=None)
         self.author = author
+        self.from_entretenimento = from_entretenimento
         self._build()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -9882,9 +9883,12 @@ class IgVerifView(discord.ui.View):
 
     async def _back(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
-        from_servidor = isinstance(interaction.channel, discord.TextChannel)
-        embed = build_comunidade_embed(self.author, settings)
-        view  = ComunidadeView(self.author)
+        if self.from_entretenimento:
+            embed = build_instagram_embed(self.author, settings)
+            view  = InstagramView(self.author)
+        else:
+            embed = build_comunidade_embed(self.author, settings)
+            view  = ComunidadeView(self.author)
         await interaction.response.edit_message(embed=embed, view=view)
 
     async def _toggle(self, interaction: discord.Interaction):
@@ -16615,6 +16619,7 @@ class InstagramView(discord.ui.View):
         row1 = [
             (t["btn_configurar_emojis"], discord.ButtonStyle.secondary, self._cfg_emojis),
             (t["btn_configurar_msg"], discord.ButtonStyle.secondary, self._cfg_msg),
+            ("Verificação", discord.ButtonStyle.primary, self._cfg_verif),
             (t["btn_resetar_destaque"], discord.ButtonStyle.danger, self._reset_destaque),
             (t["btn_resetar_tudo_simples_ig"], discord.ButtonStyle.danger, self._reset_all),
         ]
@@ -16703,6 +16708,12 @@ class InstagramView(discord.ui.View):
         view = InstagramView(self.author)
         await interaction.response.edit_message(embed=embed, view=view)
         await interaction.followup.send(embed=_notif_embed(t["ig_reset_done"]), ephemeral=True)
+
+    async def _cfg_verif(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_ig_verif_admin_embed(self.author, settings)
+        view  = IgVerifView(self.author, from_entretenimento=True)
+        await interaction.response.edit_message(embed=embed, view=view)
 
 
 # =============================================================================
