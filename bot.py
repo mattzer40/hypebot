@@ -41297,7 +41297,7 @@ async def _criar_ticket_thread(
         ],
     }
 
-    # Usa raw HTTP (igual ao IG verif) para garantir envio no thread
+    # Usa raw HTTP — sempre V2 (flags=32768), mesmo padrão que IG verif
     import aiohttp as _aiohttp_ticket
 
     _headers = {
@@ -41305,62 +41305,60 @@ async def _criar_ticket_thread(
         "Content-Type": "application/json",
     }
 
-    async def _post_to_thread(payload: dict):
+    # Monta blocos V2 do container
+    _v2_blocks: list = []
+
+    # Menções como primeiro bloco de texto (mesmo padrão IG verif)
+    if ping_content:
+        _v2_blocks.append({"type": 10, "content": ping_content})
+
+    if ei_v2 and (ei_v2.get("blocks") or ei_v2.get("title") or ei_v2.get("description")):
+        for b in (ei_v2.get("blocks") or []):
+            btype = b.get("type")
+            if btype == "text":
+                txt = b.get("text") or ""
+                if b.get("thumbnail"):
+                    _v2_blocks.append({
+                        "type": 9, "components": [
+                            {"type": 10, "content": txt},
+                            {"type": 11, "media": {"url": b["thumbnail"]}, "description": ""},
+                        ],
+                    })
+                else:
+                    _v2_blocks.append({"type": 10, "content": txt})
+            elif btype == "separator":
+                _v2_blocks.append({"type": 14, "divider": True, "spacing": 1})
+    elif ei and (ei.get("title") or ei.get("description")):
+        # Converte embed clássico para texto V2
+        _parts: list[str] = []
+        if ei.get("title"):
+            _parts.append(f"**{ei['title']}**")
+        if ei.get("description"):
+            _parts.append(ei["description"])
+        _v2_blocks.append({"type": 10, "content": "\n".join(_parts)})
+    else:
+        _v2_blocks.append({"type": 10, "content": f"Ticket aberto por {user.mention}."})
+
+    _v2_blocks.append(_action_row)
+
+    _payload_v2: dict = {
+        "flags": 32768,
+        "allowed_mentions": {"parse": ["roles", "users"]},
+        "components": [{"type": 17, "accent_color": color, "components": _v2_blocks}],
+    }
+
+    try:
         async with _aiohttp_ticket.ClientSession() as _sess:
             async with _sess.post(
                 f"https://discord.com/api/v10/channels/{thread.id}/messages",
                 headers=_headers,
-                json=payload,
+                json=_payload_v2,
             ) as _resp:
+                _body = await _resp.json()
                 if _resp.status not in (200, 201):
-                    _err = await _resp.json()
-                    raise Exception(f"Discord API {_resp.status}: {_err}")
-
-    try:
-        if ei_v2 and (ei_v2.get("blocks") or ei_v2.get("title") or ei_v2.get("description")):
-            # V2: container com conteúdo + action row de botões no mesmo payload
-            _v2_blocks = []
-            for b in (ei_v2.get("blocks") or []):
-                btype = b.get("type")
-                if btype == "text":
-                    txt = b.get("text") or ""
-                    if b.get("thumbnail"):
-                        _v2_blocks.append({
-                            "type": 9, "components": [
-                                {"type": 10, "content": txt},
-                                {"type": 11, "media": {"url": b["thumbnail"]}, "description": ""},
-                            ],
-                        })
-                    else:
-                        _v2_blocks.append({"type": 10, "content": txt})
-                elif btype == "separator":
-                    _v2_blocks.append({"type": 14, "divider": True, "spacing": 1})
-            _v2_blocks.append(_action_row)
-            _payload_v2: dict = {
-                "flags": 32768,
-                "allowed_mentions": {"parse": ["roles", "users"]},
-                "components": [{"type": 17, "accent_color": color, "components": _v2_blocks}],
-            }
-            if ping_content:
-                _payload_v2["content"] = ping_content
-            await _post_to_thread(_payload_v2)
-        else:
-            # Embed clássico
-            if ei and (ei.get("title") or ei.get("description")):
-                _embed_obj = _draft_to_embed(ei, color)
-            else:
-                _embed_obj = discord.Embed(
-                    description=f"Ticket aberto por {user.mention}.",
-                    color=color,
-                )
-            _payload_classic: dict = {
-                "embeds": [_embed_obj.to_dict()],
-                "components": [_action_row],
-                "allowed_mentions": {"parse": ["roles", "users"]},
-            }
-            if ping_content:
-                _payload_classic["content"] = ping_content
-            await _post_to_thread(_payload_classic)
+                    print(f"[ticket_criado] Discord API {_resp.status}: {_body}", flush=True)
+                else:
+                    print(f"[ticket_criado] embed enviado no thread {thread.id}", flush=True)
     except Exception as e:
         print(f"[ticket_criado] Erro ao enviar embed no thread: {e}", flush=True)
 
