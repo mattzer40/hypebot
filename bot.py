@@ -32879,7 +32879,8 @@ def _build_call_panel_v2_payload(
     }
 
 
-async def _edit_call_panel_raw(ch_id: int, msg_id: int, payload: dict) -> None:
+async def _edit_call_panel_raw(ch_id: int, msg_id: int, payload: dict) -> bool:
+    """Returns True if the message was updated as V2, False if PATCH failed or message is not V2."""
     try:
         import aiohttp as _ah_cp
         async with _ah_cp.ClientSession() as _s_cp:
@@ -32888,11 +32889,16 @@ async def _edit_call_panel_raw(ch_id: int, msg_id: int, payload: dict) -> None:
                 json=payload,
                 headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
             )
+            _rb_cp = await _r_cp.json()
             if _r_cp.status not in (200, 204):
-                _rb_cp = await _r_cp.json()
                 print(f"[call_panel_edit] {_r_cp.status}: {_rb_cp}", flush=True)
+                return False
+            # Confirm V2 flag is present in the response (flags & 32768)
+            _resp_flags = _rb_cp.get("flags", 0) if isinstance(_rb_cp, dict) else 0
+            return bool(_resp_flags & 32768)
     except Exception as _e_cp:
         print(f"[call_panel_edit] {_e_cp}", flush=True)
+        return False
 
 
 async def _refresh_call_panel(
@@ -32911,7 +32917,35 @@ async def _refresh_call_panel(
     if not msg_id:
         return
     payload = _build_call_panel_v2_payload(ch, owner, settings, banner_url=banner_url, force_locked=force_locked)
-    await _edit_call_panel_raw(ch.id, msg_id, payload)
+    ok = await _edit_call_panel_raw(ch.id, msg_id, payload)
+    if not ok:
+        # Old embed message (or PATCH failed) — delete and resend as a fresh V2 message
+        import aiohttp as _ah_re
+        async with _ah_re.ClientSession() as _s_re:
+            try:
+                async with _s_re.delete(
+                    f"https://discord.com/api/v10/channels/{ch.id}/messages/{msg_id}",
+                    headers={"Authorization": f"Bot {bot.http.token}"},
+                ):
+                    pass
+            except Exception:
+                pass
+            async with _s_re.post(
+                f"https://discord.com/api/v10/channels/{ch.id}/messages",
+                json=payload,
+                headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
+            ) as _r_re:
+                if _r_re.status in (200, 201):
+                    _body_re = await _r_re.json()
+                    _new_mid = int(_body_re.get("id", 0))
+                    if _new_mid:
+                        _call_panels[ch.id] = _new_mid
+                        settings.setdefault("active_call_panels", {})[str(ch.id)] = _new_mid
+                        bot.add_view(DonoCallPanelView(ch.id))
+                        save_settings_to_disk()
+                else:
+                    _err_re = await _r_re.json()
+                    print(f"[call_panel_resend] {_r_re.status}: {_err_re}", flush=True)
 
 
 class DonoCallNomeModal(discord.ui.Modal):
