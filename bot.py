@@ -32840,12 +32840,24 @@ def _build_call_panel_v2_payload(
     container_blocks: list = []
     effective_banner = banner_url or settings.get("dono_call_banner_url", "")
 
+    # Registro de call inline
+    _reg_entries = _call_join_log.get(ch.id, [])
+    _reg_count   = len(_reg_entries)
+    if _reg_count:
+        _last = _reg_entries[-1]
+        _last_dt   = datetime.fromtimestamp(_last[0]).strftime("%H:%M")
+        _last_icon = "→" if _last[3] == "entrou" else "←"
+        _last_name = discord.utils.escape_markdown(_last[2])
+        _reg_inline = f"  ·  📋 **{_reg_count}** eventos *(último: `{_last_dt}` {_last_icon} {_last_name})*"
+    else:
+        _reg_inline = "  ·  📋 *Sem registros*"
+
     # Info no topo
     container_blocks.append({"type": 10, "content": (
         f"**Proprietário** › {owner.mention}\n"
         f"**Canal** › {ch.mention}\n"
         f"**Limite** › {limite_val}\n\n"
-        f"{status_emoji} **{status_text}**"
+        f"{status_emoji} **{status_text}**{_reg_inline}"
     )})
     container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
