@@ -27104,9 +27104,12 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                 # Anti-Mover: se a call está protegida (trancada ou modo privado) e o membro foi
                 # movido para outro canal (não desconectou), reverte a movimentação.
                 _anti_moved = False
+                # Anti-Mover só se aplica a membros que NÃO são o dono da call.
+                # O dono deve poder sair livremente para que a restauração ocorra.
                 if (after.channel is not None
                         and (ch.id in _call_locked or ch.id in _call_auto_kick)
-                        and ch.id in _call_owners):
+                        and ch.id in _call_owners
+                        and _call_owners.get(ch.id) != member.id):
                     try:
                         await member.move_to(ch, reason="Anti-Mover — call protegida")
                         _anti_moved = True
