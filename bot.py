@@ -27132,7 +27132,8 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                             pass
                     remaining = [m for m in ch.members if not m.bot]
                     if not remaining:
-                        # Canal vazio — limpa
+                        # Canal vazio — restaura permissões antes de limpar
+                        asyncio.create_task(_restore_call_permissions(ch))
                         asyncio.create_task(_delete_call_panel(ch))
                         _call_owners.pop(ch.id, None)
                         _call_panels.pop(ch.id, None)
