@@ -32932,6 +32932,7 @@ def _build_call_panel_v2_payload(
 
     return {
         "flags": 32768,
+        "allowed_mentions": {"parse": []},
         "components": [{"type": 17, "accent_color": color, "components": container_blocks}],
     }
 
