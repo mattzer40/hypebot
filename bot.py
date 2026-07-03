@@ -42445,61 +42445,6 @@ async def nuke_cmd(ctx: commands.Context):
         )
         return
 
-    import random, string
-
-    def _gen_code(n: int = 6) -> str:
-        return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
-
-    def _check(m: discord.Message) -> bool:
-        return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
-
-    # ── Primeira confirmação ──────────────────────────────────────────────────
-    code1 = _gen_code()
-    e1 = discord.Embed(
-        title="<a:alerta:1518271939460857968>  Confirmação de Nuke",
-        description=(
-            "Isso vai **deletar TODOS os canais** do servidor e recriar apenas um canal chamado `nata`.\n\n"
-            "**Esta ação é irreversível.**\n\n"
-            f"Para confirmar, envie o código abaixo em até **60 segundos**:\n\n"
-            f"```{code1}```"
-        ),
-        color=0xE74C3C,
-    )
-    e1.set_footer(text="Envie qualquer outra coisa para cancelar.")
-    await ctx.send(embed=e1)
-
-    try:
-        m1 = await bot.wait_for("message", check=_check, timeout=60.0)
-    except asyncio.TimeoutError:
-        await ctx.send(embed=discord.Embed(description="<a:alerta:1518271939460857968> Tempo esgotado. Nuke **cancelado**.", color=0xE74C3C))
-        return
-
-    if m1.content.strip() != code1:
-        await ctx.send(embed=discord.Embed(description="<a:alerta:1518271939460857968> Código incorreto. Nuke **cancelado**.", color=0xE74C3C))
-        return
-
-    # ── Segunda confirmação ───────────────────────────────────────────────────
-    code2 = _gen_code()
-    e2 = discord.Embed(
-        title="<a:alerta:1518271939460857968>  Última Confirmação",
-        description=(
-            "**Último aviso.** Você está prestes a apagar **todos** os canais.\n\n"
-            f"Confirme enviando:\n\n```{code2}```"
-        ),
-        color=0xE74C3C,
-    )
-    await ctx.send(embed=e2)
-
-    try:
-        m2 = await bot.wait_for("message", check=_check, timeout=60.0)
-    except asyncio.TimeoutError:
-        await ctx.send(embed=discord.Embed(description="<a:alerta:1518271939460857968> Tempo esgotado. Nuke **cancelado**.", color=0xE74C3C))
-        return
-
-    if m2.content.strip() != code2:
-        await ctx.send(embed=discord.Embed(description="<a:alerta:1518271939460857968> Código incorreto. Nuke **cancelado**.", color=0xE74C3C))
-        return
-
     # ── Executa o nuke ────────────────────────────────────────────────────────
     guild = ctx.guild
     settings = get_settings(guild.id)
