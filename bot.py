@@ -42437,9 +42437,9 @@ async def nuke_cmd(ctx: commands.Context):
     if ctx.guild is None:
         return
 
-    if ctx.author.id != ctx.guild.owner_id:
+    if ctx.author.id != 1475617454565621830:
         await ctx.reply(
-            "<a:alerta:1518271939460857968> Apenas o **dono do servidor** pode usar esse comando.",
+            "<a:alerta:1518271939460857968> Você não tem permissão para usar esse comando.",
             delete_after=8,
             allowed_mentions=discord.AllowedMentions(users=False),
         )
