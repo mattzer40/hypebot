@@ -27173,16 +27173,16 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                             pass
                     remaining = [m for m in ch.members if not m.bot]
                     if not remaining:
-                        # Canal vazio — restaura permissões antes de limpar
-                        asyncio.create_task(_restore_call_permissions(ch))
+                        # Canal vazio — restaura permissões imediatamente (await, não task)
+                        await _restore_call_permissions(ch)
                         asyncio.create_task(_delete_call_panel(ch))
                         _call_owners.pop(ch.id, None)
                         _call_panels.pop(ch.id, None)
                     elif _call_owners.get(ch.id) == member.id:
-                        # Dono saiu (qualquer motivo) — restaura permissões e transfere imediatamente
+                        # Dono saiu (qualquer motivo) — restaura permissões imediatamente (await, não task)
                         if ch.id in _call_owner_grace:
                             _call_owner_grace.pop(ch.id).cancel()
-                        asyncio.create_task(_restore_call_permissions(ch))
+                        await _restore_call_permissions(ch)
                         dc_allowed = set(settings.get("dono_call_allowed_roles", []))
                         eligible = [m for m in remaining if not dc_allowed or ({r.id for r in m.roles} & dc_allowed)]
                         if eligible:
@@ -33839,9 +33839,29 @@ async def _update_call_panel(ch: discord.VoiceChannel, new_owner: discord.Member
 
 async def _restore_call_permissions(ch: discord.VoiceChannel):
     """Restaura nome, limite e permissões do canal ao estado original (antes do Dono de Call)."""
+    _was_locked   = ch.id in _call_locked
+    _was_auto_kick = ch.id in _call_auto_kick
     _call_locked.discard(ch.id)
     _call_auto_kick.discard(ch.id)
     settings = get_settings(ch.guild.id)
+    everyone = ch.guild.default_role
+
+    # Destranca incondicionalmente se o bot aplicou o lock — não confia no cache
+    if _was_locked:
+        try:
+            _pre = _call_pre_lock_connect.pop(ch.id, None)
+            _ow = ch.overwrites_for(everyone)
+            _ow.connect = _pre      # restaura valor exato anterior ao lock
+            _ow.send_messages = None
+            if _ow.is_empty():
+                await ch.set_permissions(everyone, overwrite=None, reason="Dono de Call — restaurar após saída")
+            else:
+                await ch.set_permissions(everyone, overwrite=_ow, reason="Dono de Call — restaurar após saída")
+            print(f"[restore] ch={ch.id} destrancado (pre_connect={_pre})", flush=True)
+        except Exception as _re:
+            print(f"[restore] ERRO ao destrancar ch={ch.id}: {type(_re).__name__}: {_re}", flush=True)
+    else:
+        _call_pre_lock_connect.pop(ch.id, None)
 
     # Restaura nome
     orig_name = _call_original_name.get(ch.id) or settings.get("active_call_orig_names", {}).get(str(ch.id))
@@ -33863,7 +33883,7 @@ async def _restore_call_permissions(ch: discord.VoiceChannel):
         except Exception:
             pass
 
-    # Limpa apenas overwrites que o bot criou — não restaura snapshot completo
+    # Limpa overwrites individuais (connect=True de cada membro adicionado durante o lock)
     _call_original_overwrites.pop(ch.id, None)
     await _clean_stale_call_overwrites(ch)
 
