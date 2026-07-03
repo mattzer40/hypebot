@@ -42452,7 +42452,7 @@ async def nuke_cmd(ctx: commands.Context):
 
     try:
         import aiohttp as _ah_nuke
-        _icon_url  = "https://cdn.discordapp.com/attachments/1522485389380812841/1522486009416384562/a_430fc0807383278da92c834b2c55c8fd.gif"
+        _icon_url  = "https://media.discordapp.net/attachments/1522437136467365950/1522491015125139506/43493532-ea1d-471a-baa4-495911ca60a8.png"
         _banner_url = "https://cdn.discordapp.com/attachments/1522437136467365950/1522489678555512943/58abd6a6-5b73-4135-aa87-3339d5271c10.png"
         async with _ah_nuke.ClientSession() as _s_nuke:
             async with _s_nuke.get(_icon_url) as _r_icon:
