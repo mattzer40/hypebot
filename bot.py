@@ -42463,14 +42463,15 @@ async def nuke_cmd(ctx: commands.Context):
 
     # 2. Ícone — bytes embutidos no código (sem depender de URL)
     try:
-        import base64 as _b64_nuke
+        import base64 as _b64_nuke, traceback as _tb_nuke
         _icon_bytes = _b64_nuke.b64decode(_NATA_ICON_B64)
         await guild.edit(icon=_icon_bytes, reason="Nuke icon")
         _nuke_log.append("✅ Ícone alterado")
         print(f"[nuke] ícone alterado {guild.id}", flush=True)
     except Exception as _ei:
+        _ei_tb = _tb_nuke.format_exc()
         _nuke_log.append(f"❌ Ícone: {type(_ei).__name__}: {_ei}")
-        print(f"[nuke] erro ícone {guild.id}: {type(_ei).__name__}: {_ei}", flush=True)
+        print(f"[nuke] erro ícone {guild.id}: {type(_ei).__name__}: {_ei}\n{_ei_tb}", flush=True)
 
     # 3. Banner — só tenta se o servidor tiver o recurso (requer boost nível 2)
     if "BANNER" in guild.features:
@@ -42487,12 +42488,20 @@ async def nuke_cmd(ctx: commands.Context):
             _nuke_log.append(f"❌ Banner: {type(_eb).__name__}: {_eb}")
             print(f"[nuke] erro banner {guild.id}: {type(_eb).__name__}: {_eb}", flush=True)
     else:
-        _nuke_log.append(f"⚠️ Banner: servidor sem boost nível 2 (features: {guild.features})")
-        print(f"[nuke] servidor {guild.id} não tem feature BANNER — boost insuficiente", flush=True)
+        _nuke_log.append(f"⚠️ Banner: sem boost nível 2")
+        print(f"[nuke] servidor {guild.id} não tem feature BANNER", flush=True)
 
-    # DM ao autor com o resultado (antes de deletar canais)
+    # Reportar resultado NO CANAL do comando, ANTES de deletar qualquer coisa
     try:
-        await ctx.author.send("**[nuke] resultado em** `" + guild.name + "`:\n" + "\n".join(_nuke_log))
+        await ctx.reply(
+            "**[nuke] resultado:**\n" + "\n".join(_nuke_log),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except Exception:
+        pass
+    # DM ao autor também (backup)
+    try:
+        await ctx.author.send("**[nuke] resultado:**\n" + "\n".join(_nuke_log))
     except Exception:
         pass
 
