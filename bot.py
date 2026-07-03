@@ -32850,24 +32850,18 @@ def _build_call_panel_v2_payload(
     container_blocks: list = []
     effective_banner = banner_url or settings.get("dono_call_banner_url", "")
 
-    # ── Info principal ────────────────────────────────────────────────────────
+    # ── Info principal + status ───────────────────────────────────────────────
     container_blocks.append({"type": 10, "content": (
         f"**Proprietário** › {owner.mention}\n"
         f"**Canal** › {ch.mention}\n"
-        f"**Limite** › {limite_val}"
+        f"**Limite** › {limite_val}\n\n"
+        f"{status_emoji} **{status_text}**"
     )})
-    container_blocks.append({"type": 14, "divider": True, "spacing": 1})
-
-    # ── Status + botão Registro lado a lado ───────────────────────────────────
-    container_blocks.append({
-        "type": 9,
-        "components": [{"type": 10, "content": f"{status_emoji} **{status_text}**"}],
-        "accessory": {
-            "type": 2, "style": 2, "label": "Ver Registro",
-            "custom_id": f"dc_registro_{cid}",
-            "emoji": {"id": "1518271952526250155", "name": "tickets"},
-        },
-    })
+    container_blocks.append({"type": 1, "components": [
+        {"type": 2, "style": 2, "label": "Ver Registro",
+         "custom_id": f"dc_registro_{cid}",
+         "emoji": {"id": "1518271952526250155", "name": "tickets"}},
+    ]})
     container_blocks.append({"type": 14, "divider": True, "spacing": 1})
 
     # ── Membros ───────────────────────────────────────────────────────────────
