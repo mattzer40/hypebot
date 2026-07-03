@@ -27682,9 +27682,9 @@ async def migrar_fotos_cmd(ctx: commands.Context, arg1: str = None, arg2: str = 
                     f"<a:online:1518271945550856295> {len(ck.get('done_channels', []))} canais concluídos"
                 )
             except Exception:
-                await ctx.reply("<a:alerta:1518271939460857968> Use: `nata!migrar_fotos <ID_origem> <ID_destino>`")
+                await ctx.reply("<a:alerta:1518271939460857968> Use: `hype!migrar_fotos <ID_origem> <ID_destino>`")
         else:
-            await ctx.reply("<a:alerta:1518271939460857968> Use: `nata!migrar_fotos <ID_origem> <ID_destino>`")
+            await ctx.reply("<a:alerta:1518271939460857968> Use: `hype!migrar_fotos <ID_origem> <ID_destino>`")
         return
 
     # Converte IDs
@@ -27695,7 +27695,7 @@ async def migrar_fotos_cmd(ctx: commands.Context, arg1: str = None, arg2: str = 
         return
 
     if arg2 is None:
-        await ctx.reply("<a:alerta:1518271939460857968> Informe o ID do destino: `nata!migrar_fotos <ID_origem> <ID_destino>`")
+        await ctx.reply("<a:alerta:1518271939460857968> Informe o ID do destino: `hype!migrar_fotos <ID_origem> <ID_destino>`")
         return
     try:
         target_guild_id = int(arg2)
@@ -28649,7 +28649,7 @@ async def clonar_config_cmd(ctx: commands.Context, source_guild_id: int = None):
     tgt["backup_allowed_roles"] = mrl(src.get("backup_allowed_roles", []))
 
     # Prefix / geral extra
-    tgt["prefix"]           = src.get("prefix", "nata!")
+    tgt["prefix"]           = src.get("prefix", "hype!")
     tgt["embed_banner_url"] = src.get("embed_banner_url")
     tgt["bot_name"]         = src.get("bot_name")
 
