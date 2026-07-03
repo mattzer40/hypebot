@@ -41964,6 +41964,7 @@ async def _criar_ticket_thread(
         _container_items.extend(_text_parts)
 
     _container_items.append({"type": 10, "content": f"-# {_foot_final} | {_ts_final}"})
+    _container_items.append({"type": 14, "divider": True, "spacing": "sm"})
     _container_items.append({
         "type": 1,
         "components": [
