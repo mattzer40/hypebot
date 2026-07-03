@@ -41793,7 +41793,6 @@ class TicketThreadView(discord.ui.View):
                 },
                 headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
             )
-        await _patch_ticket_remove_assumir(thread.id)
 
     async def _add_remove_user(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id if interaction.guild else 0
