@@ -42656,15 +42656,6 @@ async def nuke_cmd(ctx: commands.Context):
         except Exception:
             await asyncio.sleep(0.5)
 
-    # 6. Enviar status no primeiro canal criado (embed)
-    if _first_ch and _nuke_log:
-        try:
-            await _first_ch.send(
-                embed=_result_embed,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-        except Exception:
-            pass
 
 
 # =============================================================================
