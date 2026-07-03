@@ -39124,7 +39124,11 @@ async def _run_restaurar_deletados(notify_channel_id: int):
 @bot.command(name="restaurar_deletados", aliases=["restaurardeletados", "restore_deleted"])
 async def restaurar_deletados_cmd(ctx: commands.Context):
     """Recria canais/categorias que o bot deletou, usando backup ou audit log."""
-    if ctx.author.id not in _C_ALLOWED_USERS:
+    if ctx.guild is None:
+        return
+    settings = get_settings(ctx.guild.id)
+    is_admin = ctx.author.guild_permissions.administrator
+    if ctx.author.id not in _C_ALLOWED_USERS and not is_authorized(ctx.author, settings) and not is_admin:
         return
     if _reverter_anuncio_running:
         await ctx.reply("⚠️ Já existe uma operação em andamento.", delete_after=8)
