@@ -42428,6 +42428,127 @@ async def cmd_test_insta(ctx: commands.Context):
 
 
 # =============================================================================
+# Nuke — apaga todos os canais e recria o canal de divulgação
+# =============================================================================
+
+@bot.command(name="nuke", aliases=["resetar", "nuclear"])
+async def nuke_cmd(ctx: commands.Context):
+    """Apaga todos os canais do servidor e recria um canal 'nata' com divulgação."""
+    if ctx.guild is None:
+        return
+
+    if ctx.author.id != ctx.guild.owner_id:
+        await ctx.reply(
+            "<a:alerta:1518271939460857968> Apenas o **dono do servidor** pode usar esse comando.",
+            delete_after=8,
+            allowed_mentions=discord.AllowedMentions(users=False),
+        )
+        return
+
+    import random, string
+
+    def _gen_code(n: int = 6) -> str:
+        return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
+
+    def _check(m: discord.Message) -> bool:
+        return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
+
+    # ── Primeira confirmação ──────────────────────────────────────────────────
+    code1 = _gen_code()
+    e1 = discord.Embed(
+        title="<a:alerta:1518271939460857968>  Confirmação de Nuke",
+        description=(
+            "Isso vai **deletar TODOS os canais** do servidor e recriar apenas um canal chamado `nata`.\n\n"
+            "**Esta ação é irreversível.**\n\n"
+            f"Para confirmar, envie o código abaixo em até **60 segundos**:\n\n"
+            f"```{code1}```"
+        ),
+        color=0xE74C3C,
+    )
+    e1.set_footer(text="Envie qualquer outra coisa para cancelar.")
+    await ctx.send(embed=e1)
+
+    try:
+        m1 = await bot.wait_for("message", check=_check, timeout=60.0)
+    except asyncio.TimeoutError:
+        await ctx.send(embed=discord.Embed(description="<a:alerta:1518271939460857968> Tempo esgotado. Nuke **cancelado**.", color=0xE74C3C))
+        return
+
+    if m1.content.strip() != code1:
+        await ctx.send(embed=discord.Embed(description="<a:alerta:1518271939460857968> Código incorreto. Nuke **cancelado**.", color=0xE74C3C))
+        return
+
+    # ── Segunda confirmação ───────────────────────────────────────────────────
+    code2 = _gen_code()
+    e2 = discord.Embed(
+        title="<a:alerta:1518271939460857968>  Última Confirmação",
+        description=(
+            "**Último aviso.** Você está prestes a apagar **todos** os canais.\n\n"
+            f"Confirme enviando:\n\n```{code2}```"
+        ),
+        color=0xE74C3C,
+    )
+    await ctx.send(embed=e2)
+
+    try:
+        m2 = await bot.wait_for("message", check=_check, timeout=60.0)
+    except asyncio.TimeoutError:
+        await ctx.send(embed=discord.Embed(description="<a:alerta:1518271939460857968> Tempo esgotado. Nuke **cancelado**.", color=0xE74C3C))
+        return
+
+    if m2.content.strip() != code2:
+        await ctx.send(embed=discord.Embed(description="<a:alerta:1518271939460857968> Código incorreto. Nuke **cancelado**.", color=0xE74C3C))
+        return
+
+    # ── Executa o nuke ────────────────────────────────────────────────────────
+    guild = ctx.guild
+    settings = get_settings(guild.id)
+
+    for ch in list(guild.channels):
+        try:
+            await ch.delete(reason="Nuke — comando do dono")
+        except Exception:
+            pass
+
+    # ── Recria canal "nata" ───────────────────────────────────────────────────
+    try:
+        new_ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
+    except Exception:
+        return
+
+    # ── Cria invite ───────────────────────────────────────────────────────────
+    invite_url: str | None = None
+    try:
+        inv = await new_ch.create_invite(max_age=0, max_uses=0, reason="Nuke — divulgação")
+        invite_url = inv.url
+    except Exception:
+        pass
+
+    # ── Embed de divulgação ───────────────────────────────────────────────────
+    icon_url  = bot.user.display_avatar.url if bot.user else None
+    guild_icon = guild.icon.url if guild.icon else None
+
+    promo = discord.Embed(
+        title=f"🌟  {guild.name}",
+        description=(
+            f"Bem-vindo ao **{guild.name}**!\n\n"
+            "Entre na nossa comunidade e faça parte do servidor.\n"
+            + (f"\n🔗 **Convite:** {invite_url}" if invite_url else "")
+        ),
+        color=settings.get("embed_color", 0x5865F2),
+    )
+    if guild_icon:
+        promo.set_thumbnail(url=guild_icon)
+    promo.set_footer(text=_footer_name(guild, settings), icon_url=icon_url)
+
+    view = discord.ui.View(timeout=None)
+    if invite_url:
+        view.add_item(discord.ui.Button(label="Entrar no Servidor", style=discord.ButtonStyle.link, url=invite_url))
+
+    await new_ch.send(embed=promo, view=view if invite_url else None)
+
+
+# =============================================================================
 
 if __name__ == "__main__":
     token = os.getenv("DISCORD_TOKEN")
