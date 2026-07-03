@@ -41938,8 +41938,6 @@ async def _criar_ticket_thread(
             "**Ao finalizar, o ticket pode ser fechado utilizando o botão abaixo.**"
         )
 
-    # Thumbnail: ícone do bot como fallback
-    _thumb_final = (_embed.thumbnail.url if _embed.thumbnail and _embed.thumbnail.url else None) or _icon_url
     _title_final = _embed.title or ""
     _desc_final  = _embed.description or ""
     _foot_final  = _footer_name(guild, settings)
@@ -41947,23 +41945,15 @@ async def _criar_ticket_thread(
     _color_final = settings.get("embed_color", 0x2B2D31)
     _t_btn       = TRANSLATIONS[lang]
 
-    # Monta container V2: texto + thumbnail + botões dentro do mesmo bloco visual
-    _text_parts: list[dict] = []
-    if _title_final:
-        _text_parts.append({"type": 10, "content": f"**{_title_final}**"})
-    if _desc_final:
-        _text_parts.append({"type": 10, "content": _desc_final})
-
+    # Container V2: pings + conteúdo + separador + botões no mesmo bloco visual
+    # OBS: flags:32768 não permite "content" — pings vão como Text Display dentro do container
     _container_items: list[dict] = []
-    if _thumb_final and _text_parts:
-        _container_items.append({
-            "type": 9,
-            "components": _text_parts,
-            "accessory": {"type": 11, "media": {"url": _thumb_final}},
-        })
-    else:
-        _container_items.extend(_text_parts)
-
+    if ping_content:
+        _container_items.append({"type": 10, "content": ping_content})
+    if _title_final:
+        _container_items.append({"type": 10, "content": f"**{_title_final}**"})
+    if _desc_final:
+        _container_items.append({"type": 10, "content": _desc_final})
     _container_items.append({"type": 10, "content": f"-# {_foot_final} | {_ts_final}"})
     _container_items.append({"type": 14, "divider": True, "spacing": "sm"})
     _container_items.append({
@@ -41980,8 +41970,6 @@ async def _criar_ticket_thread(
         "components": [{"type": 17, "accent_color": _color_final, "components": _container_items}],
         "allowed_mentions": {"parse": ["roles", "users", "everyone"]},
     }
-    if ping_content:
-        _v2_body["content"] = ping_content
 
     try:
         import aiohttp as _ah_tkt
@@ -41996,7 +41984,7 @@ async def _criar_ticket_thread(
         if _sent_id:
             _ticket_msg_ids[thread.id] = (thread.id, _sent_id)
         _ticket_msg_payloads.pop(thread.id, None)
-        print(f"[ticket_criado] V2 enviado no thread {thread.id}", flush=True)
+        print(f"[ticket_criado] V2 enviado no thread {thread.id} status={_r_tkt.status}", flush=True)
     except Exception as e:
         print(f"[ticket_criado] Erro ao enviar V2 no thread: {e}", flush=True)
 
