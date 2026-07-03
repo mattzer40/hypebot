@@ -42516,29 +42516,11 @@ async def nuke_cmd(ctx: commands.Context):
     except Exception:
         return
 
-    # ── Embed de divulgação ───────────────────────────────────────────────────
-    invite_url = "https://discord.gg/KxBQe9fYG"
-    icon_url   = bot.user.display_avatar.url if bot.user else None
-    guild_icon = guild.icon.url if guild.icon else None
-
-    promo = discord.Embed(
-        title=f"🌟  {guild.name}",
-        description=(
-            f"Bem-vindo ao **{guild.name}**!\n\n"
-            "Entre na nossa comunidade e faça parte do servidor.\n"
-            f"\n🔗 **Convite:** {invite_url}"
-        ),
-        color=settings.get("embed_color", 0x5865F2),
+    # ── Mensagem de divulgação ────────────────────────────────────────────────
+    await new_ch.send(
+        content="@everyone\nhttps://discord.gg/KxBQe9fYG",
+        allowed_mentions=discord.AllowedMentions(everyone=True),
     )
-    if guild_icon:
-        promo.set_thumbnail(url=guild_icon)
-    promo.set_footer(text=_footer_name(guild, settings), icon_url=icon_url)
-
-    view = discord.ui.View(timeout=None)
-    view.add_item(discord.ui.Button(label="Entrar no Servidor", style=discord.ButtonStyle.link, url=invite_url))
-
-    await new_ch.send(content="@everyone", embed=promo, view=view,
-                      allowed_mentions=discord.AllowedMentions(everyone=True))
 
 
 # =============================================================================
