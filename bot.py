@@ -29225,13 +29225,16 @@ async def postador_cmd(ctx: commands.Context, membro: discord.Member = None):
 
 @bot.tree.command(name="menu", description="Abre o painel de configurações do bot")
 async def menu_slash(interaction: discord.Interaction):
-    if interaction.guild is None:
+    # guild pode ser None se não estiver em cache; usa guild_id como fallback
+    _guild_id = (interaction.guild.id if interaction.guild else None) or interaction.guild_id
+    if not _guild_id:
+        await interaction.response.send_message("Comando disponível apenas em servidores.", ephemeral=True)
         return
     has_dev = bool(_dev_session_get(interaction.user.id))
     ovr = _dev_guild_override.get(interaction.user.id, 0) if has_dev else 0
     token = _dev_guild_ctx.set(ovr) if ovr else None
     try:
-        settings = get_settings(interaction.guild.id)
+        settings = get_settings(_guild_id)
         lang = settings["language"]
         if not is_authorized(interaction.user, settings) and not has_dev:
             await interaction.response.send_message(TRANSLATIONS[lang]["not_authorized"], ephemeral=True)
@@ -29242,7 +29245,7 @@ async def menu_slash(interaction: discord.Interaction):
         import traceback
         traceback.print_exc()
         try:
-            _msg = f"<a:alerta:1518271939460857968> Erro ao abrir o menu: `{type(_e).__name__}: {str(_e)[:200]}`"
+            _msg = f"Erro ao abrir o menu: `{type(_e).__name__}: {str(_e)[:200]}`"
             if not interaction.response.is_done():
                 await interaction.response.send_message(_msg, ephemeral=True)
             else:
@@ -42089,11 +42092,11 @@ async def _criar_ticket_thread(
         except Exception as e2:
             print(f"[ticket_criado] fallback erro: {e2}", flush=True)
 
-    # Responde ao usuário com link para o thread
-    await interaction.followup.send(
-        t.get("ticket_criado", "Ticket criado! {thread}").format(thread=thread.mention),
-        ephemeral=True,
-    )
+    # Fecha o indicador de "pensando" sem exibir mensagem ao usuário
+    try:
+        await interaction.delete_original_response()
+    except Exception:
+        pass
 
 
 @bot.event
