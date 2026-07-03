@@ -25700,6 +25700,21 @@ async def on_ready():
     except Exception as _e_bio:
         print(f"[bio] erro: {_e_bio}", flush=True)
 
+    # ── Username do bot (BOT_USERNAME env var, padrão "hypebot") ─────────────────
+    if not getattr(bot, "_username_set", False):
+        bot._username_set = True
+        _desired_name = os.environ.get("BOT_USERNAME", "hypebot").strip()
+        if bot.user and bot.user.name != _desired_name:
+            try:
+                await bot.user.edit(username=_desired_name)
+                print(f"[username] OK: {bot.user.name} -> {_desired_name}", flush=True)
+            except discord.HTTPException as _ue:
+                print(f"[username] HTTPException {_ue.code}: {_ue.text}", flush=True)
+            except Exception as _ue:
+                print(f"[username] erro: {type(_ue).__name__}: {_ue}", flush=True)
+        else:
+            print(f"[username] já correto: {bot.user.name if bot.user else '?'}", flush=True)
+
     # ── Avatar / Banner padrão HYPE (aplicado se não houver arquivo customizado) ─
     if not getattr(bot, "_default_avatar_set", False):
         bot._default_avatar_set = True
