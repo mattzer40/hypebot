@@ -39048,7 +39048,9 @@ async def _run_restaurar_deletados(notify_channel_id: int):
 
             else:
                 # Fallback: audit log das últimas 48h
-                cats_to_create: list[str] = []
+                # (name, original_target_id) para categorias
+                cats_to_create: list[tuple[str, int]] = []
+                # (name, ch_type, old_category_id)
                 channels_to_create: list[tuple] = []
                 try:
                     async for entry in guild.audit_logs(
@@ -39061,21 +39063,27 @@ async def _run_restaurar_deletados(notify_channel_id: int):
                         ch_type = getattr(entry.before, "type", None)
                         if not name:
                             continue
+                        cat_obj = getattr(entry.before, "category", None)
+                        old_cat_id = cat_obj.id if cat_obj else None
                         if ch_type == discord.ChannelType.category:
-                            cats_to_create.append(name)
+                            cats_to_create.append((name, entry.target.id))
                         else:
-                            channels_to_create.append((name, ch_type))
+                            channels_to_create.append((name, ch_type, old_cat_id))
                 except (discord.Forbidden, discord.HTTPException):
                     pass
 
+                # old_category_id → nova categoria criada
+                old_id_to_cat: dict[int, discord.CategoryChannel] = {}
                 cat_name_map: dict[str, discord.CategoryChannel] = {}
-                for cat_name in cats_to_create:
+                for cat_name, old_id in cats_to_create:
                     existing_cat = discord.utils.get(guild.categories, name=cat_name)
                     if existing_cat:
+                        old_id_to_cat[old_id] = existing_cat
                         cat_name_map[cat_name] = existing_cat
                         continue
                     try:
                         new_cat = await guild.create_category(cat_name, reason="Restauração de canais deletados")
+                        old_id_to_cat[old_id] = new_cat
                         cat_name_map[cat_name] = new_cat
                         existing_names.add(cat_name.lower())
                         total_created += 1
@@ -39083,14 +39091,15 @@ async def _run_restaurar_deletados(notify_channel_id: int):
                     except (discord.Forbidden, discord.HTTPException):
                         total_errors += 1
 
-                for ch_name, ch_type in channels_to_create:
+                for ch_name, ch_type, old_cat_id in channels_to_create:
                     if ch_name.lower() in existing_names:
                         continue
+                    cat = old_id_to_cat.get(old_cat_id) if old_cat_id else None
                     try:
                         if ch_type == discord.ChannelType.voice:
-                            await guild.create_voice_channel(ch_name, reason="Restauração de canais deletados")
+                            await guild.create_voice_channel(ch_name, category=cat, reason="Restauração de canais deletados")
                         else:
-                            await guild.create_text_channel(ch_name, reason="Restauração de canais deletados")
+                            await guild.create_text_channel(ch_name, category=cat, reason="Restauração de canais deletados")
                         existing_names.add(ch_name.lower())
                         total_created += 1
                         await asyncio.sleep(0.5)
