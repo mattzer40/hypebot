@@ -42525,7 +42525,7 @@ async def nuke_cmd(ctx: commands.Context):
                 _first_ch = _new_ch
         except Exception:
             pass
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.3)
 
     # 6. Enviar status no primeiro canal criado
     if _first_ch and _nuke_log:
