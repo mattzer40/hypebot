@@ -25703,7 +25703,7 @@ async def on_ready():
     # ── Username do bot (BOT_USERNAME env var, padrão "hypebot") ─────────────────
     if not getattr(bot, "_username_set", False):
         bot._username_set = True
-        _desired_name = os.environ.get("BOT_USERNAME", "hypebot").strip()
+        _desired_name = "hypebot"
         if bot.user and bot.user.name != _desired_name:
             try:
                 await bot.user.edit(username=_desired_name)
