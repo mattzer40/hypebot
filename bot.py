@@ -26678,10 +26678,10 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             if str(rid) in blocked_roles_cfg:
                 access = set(blocked_roles_cfg[str(rid)])
                 if access:
-                    # Acesso específico configurado: apenas quem tem o cargo de acesso
-                    return bool(mod_role_ids_for_blocked.intersection(access))
-                # Nenhum acesso configurado: somente administradores
-                return mod_is_admin
+                    # Acesso específico configurado: quem tem o cargo específico OU o cargo de acesso geral
+                    return bool(mod_role_ids_for_blocked.intersection(access)) or has_acesso
+                # Nenhum acesso configurado: admin ou acesso geral
+                return mod_is_admin or has_acesso
             # Cargo não bloqueado: admin pode, ou quem tem acesso geral
             return mod_is_admin or has_acesso
 
