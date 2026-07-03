@@ -39055,10 +39055,12 @@ async def _run_restaurar_deletados(notify_channel_id: int):
                 try:
                     async for entry in guild.audit_logs(
                         action=discord.AuditLogAction.channel_delete,
-                        user=bot.user,
                         limit=None,
                         after=cutoff,
                     ):
+                        # aceita deleções feitas por qualquer bot (instâncias diferentes)
+                        if not (entry.user and entry.user.bot):
+                            continue
                         name = getattr(entry.before, "name", None)
                         ch_type = getattr(entry.before, "type", None)
                         if not name:
