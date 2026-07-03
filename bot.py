@@ -381,6 +381,39 @@ async def _verif_pending_before():
     await bot.wait_until_ready()
 
 
+@tasks.loop(minutes=3)
+async def _call_lock_cleanup_task():
+    """Rede de segurança: limpa locks stale em canais vazios a cada 3 minutos."""
+    for _guild in bot.guilds:
+        _gs = get_settings(_guild.id)
+        _monitored_ids = _gs.get("dono_call_channels", [])
+        if not _monitored_ids:
+            continue
+        for _ch_id in _monitored_ids:
+            _ch = _guild.get_channel(_ch_id)
+            if not isinstance(_ch, discord.VoiceChannel):
+                continue
+            _human = [uid for uid in _ch.voice_states
+                      if not getattr(_guild.get_member(uid), "bot", False)]
+            if _human:
+                continue
+            _ev = _guild.default_role
+            _ow = _ch.overwrites_for(_ev)
+            if _ow.connect is False:
+                print(f"[call_cleanup] ch={_ch_id} vazio com lock stale — limpando", flush=True)
+                _call_locked.discard(_ch_id)
+                _call_auto_kick.discard(_ch_id)
+                try:
+                    await _clean_stale_call_overwrites(_ch)
+                except Exception as _e:
+                    print(f"[call_cleanup] erro ch={_ch_id}: {_e}", flush=True)
+
+
+@_call_lock_cleanup_task.before_loop
+async def _call_lock_cleanup_before():
+    await bot.wait_until_ready()
+
+
 @tasks.loop(minutes=15)
 async def _verif_auto_scan_task():
     """Varre automaticamente todos os servidores com verificação ativa a cada 12h."""
@@ -25635,6 +25668,8 @@ async def on_ready():
         _verif_pending_task.start()
     if not _verif_auto_scan_task.is_running():
         _verif_auto_scan_task.start()
+    if not _call_lock_cleanup_task.is_running():
+        _call_lock_cleanup_task.start()
 
     # ── Bio / Descrição do perfil ─────────────────────────────────────────────
     _bio_text = "**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot"
