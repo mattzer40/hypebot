@@ -231,6 +231,7 @@ def run_all() -> None:
 
     print(f"\n🚀 Iniciando {len(customers)} cliente(s)...\n")
     _tokens_vistos: set[str] = set()
+    _bot_idx = 0
     for c in customers:
         if not c.get("ativo", True):
             print(f"  ⏸️  '{c['id']}' desativado — pulando.")
@@ -241,9 +242,13 @@ def run_all() -> None:
             continue
         if _tok:
             _tokens_vistos.add(_tok)
+        # Stagger: 8s entre cada bot para evitar pico de RAM simultâneo (OOM)
+        if _bot_idx > 0:
+            time.sleep(8)
         proc = start_instance(c)
         if proc:
             _processes[c["id"]] = proc
+            _bot_idx += 1
 
     print(f"\n✅ {len(_processes)} instância(s) rodando. Monitorando...\n")
 

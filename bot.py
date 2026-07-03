@@ -5180,7 +5180,7 @@ class MenuSelect(discord.ui.Select):
 class MenuView(discord.ui.View):
     def __init__(self, author_id: int = 0, lang: str = "pt-br"):
         is_dev = bool(author_id and _dev_guild_override.get(author_id))
-        super().__init__(timeout=600 if is_dev else None)
+        super().__init__(timeout=600)
         self.author_id = author_id
         self.add_item(MenuSelect(lang=lang))
         if is_dev:
@@ -5216,7 +5216,7 @@ class MenuView(discord.ui.View):
 
 class AppearanceView(discord.ui.View):
     def __init__(self, author: discord.Member):
-        super().__init__(timeout=None)
+        super().__init__(timeout=600)
         self.author = author
         self._build_buttons()
 
@@ -6182,7 +6182,7 @@ class ServidorMenuTwo(discord.ui.Select):
 
 class ServidorView(discord.ui.View):
     def __init__(self, author: discord.Member):
-        super().__init__(timeout=None)
+        super().__init__(timeout=600)
         self.author = author
         guild_id = author.guild.id if author.guild else 0
         settings = get_settings(guild_id)
@@ -9257,7 +9257,7 @@ class ComunidadeMenuSelect(discord.ui.Select):
 
 class ComunidadeView(discord.ui.View):
     def __init__(self, author: discord.Member):
-        super().__init__(timeout=None)
+        super().__init__(timeout=600)
         self.author = author
         guild_id = author.guild.id if author.guild else 0
         settings = get_settings(guild_id)
@@ -11709,7 +11709,7 @@ class VendasSuporteSelect(discord.ui.RoleSelect):
 
 class VendasView(discord.ui.View):
     def __init__(self, author: discord.Member):
-        super().__init__(timeout=None)
+        super().__init__(timeout=600)
         self.author = author
         self._build()
 
@@ -15751,7 +15751,7 @@ class EntretenimentoMenuSelect(discord.ui.Select):
 
 class EntretenimentoView(discord.ui.View):
     def __init__(self, author: discord.Member):
-        super().__init__(timeout=None)
+        super().__init__(timeout=600)
         self.author = author
         guild_id = author.guild.id if author.guild else 0
         settings = get_settings(guild_id)
