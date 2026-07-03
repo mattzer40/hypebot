@@ -42136,15 +42136,14 @@ async def on_interaction(interaction: discord.Interaction):
     # ── Handler para botão "Abrir Ticket" do painel (usar_botao=True) ──────────
     if cid.startswith("ticket_panel_btn_"):
         try:
+            await interaction.response.defer(ephemeral=True)
             panel_id = cid[len("ticket_panel_btn_"):]
             guild_id = interaction.guild.id if interaction.guild else 0
             settings = get_settings(guild_id)
             t = TRANSLATIONS[settings["language"]]
             panel = _find_panel(settings, panel_id)
             if not panel:
-                await interaction.response.defer(ephemeral=True)
                 return
-            await interaction.response.defer(ephemeral=True)
             await _criar_ticket_thread(interaction, panel, None, settings, t)
         except Exception as _tbe:
             print(f"[ticket_btn] ERRO: {type(_tbe).__name__}: {_tbe}", flush=True)
@@ -42167,6 +42166,8 @@ async def on_interaction(interaction: discord.Interaction):
     # ── Handler para select menu do painel de ticket ───────────────────────────
     if cid.startswith("ticket_panel_menu_"):
         try:
+            # Defer primeiro — garante resposta antes de qualquer processamento
+            await interaction.response.defer(ephemeral=True)
             panel_id = cid[len("ticket_panel_menu_"):]
             guild_id = interaction.guild.id if interaction.guild else 0
             settings = get_settings(guild_id)
@@ -42189,10 +42190,7 @@ async def on_interaction(interaction: discord.Interaction):
                         break
             if not opcao or not panel:
                 print(f"[ticket_menu] opcao=None panel_opcoes={[o.get('id') for o in (panel or {}).get('menu_opcoes', [])]}", flush=True)
-                await interaction.response.defer(ephemeral=True)
                 return
-            # Defer first — a criação do thread pode demorar
-            await interaction.response.defer(ephemeral=True)
             await _criar_ticket_thread(interaction, panel, opcao, settings, t)
         except Exception as _te:
             print(f"[ticket_menu] ERRO: {type(_te).__name__}: {_te}", flush=True)
