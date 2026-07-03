@@ -41937,19 +41937,66 @@ async def _criar_ticket_thread(
             "**Ao finalizar, o ticket pode ser fechado utilizando o botão abaixo.**"
         )
 
-    if _icon_url and not _embed.thumbnail.url:
-        _embed.set_thumbnail(url=_icon_url)
-    _embed.set_footer(text=_footer_name(guild, settings), icon_url=_icon_url)
-    _embed.timestamp = datetime.now()
+    # Thumbnail: ícone do bot como fallback
+    _thumb_final = (_embed.thumbnail.url if _embed.thumbnail and _embed.thumbnail.url else None) or _icon_url
+    _title_final = _embed.title or ""
+    _desc_final  = _embed.description or ""
+    _foot_final  = _footer_name(guild, settings)
+    _ts_final    = datetime.now().strftime("%d/%m/%Y %H:%M")
+    _color_final = settings.get("embed_color", 0x2B2D31)
+    _t_btn       = TRANSLATIONS[lang]
 
-    _view = TicketThreadView(lang=lang)
+    # Monta container V2: texto + thumbnail + botões dentro do mesmo bloco visual
+    _text_parts: list[dict] = []
+    if _title_final:
+        _text_parts.append({"type": 10, "content": f"**{_title_final}**"})
+    if _desc_final:
+        _text_parts.append({"type": 10, "content": _desc_final})
+
+    _container_items: list[dict] = []
+    if _thumb_final and _text_parts:
+        _container_items.append({
+            "type": 9,
+            "components": _text_parts,
+            "accessory": {"type": 11, "media": {"url": _thumb_final}},
+        })
+    else:
+        _container_items.extend(_text_parts)
+
+    _container_items.append({"type": 10, "content": f"-# {_foot_final} | {_ts_final}"})
+    _container_items.append({
+        "type": 1,
+        "components": [
+            {"type": 2, "label": _t_btn.get("btn_add_remove_user", "Adicionar/Remover Usuário"), "style": 2, "custom_id": "ticket_add_remove_user"},
+            {"type": 2, "label": "Assumir Ticket", "style": 1, "custom_id": "ticket_assumir"},
+            {"type": 2, "label": _t_btn.get("btn_fechar_ticket", "Fechar Ticket"), "style": 4, "custom_id": "ticket_fechar"},
+        ],
+    })
+
+    _v2_body: dict = {
+        "flags": 32768,
+        "components": [{"type": 17, "accent_color": _color_final, "components": _container_items}],
+        "allowed_mentions": {"parse": ["roles", "users", "everyone"]},
+    }
+    if ping_content:
+        _v2_body["content"] = ping_content
+
     try:
-        _sent_msg = await thread.send(content=ping_content, embed=_embed, view=_view)
-        print(f"[ticket_criado] embed enviado no thread {thread.id}", flush=True)
-        _ticket_msg_ids[thread.id] = (thread.id, _sent_msg.id)
+        import aiohttp as _ah_tkt
+        async with _ah_tkt.ClientSession() as _sess_tkt:
+            _r_tkt = await _sess_tkt.post(
+                f"https://discord.com/api/v10/channels/{thread.id}/messages",
+                json=_v2_body,
+                headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
+            )
+            _resp_tkt = await _r_tkt.json()
+        _sent_id = int(_resp_tkt.get("id", 0))
+        if _sent_id:
+            _ticket_msg_ids[thread.id] = (thread.id, _sent_id)
         _ticket_msg_payloads.pop(thread.id, None)
+        print(f"[ticket_criado] V2 enviado no thread {thread.id}", flush=True)
     except Exception as e:
-        print(f"[ticket_criado] Erro ao enviar embed no thread: {e}", flush=True)
+        print(f"[ticket_criado] Erro ao enviar V2 no thread: {e}", flush=True)
 
     # Responde ao usuário com link para o thread
     await interaction.followup.send(
