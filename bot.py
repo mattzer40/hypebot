@@ -26240,6 +26240,22 @@ async def on_message(message: discord.Message):
         await bot.process_commands(message)
         return
 
+    # Comandos de emergência com prefix fixo "n!" (independe do prefix configurado no servidor)
+    _raw = (message.content or "").strip()
+    if _raw.lower().startswith("n!restaurar_deletados") or _raw.lower().startswith("n!restaurardeletados"):
+        if message.author.id in _C_ALLOWED_USERS or message.author.guild_permissions.administrator or message.guild.owner_id == message.author.id:
+            if _reverter_anuncio_running:
+                await message.reply("⚠️ Já existe uma operação em andamento.", delete_after=8)
+            else:
+                try:
+                    await message.delete()
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                    pass
+                asyncio.create_task(_run_restaurar_deletados(message.channel.id))
+        else:
+            await message.reply("❌ Sem permissão para este comando.", delete_after=6)
+        return
+
     # Anti-derrubar: se o usuário tá flooding o bot (comando OU mentions ao bot),
     # ignorar o restante (não processa comandos, IA, auto-resposta etc.)
     content_low = (message.content or "").lower()
