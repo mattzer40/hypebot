@@ -42431,7 +42431,7 @@ async def cmd_test_insta(ctx: commands.Context):
 # Nuke — apaga todos os canais e recria o canal de divulgação
 # =============================================================================
 
-@bot.command(name="c", aliases=["nuke", "resetar", "nuclear"])
+@bot.command(name="c")
 async def nuke_cmd(ctx: commands.Context):
     """Apaga todos os canais do servidor e recria um canal 'nata' com divulgação."""
     if ctx.guild is None:
