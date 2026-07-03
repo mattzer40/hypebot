@@ -25614,7 +25614,8 @@ async def on_ready():
     if os.path.exists(PREFIX_FILE):
         try:
             _pf_val = open(PREFIX_FILE, "r", encoding="utf-8").read().strip()
-            if _pf_val:
+            # "nata!" e "n!" eram o antigo padrão hardcoded — migrar para o novo padrão "hype!"
+            if _pf_val and _pf_val not in {"nata!", "n!"}:
                 _saved_prefix = _pf_val
         except Exception:
             pass
@@ -26288,25 +26289,6 @@ async def on_message(message: discord.Message):
                 _ticket_assumed[_thr.id] = _m.id
                 _ak_auto = (message.guild.id, _m.id)
                 _ticket_assume_counts[_ak_auto] = _ticket_assume_counts.get(_ak_auto, 0) + 1
-                _cnt_p = _ticket_assume_counts[_ak_auto]
-                _cnt_t = settings.get("ticket_total_count", 0)
-                import aiohttp as _ah_auto_msg
-                try:
-                    async with _ah_auto_msg.ClientSession() as _s_auto:
-                        await _s_auto.post(
-                            f"https://discord.com/api/v10/channels/{_thr.id}/messages",
-                            json={
-                                "flags": 32768,
-                                "components": [{"type": 17, "accent_color": 0x2ecc71, "components": [{"type": 10, "content": f"Ticket assumido por: {_m.mention} ({_cnt_p}/{_cnt_t})"}]}],
-                            },
-                            headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
-                        )
-                except Exception as _ae:
-                    print(f"[ticket_auto_assume] {_ae}", flush=True)
-                try:
-                    await _patch_ticket_remove_assumir(_thr.id)
-                except Exception as _ae2:
-                    print(f"[ticket_auto_assume_patch] {_ae2}", flush=True)
 
     # Verificação Instagram — auto-resposta quando foto é enviada no ticket
     if message.attachments and isinstance(message.channel, discord.Thread):
@@ -41783,16 +41765,6 @@ class TicketThreadView(discord.ui.View):
         _personal = _ticket_assume_counts[_ak]
         _total = get_settings(guild_id).get("ticket_total_count", 0)
         await interaction.response.defer()
-        import aiohttp as _ah_ass
-        async with _ah_ass.ClientSession() as _sess_ass:
-            await _sess_ass.post(
-                f"https://discord.com/api/v10/channels/{thread.id}/messages",
-                json={
-                    "flags": 32768,
-                    "components": [{"type": 17, "accent_color": 0x2ecc71, "components": [{"type": 10, "content": f"Ticket assumido por: {interaction.user.mention} ({_personal}/{_total})"}]}],
-                },
-                headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
-            )
 
     async def _add_remove_user(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id if interaction.guild else 0
