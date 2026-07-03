@@ -33557,7 +33557,7 @@ class DonoCallPanelView(discord.ui.View):
             if action == "entrou":
                 _count_in += 1
                 _reg_entry_ts[uid] = ts
-                lines.append(f"🟢 `{dt}` ᐳ <@{uid}> **entrou**")
+                lines.append(f"<a:online:1518271945550856295> `{dt}` — <@{uid}> entrou")
             else:
                 _count_out += 1
                 _dur = ""
@@ -33566,12 +33566,12 @@ class DonoCallPanelView(discord.ui.View):
                     _h, _r = divmod(_secs, 3600)
                     _m, _s = divmod(_r, 60)
                     if _h:
-                        _dur = f" · `{_h}h {_m}m {_s}s`"
+                        _dur = f"  `{_h}h{_m}m{_s}s`"
                     elif _m:
-                        _dur = f" · `{_m}m {_s}s`"
+                        _dur = f"  `{_m}m{_s}s`"
                     else:
-                        _dur = f" · `{_s}s`"
-                lines.append(f"🔴 `{dt}` ᐳ <@{uid}> **saiu**{_dur}")
+                        _dur = f"  `{_s}s`"
+                lines.append(f"<a:alerta:1518271939460857968> `{dt}` — <@{uid}> saiu{_dur}")
 
         _total = len(entries)
         _shown = min(_total, 20)
@@ -33579,15 +33579,16 @@ class DonoCallPanelView(discord.ui.View):
         if _total > 20:
             _desc += f"\n\n*— mostrando os {_shown} eventos mais recentes de {_total} —*"
 
+        _nu = len(_unique)
         _e = discord.Embed(
             title=f"🎙️  Registro de Call  ·  {ch_mention}" if ch else "🎙️  Registro de Call",
             description=_desc,
             color=0x5865F2,
         )
         _e.set_footer(text=(
-            f"👥 {len(_unique)} pessoa{'s' if len(_unique) != 1 else ''} única{'s' if len(_unique) != 1 else ''}"
-            f"  ·  🟢 {_count_in} entrada{'s' if _count_in != 1 else ''}"
-            f"  ·  🔴 {_count_out} saída{'s' if _count_out != 1 else ''}"
+            f"👤 {_nu} pessoa{'s' if _nu != 1 else ''} única{'s' if _nu != 1 else ''}"
+            f"  ╱  ↑ {_count_in} entrada{'s' if _count_in != 1 else ''}"
+            f"  ╱  ↓ {_count_out} saída{'s' if _count_out != 1 else ''}"
         ))
         await interaction.response.send_message(embed=_e, ephemeral=True)
 
