@@ -28,9 +28,9 @@ intents.members = True
 
 def _resolve_prefix(bot_: commands.Bot, message: discord.Message):
     if message.guild is None:
-        return _stream_prefix_current or "n!"
+        return _stream_prefix_current or "hype!"
     # Usa o prefixo deste bot (isolado por instância via PREFIX_FILE)
-    return bot_settings.get(message.guild.id, {}).get("prefix", _stream_prefix_current or "n!")
+    return bot_settings.get(message.guild.id, {}).get("prefix", _stream_prefix_current or "hype!")
 
 
 # Restrição de servidor: se BOT_GUILD_ID estiver definido, o bot só responde nesse servidor
@@ -353,7 +353,7 @@ bot = commands.Bot(command_prefix=_resolve_prefix, intents=intents, help_command
 @tasks.loop(minutes=5)
 async def _presence_task():
     # Usa _stream_prefix_current — já é atualizado no on_ready e quando o cliente muda o prefixo
-    prefix = _stream_prefix_current or "n!"
+    prefix = _stream_prefix_current or "hype!"
     try:
         await bot.change_presence(
             status=discord.Status.online,
@@ -3921,7 +3921,7 @@ DESC_RES_FILE   = os.path.join(_CLIENT_DIR, "bot_desc_result.txt")
 DESC_SAVED_FILE = os.path.join(_CLIENT_DIR, "bot_desc_saved.txt")
 
 # ── Streaming prefix dinâmico ─────────────────────────────────────────────────
-_stream_prefix_current: str = "n!"
+_stream_prefix_current: str = "hype!"
 _stream_prefix_last_ts: float = 0.0
 
 async def _set_streaming_prefix(prefix: str) -> None:
@@ -3955,10 +3955,10 @@ async def _update_streaming_prefix(guild_id: int) -> None:
     """Atualiza o status de streaming passivamente (rate limit 30s — usado no on_message)."""
     global _stream_prefix_last_ts
     import time
-    prefix = get_settings(guild_id).get("prefix", "n!")
+    prefix = get_settings(guild_id).get("prefix", "hype!")
     # Nunca sobrescreve um prefixo personalizado com o padrão "n!"
     # Isso evita que mensagens de outros servidores resetem o prefixo do cliente
-    if not prefix or prefix == "n!":
+    if not prefix or prefix == "hype!":
         return
     if prefix == _stream_prefix_current:
         return  # prefixo igual, não precisa atualizar
@@ -4303,7 +4303,7 @@ def get_settings(guild_id: int) -> dict:
         guild_id,
         {
             "language": "pt-br",
-            "prefix": "n!",
+            "prefix": "hype!",
             "authorized_members": [],
             "embed_color": 0x2B2D31,
         },
@@ -4568,14 +4568,14 @@ def get_settings(guild_id: int) -> dict:
         "enabled": False, "whitelist": [], "limit": 0, "window": 0,
         "window_unit": "segundos", "action": "banir",
     })
-    settings.setdefault("bot_name", "HypeBot")
+    settings.setdefault("bot_name", "hypebot")
     settings.setdefault("embed_banner_url", os.environ.get("DEFAULT_EMBED_BANNER", ""))
     return settings
 
 
 def _bn(settings: dict) -> str:
     """Return the bot's branded name for this guild (default: HypeBot)."""
-    return settings.get("bot_name", "HypeBot")
+    return settings.get("bot_name", "hypebot")
 
 
 def _apply_name(text: str, settings: dict) -> str:
@@ -4953,7 +4953,7 @@ def _footer_name(guild: discord.Guild | None = None,
         return settings["guild_name"]
     if bot.user:
         return bot.user.display_name
-    return "NATA®"
+    return "hypebot"
 
 
 VALID_WARN_ACTIONS_PT = {"kikar", "banir", "mutar"}
@@ -5308,7 +5308,7 @@ class AppearanceView(discord.ui.View):
             ),
             color=color,
         )
-        ask.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        ask.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         ask.set_footer(text=_footer_name(interaction.guild), icon_url=icon_url)
         await interaction.response.send_message(embed=ask, ephemeral=True)
 
@@ -5319,7 +5319,7 @@ class AppearanceView(discord.ui.View):
             msg = await bot.wait_for("message", check=check, timeout=120)
         except asyncio.TimeoutError:
             err = discord.Embed(description=f"⏱️ {t['timed_out']}", color=color)
-            err.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+            err.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
             await interaction.followup.send(embed=err, ephemeral=True)
             return
 
@@ -5331,13 +5331,13 @@ class AppearanceView(discord.ui.View):
 
         if content.lower() == t["cancel_keyword"]:
             emb = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['operation_cancelled']}", color=color)
-            emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+            emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
             await interaction.followup.send(embed=emb, ephemeral=True)
             return
 
         if not content or len(content) > 5 or any(c.isspace() for c in content):
             inv = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['invalid_prefix']}", color=color)
-            inv.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+            inv.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
             await interaction.followup.send(embed=inv, ephemeral=True)
             return
 
@@ -5359,7 +5359,7 @@ class AppearanceView(discord.ui.View):
             description=f"Novo prefixo: **`{content}`**",
             color=0x23A55A,
         )
-        ok.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        ok.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         ok.set_footer(text=_footer_name(interaction.guild), icon_url=icon_url)
         await interaction.followup.send(embed=ok, ephemeral=True)
 
@@ -5472,7 +5472,7 @@ class AppearanceView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         color = settings.get("embed_color", 0x2B2D31)
 
-        _bot_name = bot.user.display_name if bot.user else "NATA®"
+        _bot_name = bot.user.display_name if bot.user else "hypebot"
         ask_embed = discord.Embed(
             title="<:aparncia_:1518271975317962895>  Alterar Avatar",
             description=(
@@ -5602,7 +5602,7 @@ class AppearanceView(discord.ui.View):
         color = settings.get("embed_color", 0x2B2D31)
 
         # Embed pedindo o novo banner
-        bot_name = bot.user.display_name if bot.user else "NATA®"
+        bot_name = bot.user.display_name if bot.user else "hypebot"
         ask_embed = discord.Embed(
             title="<:aparncia_:1518271975317962895>  Alterar Banner",
             description=(
@@ -5661,7 +5661,7 @@ class AppearanceView(discord.ui.View):
                 await interaction.followup.send(embed=err_embed, ephemeral=True)
                 return
             ok_embed = discord.Embed(description=f"<a:online:1518271945550856295> {t['banner_removed']}", color=0x23A55A)
-            ok_embed.set_author(name="NATA®", icon_url=icon_url)
+            ok_embed.set_author(name="hypebot", icon_url=icon_url)
             await interaction.followup.send(embed=ok_embed, ephemeral=True)
             return
 
@@ -5778,7 +5778,7 @@ class AppearanceView(discord.ui.View):
         settings  = get_settings(guild_id)
         color     = settings.get("embed_color", 0x2B2D31)
         icon_url  = bot.user.display_avatar.url if bot.user else None
-        _bot_name = bot.user.display_name if bot.user else "NATA®"
+        _bot_name = bot.user.display_name if bot.user else "hypebot"
         panel_msg = interaction.message
 
         # ── Embed de instrução ──────────────────────────────────────────────────
@@ -5930,7 +5930,7 @@ class AppearanceView(discord.ui.View):
 
                 if len(hex_str) != 6 or not all(c in "0123456789abcdefABCDEF" for c in hex_str):
                     err = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['invalid_hex']}", color=color)
-                    err.set_author(name="NATA®", icon_url=icon_url)
+                    err.set_author(name="hypebot", icon_url=icon_url)
                     await intr.response.send_message(embed=err, ephemeral=True)
                     return
 
@@ -5939,7 +5939,7 @@ class AppearanceView(discord.ui.View):
                 save_settings_to_disk()
 
                 ok = discord.Embed(description=f"<a:online:1518271945550856295> {t['color_changed']}", color=new_color)
-                ok.set_author(name="NATA®", icon_url=icon_url)
+                ok.set_author(name="hypebot", icon_url=icon_url)
                 await intr.response.send_message(embed=ok, ephemeral=True)
 
                 new_embed = build_appearance_embed(outer_self.author, get_settings(guild_id))
@@ -9390,7 +9390,7 @@ class VerifContaModal(discord.ui.Modal):
             description=f"<:Mov_chat:1518271970008105031> {t['verif_conta_set']}",
             color=settings.get("embed_color", 0x2B2D31),
         )
-        _conf.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _conf.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _conf.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         _conf.timestamp = datetime.now()
         await interaction.followup.send(embed=_conf, ephemeral=True)
@@ -9416,7 +9416,7 @@ class VerifCanalSelect(_NativeChannelSelect):
             description=f"<:Mov_chat:1518271970008105031> Canal de logs definido: {ch.mention}",
             color=settings.get("embed_color", 0x2B2D31),
         )
-        conf_embed.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        conf_embed.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         conf_embed.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         conf_embed.timestamp = datetime.now()
         await interaction.followup.send(embed=conf_embed, ephemeral=True)
@@ -9436,7 +9436,7 @@ class VerifAddRoleSelect(discord.ui.RoleSelect):
             description=f"<a:online:1518271945550856295> {t['verif_add_roles_updated']}",
             color=0x57F287,
         )
-        _emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _emb.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         _emb.timestamp = datetime.now()
         await interaction.response.send_message(embed=_emb, ephemeral=True)
@@ -9456,7 +9456,7 @@ class VerifRmRoleSelect(discord.ui.RoleSelect):
             description=f"<a:alerta:1518271939460857968> {t['verif_remove_roles_updated']}",
             color=0xED4245,
         )
-        _emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _emb.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         _emb.timestamp = datetime.now()
         await interaction.response.send_message(embed=_emb, ephemeral=True)
@@ -9477,7 +9477,7 @@ class VerifURLRoleSelect(discord.ui.RoleSelect):
             description=f"<a:online:1518271945550856295> {t['verif_url_roles_updated']}",
             color=0x57F287,
         )
-        _emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _emb.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         _emb.timestamp = datetime.now()
         embed = build_verificacao_embed(self.parent_view.author, settings)
@@ -9537,7 +9537,7 @@ class VerifCargosView(discord.ui.View):
             description=f"<a:online:1518271945550856295> {t['verif_cargos_add_placeholder']}",
             color=settings.get("embed_color", 0x2B2D31),
         )
-        _emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _emb.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         _emb.timestamp = datetime.now()
         view = _SingleSelectView(VerifAddRoleSelect(self, t["verif_cargos_add_placeholder"]))
@@ -9551,7 +9551,7 @@ class VerifCargosView(discord.ui.View):
             description=f"<a:alerta:1518271939460857968> {t['verif_cargos_rm_placeholder']}",
             color=settings.get("embed_color", 0x2B2D31),
         )
-        _emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _emb.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         _emb.timestamp = datetime.now()
         view = _SingleSelectView(VerifRmRoleSelect(self, t["verif_cargos_rm_placeholder"]))
@@ -9641,7 +9641,7 @@ class VerificacaoView(discord.ui.View):
             ),
             color=0x57F287 if _is_on else 0xED4245,
         )
-        _toggle_embed.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _toggle_embed.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _toggle_embed.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         _toggle_embed.timestamp = datetime.now()
         await interaction.followup.send(embed=_toggle_embed, ephemeral=True)
@@ -9663,7 +9663,7 @@ class VerificacaoView(discord.ui.View):
             description=f"<:Mov_chat:1518271970008105031> {t['protecao_url_select_log_placeholder']}",
             color=settings.get("embed_color", 0x2B2D31),
         )
-        _canal_embed.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _canal_embed.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _canal_embed.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         _canal_embed.timestamp = datetime.now()
         view = _SingleSelectView(VerifCanalSelect(self, t["protecao_url_select_log_placeholder"]))
@@ -9689,7 +9689,7 @@ class VerificacaoView(discord.ui.View):
             description=f"<:f1:1518271958024720555> {t['verif_url_roles_placeholder']}",
             color=settings.get("embed_color", 0x2B2D31),
         )
-        _emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _emb.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         _emb.timestamp = datetime.now()
         view = _SingleSelectView(VerifURLRoleSelect(self, t["verif_url_roles_placeholder"]))
@@ -9949,7 +9949,7 @@ class IgVerifView(discord.ui.View):
             description="<a:online:1518271945550856295> Selecione os canais da verificação.",
             color=settings.get("embed_color", 0x2B2D31),
         )
-        _emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _emb.timestamp = datetime.now()
         await interaction.response.edit_message(embed=_emb, view=IgVerifCanaisView(self))
 
@@ -9960,7 +9960,7 @@ class IgVerifView(discord.ui.View):
             description="<a:online:1518271945550856295> Selecione o cargo de verificado.",
             color=settings.get("embed_color", 0x2B2D31),
         )
-        _emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _emb.timestamp = datetime.now()
 
         author = self.author
@@ -9985,7 +9985,7 @@ class IgVerifView(discord.ui.View):
             description="<a:online:1518271945550856295> Selecione os cargos autorizados para adicionar.",
             color=settings.get("embed_color", 0x2B2D31),
         )
-        _emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _emb.timestamp = datetime.now()
         v = _SingleSelectView(IgVerifRoleAddSelect(self))
         await interaction.response.edit_message(embed=_emb, view=v)
@@ -9997,7 +9997,7 @@ class IgVerifView(discord.ui.View):
             description="<a:alerta:1518271939460857968> Selecione os cargos autorizados para remover.",
             color=settings.get("embed_color", 0x2B2D31),
         )
-        _emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _emb.timestamp = datetime.now()
         v = _SingleSelectView(IgVerifRoleRmSelect(self))
         await interaction.response.edit_message(embed=_emb, view=v)
@@ -10183,7 +10183,7 @@ async def _handle_ig_verif_check(interaction: discord.Interaction) -> None:
                 color=0x5865F2,
                 timestamp=datetime.now(),
             )
-            log_emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+            log_emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
             log_emb.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
             try:
                 await log_ch.send(embed=log_emb)
@@ -10410,7 +10410,7 @@ class IgVerifTicketView(discord.ui.LayoutView):
                     color=0x57F287,
                     timestamp=datetime.now(),
                 )
-                log_emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+                log_emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
                 log_emb.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
                 try:
                     await log_ch.send(embed=log_emb)
@@ -10706,7 +10706,7 @@ async def _handle_verif_check(interaction: discord.Interaction) -> None:
             color=0xED4245,
         )
 
-    result_embed.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+    result_embed.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
     result_embed.set_footer(text=_footer_name(guild, settings), icon_url=icon_url)
     result_embed.timestamp = datetime.now()
     await interaction.followup.send(embed=result_embed, ephemeral=True)
@@ -18789,7 +18789,7 @@ class EditarTipoSelect(discord.ui.Select):
 
         embed = discord.Embed(color=settings["embed_color"])
         icon_url = bot.user.display_avatar.url if bot.user else None
-        embed.set_author(name="NATA®", icon_url=icon_url)
+        embed.set_author(name="hypebot", icon_url=icon_url)
         embed.description = (
             f"**{title}**\n"
             f"{t['editar_grupo_select_text']}\n\n"
@@ -19050,7 +19050,7 @@ class EditandoCargosView(discord.ui.View):
             description=t["editar_tipo_prompt"],
         )
         icon_url = bot.user.display_avatar.url if bot.user else None
-        embed.set_author(name="NATA®", icon_url=icon_url)
+        embed.set_author(name="hypebot", icon_url=icon_url)
         embed.set_footer(
             text=f"{t['solicitado_por']} {self.author.name}",
             icon_url=self.author.display_avatar.url,
@@ -22441,7 +22441,7 @@ async def on_guild_update(before: discord.Guild, after: discord.Guild):
         new_owner = after.owner or await after.fetch_member(new_owner_id)
         if new_owner:
             lang = settings.get("language", "pt-br")
-            prefix = settings.get("prefix", "n!")
+            prefix = settings.get("prefix", "hype!")
             icon_url = bot.user.display_avatar.url if bot.user else None
             guild_icon = after.icon.url if after.icon else None
             if lang == "pt-br":
@@ -23610,7 +23610,7 @@ def build_warns_embed(author: discord.Member, settings: dict) -> discord.Embed:
     else:
         action_display = f"`{action}`"
 
-    prefix = settings.get("prefix", "n!")
+    prefix = settings.get("prefix", "hype!")
     command_example = f"{prefix}aviso @membro motivo"
 
     embed.add_field(
@@ -25325,7 +25325,7 @@ async def _autopostador_loop():
                                 continue
 
                             _icon    = bot.user.display_avatar.url if bot.user else None
-                            _botname = bot.user.name if bot.user else "NATA®"
+                            _botname = bot.user.name if bot.user else "hypebot"
 
                             # Histórico de enviados para esta categoria
                             _cat_sent: list = sent_history.get(cat_key, [])
@@ -25608,7 +25608,7 @@ async def on_ready():
 
     # ── Restaurar prefixo persistido ──────────────────────────────────────────
     # Prioridade: PREFIX_FILE (/data persistente) → bot_settings → "n!"
-    _saved_prefix = "n!"
+    _saved_prefix = "hype!"
 
     # 1) PREFIX_FILE é atualizado sempre que o cliente muda o prefixo — fonte mais confiável
     if os.path.exists(PREFIX_FILE):
@@ -25620,16 +25620,16 @@ async def on_ready():
             pass
 
     # 2) Se PREFIX_FILE tem "n!" ou não existe, tenta bot_settings como fallback
-    if _saved_prefix == "n!":
+    if _saved_prefix == "hype!":
         if _BOT_GUILD_ID and _BOT_GUILD_ID in bot_settings:
-            _p = bot_settings[_BOT_GUILD_ID].get("prefix", "n!")
-            if _p and _p != "n!":
+            _p = bot_settings[_BOT_GUILD_ID].get("prefix", "hype!")
+            if _p and _p != "hype!":
                 _saved_prefix = _p
         elif bot.guilds:
             for _g in bot.guilds:
                 if _g.id in bot_settings:
-                    _p = bot_settings[_g.id].get("prefix", "n!")
-                    if _p and _p != "n!":
+                    _p = bot_settings[_g.id].get("prefix", "hype!")
+                    if _p and _p != "hype!":
                         _saved_prefix = _p
                         break
 
@@ -25881,7 +25881,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
             # Bot sem permissão para enviar mensagens no canal — tenta DM
             try:
                 settings = get_settings(ctx.guild.id if ctx.guild else 0)
-                prefix   = settings.get("prefix", "n!")
+                prefix   = settings.get("prefix", "hype!")
                 await ctx.author.send(
                     f"<a:alerta:1518271939460857968> Não consigo responder em **{ctx.channel}** "
                     f"(`{ctx.guild.name if ctx.guild else ''}`) — sem permissão para enviar mensagens.\n"
@@ -26403,7 +26403,7 @@ async def on_message(message: discord.Message):
             bot.loop.create_task(_schedule_cleanup_message(message, delay_seconds))
 
     if settings.get("cmd_block_enabled"):
-        prefix = settings.get("prefix", "n!")
+        prefix = settings.get("prefix", "hype!")
         if message.content.startswith(prefix):
             is_admin = (
                 isinstance(message.author, discord.Member)
@@ -29096,7 +29096,7 @@ async def help_cmd(ctx: commands.Context):
         return
 
     settings  = get_settings(ctx.guild.id)
-    prefix    = settings.get("prefix", "n!")
+    prefix    = settings.get("prefix", "hype!")
     icon_url  = bot.user.display_avatar.url if bot.user else None
 
     # ── Categorias de comandos ─────────────────────────────────────────────────
@@ -29799,7 +29799,7 @@ async def addemoji_cmd(ctx: commands.Context, *, args: str = ""):
             sources.append((name, url))
 
     if not sources:
-        prefix = settings.get("prefix", "n!")
+        prefix = settings.get("prefix", "hype!")
         await ctx.reply(
             "Envie de uma das formas:\n"
             f"• `{prefix}addemoji nome` com **imagem(ns) em anexo**\n"
@@ -32317,7 +32317,7 @@ class DonoCallRoleSelect(discord.ui.RoleSelect):
             description="<a:online:1518271945550856295> **Cargos do Dono de Call atualizados!**",
             color=0x57F287,
         )
-        _fb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _fb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _fb.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         _fb.timestamp = datetime.now()
         await interaction.followup.send(embed=_fb, ephemeral=True)
@@ -32641,7 +32641,7 @@ class DonoCallView(discord.ui.View):
             description="<a:online:1518271945550856295> **Dono de Call resetado!**",
             color=0x57F287,
         )
-        _fb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+        _fb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
         _fb.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
         _fb.timestamp = datetime.now()
         await interaction.followup.send(embed=_fb, ephemeral=True)
@@ -37829,7 +37829,7 @@ class EmbedBuilderView(discord.ui.View):
             _icon = bot.user.display_avatar.url if bot.user else None
             _g = self.author.guild if self.author.guild else None
             _s = get_settings(_g.id if _g else 0)
-            _e.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=_icon)
+            _e.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=_icon)
             _e.set_footer(text=_footer_name(_g, _s) if _g else "NATA®", icon_url=_icon)
             _e.timestamp = datetime.now()
             return [_e]
@@ -38829,7 +38829,7 @@ async def clear_cmd(ctx: commands.Context, valor: str = ""):
     lang = settings["language"]
     if not valor.strip():
         # Show usage in embed (auto-delete)
-        p = ctx.prefix or settings.get("prefix", "n!")
+        p = ctx.prefix or settings.get("prefix", "hype!")
         embed = discord.Embed(
             color=settings["embed_color"],
             description=(
@@ -38858,7 +38858,7 @@ async def iatest_cmd(ctx: commands.Context, *, message: str = ""):
         return
     settings = get_settings(ctx.guild.id)
     if not message.strip():
-        p = ctx.prefix or settings.get("prefix", "n!")
+        p = ctx.prefix or settings.get("prefix", "hype!")
         embed = discord.Embed(
             color=settings["embed_color"],
             title="🤖 IA Test — NATA®",
@@ -41522,7 +41522,7 @@ async def cmd_dev(ctx: commands.Context, bot_id: str = ""):
 @bot.event
 async def on_resumed():
     """Restaura o status de prefixo imediatamente após reconexão ao gateway."""
-    await _set_streaming_prefix(_stream_prefix_current or "n!")
+    await _set_streaming_prefix(_stream_prefix_current or "hype!")
 
 
 class TicketAddUserSelect(discord.ui.UserSelect):
@@ -42329,7 +42329,7 @@ async def on_interaction(interaction: discord.Interaction):
                 lang     = settings.get("language", "pt-br")
                 color    = settings.get("embed_color", 0x2B2D31)
                 icon_url = bot.user.display_avatar.url if bot.user else None
-                prefix   = settings.get("prefix", "n!")
+                prefix   = settings.get("prefix", "hype!")
 
                 if lang == "pt-br":
                     title = "<a:alerta:1518271939460857968>  Painel Expirado"
@@ -42345,7 +42345,7 @@ async def on_interaction(interaction: discord.Interaction):
                     )
 
                 emb = discord.Embed(title=title, description=desc, color=color)
-                emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
+                emb.set_author(name=bot.user.display_name if bot.user else "hypebot", icon_url=icon_url)
                 emb.set_footer(text=_footer_name(interaction.guild, settings), icon_url=icon_url)
                 await interaction.response.send_message(embed=emb, ephemeral=True)
             except Exception:
