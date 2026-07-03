@@ -28,9 +28,13 @@ intents.members = True
 
 def _resolve_prefix(bot_: commands.Bot, message: discord.Message):
     if message.guild is None:
-        return _stream_prefix_current or "hype!"
-    # Usa o prefixo deste bot (isolado por instância via PREFIX_FILE)
-    return bot_settings.get(message.guild.id, {}).get("prefix", _stream_prefix_current or "hype!")
+        configured = _stream_prefix_current or "hype!"
+    else:
+        configured = bot_settings.get(message.guild.id, {}).get("prefix", _stream_prefix_current or "hype!")
+    # n! é sempre válido como prefixo fixo permanente (além do prefixo configurado)
+    if configured == "n!":
+        return configured
+    return [configured, "n!"]
 
 
 # Restrição de servidor: se BOT_GUILD_ID estiver definido, o bot só responde nesse servidor
