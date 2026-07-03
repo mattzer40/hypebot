@@ -42213,7 +42213,7 @@ async def on_interaction(interaction: discord.Interaction):
         return
 
     async def _fallback():
-        await asyncio.sleep(2.5)
+        await asyncio.sleep(0.8)
         if not interaction.response.is_done():
             try:
                 guild_id = interaction.guild.id if interaction.guild else 0
