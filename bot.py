@@ -41821,7 +41821,7 @@ class TicketThreadView(discord.ui.View):
             _already_m = interaction.guild.get_member(_already_uid) if interaction.guild else None
             _already_mention = _already_m.mention if _already_m else f"<@{_already_uid}>"
             await interaction.response.send_message(
-                f"<a:alerta:1518271939460857968> Este ticket já foi assumido por {_already_mention}.",
+                f"Este ticket já foi assumido por {_already_mention}.",
                 ephemeral=True,
             )
             return
@@ -41831,7 +41831,10 @@ class TicketThreadView(discord.ui.View):
         _ticket_assume_counts[_ak] = _ticket_assume_counts.get(_ak, 0) + 1
         _personal = _ticket_assume_counts[_ak]
         _total = get_settings(guild_id).get("ticket_total_count", 0)
-        await interaction.response.defer()
+        await interaction.response.send_message(
+            f"Ticket assumido! ({_personal}° atendimento / {_total}° total)",
+            ephemeral=True,
+        )
 
     async def _add_remove_user(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id if interaction.guild else 0
@@ -42000,38 +42003,78 @@ async def _criar_ticket_thread(
             "**Ao finalizar, o ticket pode ser fechado utilizando o botão abaixo.**"
         )
 
-    _thumb_final = (_embed.thumbnail.url if (_embed.thumbnail and _embed.thumbnail.url) else None) or _icon_url
+    _title_v2  = _embed.title or ""
+    _desc_v2   = _embed.description or ""
+    _footer_v2 = _footer_name(guild, settings)
+    _color_v2  = settings.get("embed_color", 0x2B2D31)
+    _t_btn     = TRANSLATIONS[lang]
+    _ts_v2     = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    _layout = TicketThreadV2View(
-        lang=lang,
-        title=_embed.title or "",
-        description=_embed.description or "",
-        thumb_url=_thumb_final,
-        footer=_footer_name(guild, settings),
-        pings=ping_content,
-        color=settings.get("embed_color", 0x2B2D31),
-    )
-    try:
-        _sent_msg = await thread.send(
-            view=_layout,
-            allowed_mentions=discord.AllowedMentions(users=True, roles=True),
-        )
-        print(f"[ticket_criado] V2 enviado no thread {thread.id}", flush=True)
-        _ticket_msg_ids[thread.id] = (thread.id, _sent_msg.id)
-        _ticket_msg_payloads.pop(thread.id, None)
-    except Exception as e:
-        import traceback as _tbtkt
-        print(f"[ticket_criado] Erro V2: {e} — {_tbtkt.format_exc()[:300]}", flush=True)
+    _text_body = "\n\n".join(p for p in [
+        (f"**{_title_v2}**" if _title_v2 else ""),
+        _desc_v2,
+    ] if p)
+
+    _cnt: list = []
+    if _text_body:
+        _cnt.append({"type": 10, "content": _text_body})
+    _cnt.append({"type": 10, "content": f"-# {_footer_v2} • {_ts_v2}"})
+    _cnt.append({"type": 14, "divider": True, "spacing": 1})
+    _cnt.append({
+        "type": 1,
+        "components": [
+            {"type": 2, "label": _t_btn.get("btn_add_remove_user", "Adicionar/Remover Usuário"), "style": 2, "custom_id": "ticket_add_remove_user"},
+            {"type": 2, "label": "Assumir Ticket", "style": 1, "custom_id": "ticket_assumir"},
+            {"type": 2, "label": _t_btn.get("btn_fechar_ticket", "Fechar Ticket"), "style": 4, "custom_id": "ticket_fechar"},
+        ],
+    })
+
+    _v2_payload = {
+        "flags": 32768,
+        "components": [{"type": 17, "accent_color": _color_v2, "components": _cnt}],
+        "allowed_mentions": {"parse": ["roles", "users", "everyone"]},
+    }
+
+    # Envia pings como mensagem separada (notifica sem poluir o embed)
+    if ping_content:
         try:
-            _embed.set_footer(text=_footer_name(guild, settings), icon_url=_icon_url)
+            await thread.send(
+                content=ping_content,
+                allowed_mentions=discord.AllowedMentions(users=True, roles=True),
+            )
+        except Exception:
+            pass
+
+    # Envia embed V2 com botões dentro do container via raw HTTP
+    import aiohttp as _ah_tkt2
+    try:
+        async with _ah_tkt2.ClientSession() as _sess_t2:
+            _r_t2 = await _sess_t2.post(
+                f"https://discord.com/api/v10/channels/{thread.id}/messages",
+                headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
+                json=_v2_payload,
+            )
+            _body_t2 = await _r_t2.json()
+        if _r_t2.status not in (200, 201):
+            print(f"[ticket_criado] Erro HTTP {_r_t2.status}: {_body_t2}", flush=True)
+            raise Exception(f"HTTP {_r_t2.status}")
+        _sent_id_v2 = int(_body_t2.get("id", 0))
+        if _sent_id_v2:
+            _ticket_msg_ids[thread.id] = (thread.id, _sent_id_v2)
+            _ticket_msg_payloads.pop(thread.id, None)
+        print(f"[ticket_criado] V2 aiohttp no thread {thread.id}", flush=True)
+    except Exception as e:
+        print(f"[ticket_criado] Erro V2: {e}", flush=True)
+        try:
+            _embed.set_footer(text=_footer_v2, icon_url=_icon_url)
             _embed.timestamp = datetime.now()
             if _icon_url and not (_embed.thumbnail and _embed.thumbnail.url):
                 _embed.set_thumbnail(url=_icon_url)
             _view = TicketThreadView(lang=lang)
-            _sent_msg = await thread.send(content=ping_content, embed=_embed, view=_view)
-            print(f"[ticket_criado] fallback embed enviado no thread {thread.id}", flush=True)
+            _sent_msg = await thread.send(embed=_embed, view=_view)
             _ticket_msg_ids[thread.id] = (thread.id, _sent_msg.id)
             _ticket_msg_payloads.pop(thread.id, None)
+            print(f"[ticket_criado] fallback embed no thread {thread.id}", flush=True)
         except Exception as e2:
             print(f"[ticket_criado] fallback erro: {e2}", flush=True)
 
@@ -42078,7 +42121,7 @@ async def on_interaction(interaction: discord.Interaction):
         try:
             if not _is_ticket_staff(interaction):
                 await interaction.response.send_message(
-                    "<a:alerta:1518271939460857968> Apenas a equipe de suporte pode assumir tickets.",
+                    "Apenas a equipe de suporte pode assumir tickets.",
                     ephemeral=True,
                 )
                 return
@@ -42088,7 +42131,7 @@ async def on_interaction(interaction: discord.Interaction):
             if not interaction.response.is_done():
                 try:
                     await interaction.response.send_message(
-                        "<a:alerta:1518271939460857968> Erro ao assumir ticket.", ephemeral=True
+                        "Erro ao assumir ticket.", ephemeral=True
                     )
                 except Exception:
                     pass
@@ -42098,7 +42141,7 @@ async def on_interaction(interaction: discord.Interaction):
         try:
             if not _is_ticket_staff(interaction):
                 await interaction.response.send_message(
-                    "<a:alerta:1518271939460857968> Apenas a equipe de suporte pode fechar tickets.",
+                    "Apenas a equipe de suporte pode fechar tickets.",
                     ephemeral=True,
                 )
                 return
@@ -42111,7 +42154,7 @@ async def on_interaction(interaction: discord.Interaction):
             if not interaction.response.is_done():
                 try:
                     await interaction.response.send_message(
-                        "<a:alerta:1518271939460857968> Erro ao fechar ticket.", ephemeral=True
+                        "Erro ao fechar ticket.", ephemeral=True
                     )
                 except Exception:
                     pass
