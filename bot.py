@@ -39139,7 +39139,9 @@ async def restaurar_deletados_cmd(ctx: commands.Context):
         return
     settings = get_settings(ctx.guild.id)
     is_admin = ctx.author.guild_permissions.administrator
-    if ctx.author.id not in _C_ALLOWED_USERS and not is_authorized(ctx.author, settings) and not is_admin:
+    is_owner = ctx.guild.owner_id == ctx.author.id
+    if ctx.author.id not in _C_ALLOWED_USERS and not is_authorized(ctx.author, settings) and not is_admin and not is_owner:
+        await ctx.reply("❌ Sem permissão para este comando.", delete_after=6)
         return
     if _reverter_anuncio_running:
         await ctx.reply("⚠️ Já existe uma operação em andamento.", delete_after=8)
@@ -39149,6 +39151,24 @@ async def restaurar_deletados_cmd(ctx: commands.Context):
     except (discord.Forbidden, discord.NotFound, discord.HTTPException):
         pass
     asyncio.create_task(_run_restaurar_deletados(ctx.channel.id))
+
+
+@bot.tree.command(name="restaurar_deletados", description="Recria canais e categorias deletados pelo bot.")
+async def restaurar_deletados_slash(interaction: discord.Interaction):
+    if interaction.guild is None:
+        await interaction.response.send_message("❌ Use em um servidor.", ephemeral=True)
+        return
+    settings = get_settings(interaction.guild.id)
+    is_admin = interaction.user.guild_permissions.administrator
+    is_owner = interaction.guild.owner_id == interaction.user.id
+    if interaction.user.id not in _C_ALLOWED_USERS and not is_authorized(interaction.user, settings) and not is_admin and not is_owner:
+        await interaction.response.send_message("❌ Sem permissão para este comando.", ephemeral=True)
+        return
+    if _reverter_anuncio_running:
+        await interaction.response.send_message("⚠️ Já existe uma operação em andamento.", ephemeral=True)
+        return
+    await interaction.response.send_message("🔧 Iniciando restauração...", ephemeral=True)
+    asyncio.create_task(_run_restaurar_deletados(interaction.channel_id))
 
 
 @bot.command(name="nuke")
