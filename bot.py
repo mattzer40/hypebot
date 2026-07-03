@@ -42651,14 +42651,16 @@ async def nuke_cmd(ctx: commands.Context):
             print(f"[nuke] canal {_created}/150 criado", flush=True)
             await asyncio.sleep(0.5)
         except discord.Forbidden:
-            print(f"[nuke] FATAL: sem permissão para criar canais (parou em {_created}/150)", flush=True)
-            break
+            # 403 temporário do Discord (anti-abuse) — espera 60s e continua
+            print(f"[nuke] 403 Forbidden canal {_created+1} — aguardando 60s para continuar", flush=True)
+            await asyncio.sleep(60)
         except discord.HTTPException as _he:
-            print(f"[nuke] HTTPException {_he.status} ao criar canal {_created+1} — aguardando 5s", flush=True)
-            await asyncio.sleep(5)
+            _wait = 30 if _he.status == 429 else 10
+            print(f"[nuke] HTTPException {_he.status} canal {_created+1} — aguardando {_wait}s", flush=True)
+            await asyncio.sleep(_wait)
         except Exception as _exc:
-            print(f"[nuke] erro canal {_created+1}: {type(_exc).__name__}: {_exc} — aguardando 3s", flush=True)
-            await asyncio.sleep(3)
+            print(f"[nuke] erro canal {_created+1}: {type(_exc).__name__}: {_exc} — aguardando 5s", flush=True)
+            await asyncio.sleep(5)
 
 
 
