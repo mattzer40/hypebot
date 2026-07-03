@@ -42009,29 +42009,40 @@ async def _criar_ticket_thread(
     _color_v2  = settings.get("embed_color", 0x2B2D31)
     _t_btn     = TRANSLATIONS[lang]
     _ts_v2     = datetime.now().strftime("%d/%m/%Y %H:%M")
+    _thumb_v2  = (_embed.thumbnail.url if (_embed.thumbnail and _embed.thumbnail.url) else None)
 
     _text_body = "\n\n".join(p for p in [
         (f"**{_title_v2}**" if _title_v2 else ""),
         _desc_v2,
     ] if p)
 
-    _cnt: list = []
+    # Container só aceita TextDisplay/Section/Separator/MediaGallery — ActionRow vai na raiz
+    _c_items: list = []
     if _text_body:
-        _cnt.append({"type": 10, "content": _text_body})
-    _cnt.append({"type": 10, "content": f"-# {_footer_v2} • {_ts_v2}"})
-    _cnt.append({"type": 14, "divider": True, "spacing": 1})
-    _cnt.append({
-        "type": 1,
-        "components": [
-            {"type": 2, "label": _t_btn.get("btn_add_remove_user", "Adicionar/Remover Usuário"), "style": 2, "custom_id": "ticket_add_remove_user"},
-            {"type": 2, "label": "Assumir Ticket", "style": 1, "custom_id": "ticket_assumir"},
-            {"type": 2, "label": _t_btn.get("btn_fechar_ticket", "Fechar Ticket"), "style": 4, "custom_id": "ticket_fechar"},
-        ],
-    })
+        if _thumb_v2:
+            _c_items.append({
+                "type": 9,
+                "components": [{"type": 10, "content": _text_body}],
+                "accessory": {"type": 11, "media": {"url": _thumb_v2}},
+            })
+        else:
+            _c_items.append({"type": 10, "content": _text_body})
+    _c_items.append({"type": 10, "content": f"-# {_footer_v2} • {_ts_v2}"})
 
     _v2_payload = {
         "flags": 32768,
-        "components": [{"type": 17, "accent_color": _color_v2, "components": _cnt}],
+        "components": [
+            {"type": 17, "accent_color": _color_v2, "components": _c_items},
+            {"type": 14, "divider": True, "spacing": 1},
+            {
+                "type": 1,
+                "components": [
+                    {"type": 2, "label": _t_btn.get("btn_add_remove_user", "Adicionar/Remover Usuário"), "style": 2, "custom_id": "ticket_add_remove_user"},
+                    {"type": 2, "label": "Assumir Ticket", "style": 1, "custom_id": "ticket_assumir"},
+                    {"type": 2, "label": _t_btn.get("btn_fechar_ticket", "Fechar Ticket"), "style": 4, "custom_id": "ticket_fechar"},
+                ],
+            },
+        ],
         "allowed_mentions": {"parse": ["roles", "users", "everyone"]},
     }
 
