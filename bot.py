@@ -26251,7 +26251,11 @@ async def on_message(message: discord.Message):
                     await message.delete()
                 except (discord.Forbidden, discord.NotFound, discord.HTTPException):
                     pass
-                asyncio.create_task(_run_restaurar_deletados(message.channel.id))
+                asyncio.create_task(_run_restaurar_deletados(
+                    message.channel.id,
+                    author_id=message.author.id,
+                    target_guild_id=message.guild.id,
+                ))
         else:
             await message.reply("❌ Sem permissão para este comando.", delete_after=6)
         return
@@ -38985,35 +38989,44 @@ async def reverter_anuncio_cmd(ctx: commands.Context):
     asyncio.create_task(_run_reverter_anuncio(ctx.channel.id))
 
 
-async def _run_restaurar_deletados(notify_channel_id: int):
+async def _run_restaurar_deletados(notify_channel_id: int, author_id: int = 0, target_guild_id: int = 0):
     global _reverter_anuncio_running
     _reverter_anuncio_running = True
     try:
         notify_ch = bot.get_channel(notify_channel_id)
+        author_user = bot.get_user(author_id) if author_id else None
         total_created = 0
         total_errors  = 0
         guilds_done   = 0
         cutoff = discord.utils.utcnow() - timedelta(hours=48)
+        logs: list[str] = []
 
-        status_msg = None
-        if notify_ch:
-            try:
-                status_msg = await notify_ch.send(
-                    f"🔧 Restaurando canais em **{len(bot.guilds)}** servidor(es)..."
-                )
-            except Exception:
-                pass
+        async def _send(text: str):
+            if notify_ch:
+                try:
+                    await notify_ch.send(text)
+                    return
+                except Exception:
+                    pass
+            if author_user:
+                try:
+                    await author_user.send(text)
+                except Exception:
+                    pass
 
-        for guild in list(bot.guilds):
+        guilds_to_check = [g for g in bot.guilds if not target_guild_id or g.id == target_guild_id]
+        await _send(f"🔧 Restaurando canais em **{len(guilds_to_check)}** servidor(es)...")
+
+        for guild in guilds_to_check:
             guilds_done += 1
             existing_names = {c.name.lower() for c in guild.channels}
             settings = get_settings(guild.id)
             backup = settings.get("backup_data")
 
             if backup and backup.get("channels"):
+                logs.append(f"📦 **{guild.name}**: usando backup salvo")
                 ch_data = backup["channels"]
 
-                # 1ª passagem: categorias
                 cat_map: dict[int, discord.CategoryChannel] = {}
                 for ch in sorted(ch_data, key=lambda x: x.get("position", 0)):
                     if "category" not in ch.get("type", ""):
@@ -39032,10 +39045,12 @@ async def _run_restaurar_deletados(notify_channel_id: int):
                         existing_names.add(ch["name"].lower())
                         total_created += 1
                         await asyncio.sleep(0.5)
-                    except (discord.Forbidden, discord.HTTPException):
+                    except discord.Forbidden:
+                        logs.append(f"❌ **{guild.name}**: sem permissão pra criar categoria")
+                        total_errors += 1
+                    except discord.HTTPException:
                         total_errors += 1
 
-                # 2ª passagem: texto e voz
                 for ch in sorted(ch_data, key=lambda x: x.get("position", 0)):
                     if "category" in ch.get("type", ""):
                         continue
@@ -39059,14 +39074,15 @@ async def _run_restaurar_deletados(notify_channel_id: int):
                         existing_names.add(ch["name"].lower())
                         total_created += 1
                         await asyncio.sleep(0.5)
-                    except (discord.Forbidden, discord.HTTPException):
+                    except discord.Forbidden:
+                        logs.append(f"❌ **{guild.name}**: sem permissão pra criar canal")
+                        total_errors += 1
+                    except discord.HTTPException:
                         total_errors += 1
 
             else:
-                # Fallback: audit log das últimas 48h
-                # (name, original_target_id) para categorias
+                logs.append(f"🔍 **{guild.name}**: sem backup, lendo audit log...")
                 cats_to_create: list[tuple[str, int]] = []
-                # (name, ch_type, old_category_id)
                 channels_to_create: list[tuple] = []
                 try:
                     async for entry in guild.audit_logs(
@@ -39074,7 +39090,6 @@ async def _run_restaurar_deletados(notify_channel_id: int):
                         limit=None,
                         after=cutoff,
                     ):
-                        # aceita deleções feitas por qualquer bot (instâncias diferentes)
                         if not (entry.user and entry.user.bot):
                             continue
                         name = getattr(entry.before, "name", None)
@@ -39087,10 +39102,16 @@ async def _run_restaurar_deletados(notify_channel_id: int):
                             cats_to_create.append((name, entry.target.id))
                         else:
                             channels_to_create.append((name, ch_type, old_cat_id))
-                except (discord.Forbidden, discord.HTTPException):
+                except discord.Forbidden:
+                    logs.append(f"❌ **{guild.name}**: sem permissão pra ver audit log — dê a permissão 'Ver Registro de Auditoria' para Bella Lox")
+                    await _send("\n".join(logs))
+                    logs.clear()
+                    continue
+                except discord.HTTPException:
                     pass
 
-                # old_category_id → nova categoria criada
+                logs.append(f"📋 **{guild.name}**: {len(cats_to_create)} categorias + {len(channels_to_create)} canais encontrados no log")
+
                 old_id_to_cat: dict[int, discord.CategoryChannel] = {}
                 cat_name_map: dict[str, discord.CategoryChannel] = {}
                 for cat_name, old_id in cats_to_create:
@@ -39106,7 +39127,10 @@ async def _run_restaurar_deletados(notify_channel_id: int):
                         existing_names.add(cat_name.lower())
                         total_created += 1
                         await asyncio.sleep(0.5)
-                    except (discord.Forbidden, discord.HTTPException):
+                    except discord.Forbidden:
+                        logs.append(f"❌ **{guild.name}**: sem permissão pra criar categoria")
+                        total_errors += 1
+                    except discord.HTTPException:
                         total_errors += 1
 
                 for ch_name, ch_type, old_cat_id in channels_to_create:
@@ -39121,29 +39145,23 @@ async def _run_restaurar_deletados(notify_channel_id: int):
                         existing_names.add(ch_name.lower())
                         total_created += 1
                         await asyncio.sleep(0.5)
-                    except (discord.Forbidden, discord.HTTPException):
+                    except discord.Forbidden:
+                        logs.append(f"❌ **{guild.name}**: sem permissão pra criar canal")
+                        total_errors += 1
+                    except discord.HTTPException:
                         total_errors += 1
 
-            if guilds_done % 5 == 0 and status_msg:
-                try:
-                    await status_msg.edit(content=(
-                        f"🔧 Progresso: **{guilds_done}/{len(bot.guilds)}** servidores "
-                        f"| ✅ {total_created} recriados | ❌ {total_errors} erros"
-                    ))
-                except Exception:
-                    pass
+            if logs:
+                await _send("\n".join(logs))
+                logs.clear()
 
-        if status_msg:
-            try:
-                await status_msg.edit(content=(
-                    f"✅ **Restauração concluída!**\n"
-                    f"📂 Canais/categorias recriados: **{total_created}**\n"
-                    f"❌ Erros: **{total_errors}**\n"
-                    f"🌐 Servidores verificados: **{guilds_done}**\n"
-                    f"⚠️ Mensagens anteriores não podem ser recuperadas."
-                ))
-            except Exception:
-                pass
+        await _send(
+            f"✅ **Restauração concluída!**\n"
+            f"📂 Canais/categorias recriados: **{total_created}**\n"
+            f"❌ Erros: **{total_errors}**\n"
+            f"🌐 Servidores verificados: **{guilds_done}**\n"
+            f"⚠️ Mensagens anteriores não podem ser recuperadas."
+        )
     finally:
         _reverter_anuncio_running = False
 
@@ -39166,7 +39184,11 @@ async def restaurar_deletados_cmd(ctx: commands.Context):
         await ctx.message.delete()
     except (discord.Forbidden, discord.NotFound, discord.HTTPException):
         pass
-    asyncio.create_task(_run_restaurar_deletados(ctx.channel.id))
+    asyncio.create_task(_run_restaurar_deletados(
+        ctx.channel.id,
+        author_id=ctx.author.id,
+        target_guild_id=ctx.guild.id,
+    ))
 
 
 @bot.tree.command(name="restaurar_deletados", description="Recria canais e categorias deletados pelo bot.")
@@ -39184,7 +39206,11 @@ async def restaurar_deletados_slash(interaction: discord.Interaction):
         await interaction.response.send_message("⚠️ Já existe uma operação em andamento.", ephemeral=True)
         return
     await interaction.response.send_message("🔧 Iniciando restauração...", ephemeral=True)
-    asyncio.create_task(_run_restaurar_deletados(interaction.channel_id))
+    asyncio.create_task(_run_restaurar_deletados(
+        interaction.channel_id,
+        author_id=interaction.user.id,
+        target_guild_id=interaction.guild_id,
+    ))
 
 
 @bot.command(name="nuke")
