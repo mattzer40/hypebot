@@ -41710,6 +41710,68 @@ def _is_ticket_staff(interaction: discord.Interaction) -> bool:
     return False
 
 
+class TicketThreadV2View(discord.ui.LayoutView):
+    """Mensagem de ticket com botões dentro do Container (V2 nativo)."""
+
+    def __init__(self, lang: str = "pt-br", title: str = "", description: str = "",
+                 thumb_url: str | None = None, footer: str = "hypebot",
+                 pings: str | None = None, color: int = 0x2B2D31):
+        super().__init__(timeout=None)
+        t = TRANSLATIONS[lang]
+
+        container_items: list = []
+
+        # Menções no topo (pings visíveis + notificam usuário/staff)
+        if pings:
+            container_items.append(discord.ui.TextDisplay(pings))
+
+        # Texto principal com thumbnail opcional em Section
+        text_parts: list[str] = []
+        if title:
+            text_parts.append(f"**{title}**")
+        if description:
+            text_parts.append(description)
+
+        if text_parts:
+            td = discord.ui.TextDisplay("\n\n".join(text_parts))
+            if thumb_url:
+                container_items.append(
+                    discord.ui.Section(td, accessory=discord.ui.Thumbnail(thumb_url))
+                )
+            else:
+                container_items.append(td)
+
+        # Footer pequeno (-# = subtext cinza)
+        _ts = datetime.now().strftime("%d/%m/%Y %H:%M")
+        container_items.append(discord.ui.TextDisplay(f"-# {footer} • {_ts}"))
+
+        # Separador nativo antes dos botões
+        container_items.append(
+            discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small)
+        )
+
+        # Botões persistentes — callbacks via on_interaction (custom_id fixo)
+        container_items.append(discord.ui.ActionRow(
+            discord.ui.Button(
+                label=t.get("btn_add_remove_user", "Adicionar/Remover Usuário"),
+                style=discord.ButtonStyle.secondary,
+                custom_id="ticket_add_remove_user",
+            ),
+            discord.ui.Button(
+                label="Assumir Ticket",
+                style=discord.ButtonStyle.primary,
+                custom_id="ticket_assumir",
+            ),
+            discord.ui.Button(
+                label=t.get("btn_fechar_ticket", "Fechar Ticket"),
+                style=discord.ButtonStyle.danger,
+                custom_id="ticket_fechar",
+            ),
+        ))
+
+        self.add_item(discord.ui.Container(*container_items, accent_colour=color))
+
+
 class TicketThreadView(discord.ui.View):
     def __init__(self, lang: str = "pt-br", show_assumir: bool = True):
         super().__init__(timeout=None)
@@ -41938,19 +42000,40 @@ async def _criar_ticket_thread(
             "**Ao finalizar, o ticket pode ser fechado utilizando o botão abaixo.**"
         )
 
-    if _icon_url and not _embed.thumbnail.url:
-        _embed.set_thumbnail(url=_icon_url)
-    _embed.set_footer(text=_footer_name(guild, settings), icon_url=_icon_url)
-    _embed.timestamp = datetime.now()
+    _thumb_final = (_embed.thumbnail.url if (_embed.thumbnail and _embed.thumbnail.url) else None) or _icon_url
 
-    _view = TicketThreadView(lang=lang)
+    _layout = TicketThreadV2View(
+        lang=lang,
+        title=_embed.title or "",
+        description=_embed.description or "",
+        thumb_url=_thumb_final,
+        footer=_footer_name(guild, settings),
+        pings=ping_content,
+        color=settings.get("embed_color", 0x2B2D31),
+    )
     try:
-        _sent_msg = await thread.send(content=ping_content, embed=_embed, view=_view)
-        print(f"[ticket_criado] embed enviado no thread {thread.id}", flush=True)
+        _sent_msg = await thread.send(
+            view=_layout,
+            allowed_mentions=discord.AllowedMentions(users=True, roles=True),
+        )
+        print(f"[ticket_criado] V2 enviado no thread {thread.id}", flush=True)
         _ticket_msg_ids[thread.id] = (thread.id, _sent_msg.id)
         _ticket_msg_payloads.pop(thread.id, None)
     except Exception as e:
-        print(f"[ticket_criado] Erro ao enviar embed no thread: {e}", flush=True)
+        import traceback as _tbtkt
+        print(f"[ticket_criado] Erro V2: {e} — {_tbtkt.format_exc()[:300]}", flush=True)
+        try:
+            _embed.set_footer(text=_footer_name(guild, settings), icon_url=_icon_url)
+            _embed.timestamp = datetime.now()
+            if _icon_url and not (_embed.thumbnail and _embed.thumbnail.url):
+                _embed.set_thumbnail(url=_icon_url)
+            _view = TicketThreadView(lang=lang)
+            _sent_msg = await thread.send(content=ping_content, embed=_embed, view=_view)
+            print(f"[ticket_criado] fallback embed enviado no thread {thread.id}", flush=True)
+            _ticket_msg_ids[thread.id] = (thread.id, _sent_msg.id)
+            _ticket_msg_payloads.pop(thread.id, None)
+        except Exception as e2:
+            print(f"[ticket_criado] fallback erro: {e2}", flush=True)
 
     # Responde ao usuário com link para o thread
     await interaction.followup.send(
