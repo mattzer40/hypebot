@@ -25625,16 +25625,17 @@ async def on_ready():
             pass
 
     # 2) Se PREFIX_FILE tem "n!" ou não existe, tenta bot_settings como fallback
+    _LEGACY_PREFIXES = {"nata!", "n!"}
     if _saved_prefix == "hype!":
         if _BOT_GUILD_ID and _BOT_GUILD_ID in bot_settings:
             _p = bot_settings[_BOT_GUILD_ID].get("prefix", "hype!")
-            if _p and _p != "hype!":
+            if _p and _p not in _LEGACY_PREFIXES and _p != "hype!":
                 _saved_prefix = _p
         elif bot.guilds:
             for _g in bot.guilds:
                 if _g.id in bot_settings:
                     _p = bot_settings[_g.id].get("prefix", "hype!")
-                    if _p and _p != "hype!":
+                    if _p and _p not in _LEGACY_PREFIXES and _p != "hype!":
                         _saved_prefix = _p
                         break
 
