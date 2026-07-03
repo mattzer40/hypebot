@@ -333,7 +333,7 @@ async def _global_view_on_error(self, interaction: discord.Interaction, error: E
     import traceback
     traceback.print_exc()
     try:
-        msg = f"❌ Erro interno: `{type(error).__name__}: {str(error)[:200]}`"
+        msg = f"<a:alerta:1518271939460857968> Erro interno: `{type(error).__name__}: {str(error)[:200]}`"
         if not interaction.response.is_done():
             await interaction.response.send_message(embed=_notif_embed(msg), ephemeral=True)
         else:
@@ -1545,14 +1545,14 @@ TRANSLATIONS = {
             "Use **`0`** para remover o limite. Intervalo válido: **0 a 99**.\n"
             "Administradores sempre têm acesso independente da configuração."
         ),
-        "call_limit_roles_updated": "✅ Cargos do Limite Call atualizados!",
-        "call_limit_reset_done": "✅ Limite Call resetado!",
+        "call_limit_roles_updated": "<a:online:1518271945550856295> Cargos do Limite Call atualizados!",
+        "call_limit_reset_done": "<a:online:1518271945550856295> Limite Call resetado!",
         "call_limit_no_voice": "<a:alerta:1518271939460857968> Você precisa estar em um **canal de voz** para usar esse comando.",
         "call_limit_no_perm": "<a:alerta:1518271939460857968> Você não tem **permissão** para usar esse comando.",
         "call_limit_invalid": "<a:alerta:1518271939460857968> Número inválido. Use um valor entre **0** e **99** *(0 = sem limite)*.",
         "call_limit_set": "<a:online:1518271945550856295> Limite definido com sucesso!",
         "call_limit_removed": "<a:online:1518271945550856295> Limite removido! Canal sem restrição de vagas.",
-        "call_limit_error": "❌ Não foi possível alterar o limite do canal.",
+        "call_limit_error": "<a:alerta:1518271939460857968> Não foi possível alterar o limite do canal.",
         "call_limit_ask": "<:mov_call:1518271964077232150> **Qual o novo limite de usuários?**\nEnvie um número entre **0** e **99** *(0 = sem limite)*.",
         "dono_call_panel_title": "Dono de Call - NATA®",
         "dono_call_canais_voz": "Canais Monitorados",
@@ -1562,14 +1562,14 @@ TRANSLATIONS = {
             "Alterar Limite e Alterar Status.\n"
             "Quando o dono sai, o próximo membro assume. Canal vazio = painel removido."
         ),
-        "dono_call_channels_updated": "✅ Canais do Dono de Call atualizados!",
-        "dono_call_reset_done": "✅ Dono de Call resetado!",
+        "dono_call_channels_updated": "<a:online:1518271945550856295> Canais do Dono de Call atualizados!",
+        "dono_call_reset_done": "<a:online:1518271945550856295> Dono de Call resetado!",
         "dono_call_cargos_btn": "Cargos com Acesso",
         "dono_call_cargos_placeholder": "Selecione os cargos com acesso...",
-        "dono_call_cargos_updated": "✅ Cargos do Dono de Call atualizados!",
+        "dono_call_cargos_updated": "<a:online:1518271945550856295> Cargos do Dono de Call atualizados!",
         "dono_call_cargos_label": "Cargos com Acesso",
         "dono_call_cargos_obs": "Apenas membros com um desses cargos viram **dono da call**. Deixe vazio para liberar para todos.",
-        "dono_call_only_owner": "❌ Apenas o dono da call pode usar isso.",
+        "dono_call_only_owner": "<a:alerta:1518271939460857968> Apenas o dono da call pode usar isso.",
         "dono_call_btn_nome": "Alterar Nome",
         "dono_call_btn_limite": "Alterar Limite",
         "dono_call_btn_status": "Alterar Status",
@@ -1579,33 +1579,33 @@ TRANSLATIONS = {
         "dono_call_modal_limite_title": "Alterar Limite de Usuários",
         "dono_call_modal_limite_label": "Limite (0 = sem limite)",
         "dono_call_modal_limite_placeholder": "0-99",
-        "dono_call_status_abrir": "🟢 Abrir Call",
-        "dono_call_status_fechar": "🔴 Fechar Call",
+        "dono_call_status_abrir": "<a:online:1518271945550856295> Abrir Call",
+        "dono_call_status_fechar": "<a:alerta:1518271939460857968> Fechar Call",
         "dono_call_status_field": "Status",
-        "dono_call_status_open": "🟢 Aberto",
-        "dono_call_status_closed": "🔴 Fechado",
+        "dono_call_status_open": "<a:online:1518271945550856295> Aberto",
+        "dono_call_status_closed": "<a:alerta:1518271939460857968> Fechado",
         "dono_call_limite_field": "Limite",
         "dono_call_limite_sem": "Sem limite",
         "dono_call_membros_field": "Membros",
-        "dono_call_nome_ok": "✅ Nome do canal alterado!",
-        "dono_call_limite_ok": "✅ Limite alterado!",
-        "dono_call_limite_invalid": "❌ Número inválido. Use entre 0 e 99.",
-        "dono_call_status_ok": "✅ Status alterado!",
-        "dono_call_nome_error": "❌ Não foi possível renomear o canal.",
-        "dono_call_limite_error": "❌ Não foi possível alterar o limite.",
-        "dono_call_status_error": "❌ Não foi possível alterar o status.",
+        "dono_call_nome_ok": "<a:online:1518271945550856295> Nome do canal alterado!",
+        "dono_call_limite_ok": "<a:online:1518271945550856295> Limite alterado!",
+        "dono_call_limite_invalid": "<a:alerta:1518271939460857968> Número inválido. Use entre 0 e 99.",
+        "dono_call_status_ok": "<a:online:1518271945550856295> Status alterado!",
+        "dono_call_nome_error": "<a:alerta:1518271939460857968> Não foi possível renomear o canal.",
+        "dono_call_limite_error": "<a:alerta:1518271939460857968> Não foi possível alterar o limite.",
+        "dono_call_status_error": "<a:alerta:1518271939460857968> Não foi possível alterar o status.",
         "dono_call_banner_title": "🖼️ Banner da Call",
         "dono_call_banner_label": "URL da imagem",
         "dono_call_banner_placeholder": "https://i.imgur.com/exemplo.png",
         "dono_call_banner_ok": "🖼️ Banner definido com sucesso!",
         "dono_call_banner_removed": "🖼️ Banner removido.",
-        "dono_call_banner_invalid": "❌ URL inválida. Use um link direto para imagem (jpg, png, gif, webp).",
+        "dono_call_banner_invalid": "<a:alerta:1518271939460857968> URL inválida. Use um link direto para imagem (jpg, png, gif, webp).",
         "dono_call_btn_expulsar": "Expulsar da Call",
         "dono_call_expulsar_placeholder": "Selecione quem expulsar...",
-        "dono_call_expulsar_ok": "✅ **{name}** foi expulso(a) da call.",
-        "dono_call_expulsar_error": "❌ Não foi possível expulsar o membro.",
-        "dono_call_expulsar_nobody": "❌ Não há outros membros na call para expulsar.",
-        "dono_call_expulsar_not_in_call": "❌ Este membro não está mais na call.",
+        "dono_call_expulsar_ok": "<a:online:1518271945550856295> **{name}** foi expulso(a) da call.",
+        "dono_call_expulsar_error": "<a:alerta:1518271939460857968> Não foi possível expulsar o membro.",
+        "dono_call_expulsar_nobody": "<a:alerta:1518271939460857968> Não há outros membros na call para expulsar.",
+        "dono_call_expulsar_not_in_call": "<a:alerta:1518271939460857968> Este membro não está mais na call.",
         "call_temp_panel_title": "Call Temporária - NATA®",
         "call_temp_canais_voz": "Canais Monitorados",
         "call_temp_obs": (
@@ -1613,9 +1613,9 @@ TRANSLATIONS = {
             "e um painel de controle V2 é enviado no chat do canal com menu para Alterar Nome, Limite e Status.\n"
             "Quando o dono sai, o próximo membro assume. Canal vazio = painel removido."
         ),
-        "call_temp_channels_updated": "✅ Canais da Call Temporária atualizados!",
-        "call_temp_reset_done": "✅ Call Temporária resetada!",
-        "call_temp_only_owner": "❌ Apenas o dono da call pode usar este painel.",
+        "call_temp_channels_updated": "<a:online:1518271945550856295> Canais da Call Temporária atualizados!",
+        "call_temp_reset_done": "<a:online:1518271945550856295> Call Temporária resetada!",
+        "call_temp_only_owner": "<a:alerta:1518271939460857968> Apenas o dono da call pode usar este painel.",
         "call_temp_select_placeholder": "Selecione uma opção de configuração...",
         "call_temp_opt_nome": "Alterar Nome",
         "call_temp_opt_nome_desc": "Altere o nome da sua call.",
@@ -1626,18 +1626,18 @@ TRANSLATIONS = {
         "call_temp_nome_title": "Alterar Nome da Call",
         "call_temp_nome_label": "Novo nome",
         "call_temp_nome_placeholder": "Ex: Call do galera",
-        "call_temp_nome_ok": "✅ Nome da call alterado!",
-        "call_temp_nome_error": "❌ Não foi possível renomear o canal.",
+        "call_temp_nome_ok": "<a:online:1518271945550856295> Nome da call alterado!",
+        "call_temp_nome_error": "<a:alerta:1518271939460857968> Não foi possível renomear o canal.",
         "call_temp_limite_title": "Alterar Limite de Usuários",
         "call_temp_limite_label": "Limite (0 = sem limite)",
         "call_temp_limite_placeholder": "Ex: 5",
-        "call_temp_limite_ok": "✅ Limite da call alterado!",
-        "call_temp_limite_error": "❌ Não foi possível alterar o limite.",
-        "call_temp_limite_invalid": "❌ Número inválido. Use entre 0 e 99.",
-        "call_temp_status_abrir": "🟢 Abrir Call",
-        "call_temp_status_fechar": "🔴 Fechar Call",
-        "call_temp_status_ok": "✅ Status da call alterado!",
-        "call_temp_status_error": "❌ Não foi possível alterar o status.",
+        "call_temp_limite_ok": "<a:online:1518271945550856295> Limite da call alterado!",
+        "call_temp_limite_error": "<a:alerta:1518271939460857968> Não foi possível alterar o limite.",
+        "call_temp_limite_invalid": "<a:alerta:1518271939460857968> Número inválido. Use entre 0 e 99.",
+        "call_temp_status_abrir": "<a:online:1518271945550856295> Abrir Call",
+        "call_temp_status_fechar": "<a:alerta:1518271939460857968> Fechar Call",
+        "call_temp_status_ok": "<a:online:1518271945550856295> Status da call alterado!",
+        "call_temp_status_error": "<a:alerta:1518271939460857968> Não foi possível alterar o status.",
         "call_temp_panel_header": "Você é o **dono desta call**.",
         "call_temp_panel_subtext": "Use o menu abaixo para configurar o canal de voz.",
         "call_temp_status_ask": "Selecione o novo status da call:",
@@ -1661,7 +1661,7 @@ TRANSLATIONS = {
         "panelv2_input_title_placeholder": "Título exibido no topo da embed...",
         "panelv2_input_embed_desc_label": "Descrição (máx. 2000 caracteres)",
         "panelv2_input_embed_desc_placeholder": "Texto principal da embed...",
-        "panelv2_title_set": "✅ Título/Descrição definido(s)!",
+        "panelv2_title_set": "<a:online:1518271945550856295> Título/Descrição definido(s)!",
         "panelv2_btn_cor": "Cor",
         "panelv2_btn_salvar": "Salvar",
         "panelv2_modal_text_title": "Adicionar Texto / Seção",
@@ -2294,8 +2294,8 @@ TRANSLATIONS = {
         "administrator_label": "Administrator",
         "info_section": "Information",
         "status": "Status",
-        "status_disabled": "🔴 (Disabled)",
-        "status_enabled": "🟢 (Enabled)",
+        "status_disabled": "<a:alerta:1518271939460857968> (Disabled)",
+        "status_enabled": "<a:online:1518271945550856295> (Enabled)",
         "log_channel_label": "Log Channel",
         "not_defined_log": "Not defined.",
         "protection": "Protection",
@@ -2331,8 +2331,8 @@ TRANSLATIONS = {
         "days_updated": "Days updated successfully!",
         "invalid_days": "Invalid number. Send a positive integer (1-365).",
         "all_reset": "Everything reset successfully!",
-        "status_enabled_inline": "Enabled 🟢",
-        "status_disabled_inline": "Disabled 🔴",
+        "status_enabled_inline": "Enabled <a:online:1518271945550856295>",
+        "status_disabled_inline": "Disabled <a:alerta:1518271939460857968>",
         "antlink_panel_title": "Anti Link · Settings Center - NATA®",
         "antlink_observations_text": (
             "Anti link blocks any kind of link, only ignores administrators. "
@@ -3264,14 +3264,14 @@ TRANSLATIONS = {
             "Use **`0`** to remove the limit. Valid range: **0 to 99**.\n"
             "Administrators always have access regardless of configuration."
         ),
-        "call_limit_roles_updated": "✅ Call Limit roles updated!",
-        "call_limit_reset_done": "✅ Call Limit reset!",
+        "call_limit_roles_updated": "<a:online:1518271945550856295> Call Limit roles updated!",
+        "call_limit_reset_done": "<a:online:1518271945550856295> Call Limit reset!",
         "call_limit_no_voice": "<a:alerta:1518271939460857968> You need to be in a **voice channel** to use this command.",
         "call_limit_no_perm": "<a:alerta:1518271939460857968> You don't have **permission** to use this command.",
         "call_limit_invalid": "<a:alerta:1518271939460857968> Invalid number. Use a value between **0** and **99** *(0 = no limit)*.",
         "call_limit_set": "<a:online:1518271945550856295> Limit set successfully!",
         "call_limit_removed": "<a:online:1518271945550856295> Limit removed! Channel has no user restriction.",
-        "call_limit_error": "❌ Could not change the channel limit.",
+        "call_limit_error": "<a:alerta:1518271939460857968> Could not change the channel limit.",
         "call_limit_ask": "<:mov_call:1518271964077232150> **What is the new user limit?**\nSend a number between **0** and **99** *(0 = no limit)*.",
         "dono_call_panel_title": "Call Owner - NATA®",
         "dono_call_canais_voz": "Monitored Channels",
@@ -3281,14 +3281,14 @@ TRANSLATIONS = {
             "Set Limit, and Set Status.\n"
             "When the owner leaves, the next member takes over. Empty channel = panel removed."
         ),
-        "dono_call_channels_updated": "✅ Call Owner channels updated!",
-        "dono_call_reset_done": "✅ Call Owner reset!",
+        "dono_call_channels_updated": "<a:online:1518271945550856295> Call Owner channels updated!",
+        "dono_call_reset_done": "<a:online:1518271945550856295> Call Owner reset!",
         "dono_call_cargos_btn": "Access Roles",
         "dono_call_cargos_placeholder": "Select roles with access...",
-        "dono_call_cargos_updated": "✅ Call Owner roles updated!",
+        "dono_call_cargos_updated": "<a:online:1518271945550856295> Call Owner roles updated!",
         "dono_call_cargos_label": "Access Roles",
         "dono_call_cargos_obs": "Only members with one of these roles become the **call owner**. Leave empty to allow everyone.",
-        "dono_call_only_owner": "❌ Only the call owner can use this.",
+        "dono_call_only_owner": "<a:alerta:1518271939460857968> Only the call owner can use this.",
         "dono_call_btn_nome": "Rename",
         "dono_call_btn_limite": "Set Limit",
         "dono_call_btn_status": "Set Status",
@@ -3298,33 +3298,33 @@ TRANSLATIONS = {
         "dono_call_modal_limite_title": "Set User Limit",
         "dono_call_modal_limite_label": "Limit (0 = no limit)",
         "dono_call_modal_limite_placeholder": "0-99",
-        "dono_call_status_abrir": "🟢 Open Call",
-        "dono_call_status_fechar": "🔴 Close Call",
+        "dono_call_status_abrir": "<a:online:1518271945550856295> Open Call",
+        "dono_call_status_fechar": "<a:alerta:1518271939460857968> Close Call",
         "dono_call_status_field": "Status",
-        "dono_call_status_open": "🟢 Open",
-        "dono_call_status_closed": "🔴 Closed",
+        "dono_call_status_open": "<a:online:1518271945550856295> Open",
+        "dono_call_status_closed": "<a:alerta:1518271939460857968> Closed",
         "dono_call_limite_field": "Limit",
         "dono_call_limite_sem": "No limit",
         "dono_call_membros_field": "Members",
-        "dono_call_nome_ok": "✅ Channel renamed!",
-        "dono_call_limite_ok": "✅ Limit updated!",
-        "dono_call_limite_invalid": "❌ Invalid number. Use between 0 and 99.",
-        "dono_call_status_ok": "✅ Status updated!",
-        "dono_call_nome_error": "❌ Could not rename the channel.",
-        "dono_call_limite_error": "❌ Could not change the limit.",
-        "dono_call_status_error": "❌ Could not change the status.",
+        "dono_call_nome_ok": "<a:online:1518271945550856295> Channel renamed!",
+        "dono_call_limite_ok": "<a:online:1518271945550856295> Limit updated!",
+        "dono_call_limite_invalid": "<a:alerta:1518271939460857968> Invalid number. Use between 0 and 99.",
+        "dono_call_status_ok": "<a:online:1518271945550856295> Status updated!",
+        "dono_call_nome_error": "<a:alerta:1518271939460857968> Could not rename the channel.",
+        "dono_call_limite_error": "<a:alerta:1518271939460857968> Could not change the limit.",
+        "dono_call_status_error": "<a:alerta:1518271939460857968> Could not change the status.",
         "dono_call_banner_title": "🖼️ Call Banner",
         "dono_call_banner_label": "Image URL",
         "dono_call_banner_placeholder": "https://i.imgur.com/example.png",
         "dono_call_banner_ok": "🖼️ Banner set successfully!",
         "dono_call_banner_removed": "🖼️ Banner removed.",
-        "dono_call_banner_invalid": "❌ Invalid URL. Use a direct image link (jpg, png, gif, webp).",
+        "dono_call_banner_invalid": "<a:alerta:1518271939460857968> Invalid URL. Use a direct image link (jpg, png, gif, webp).",
         "dono_call_btn_expulsar": "Kick from Call",
         "dono_call_expulsar_placeholder": "Select who to kick...",
-        "dono_call_expulsar_ok": "✅ **{name}** was kicked from the call.",
-        "dono_call_expulsar_error": "❌ Could not kick the member.",
-        "dono_call_expulsar_nobody": "❌ There are no other members in the call to kick.",
-        "dono_call_expulsar_not_in_call": "❌ This member is no longer in the call.",
+        "dono_call_expulsar_ok": "<a:online:1518271945550856295> **{name}** was kicked from the call.",
+        "dono_call_expulsar_error": "<a:alerta:1518271939460857968> Could not kick the member.",
+        "dono_call_expulsar_nobody": "<a:alerta:1518271939460857968> There are no other members in the call to kick.",
+        "dono_call_expulsar_not_in_call": "<a:alerta:1518271939460857968> This member is no longer in the call.",
         "call_temp_panel_title": "Temporary Call - NATA®",
         "call_temp_canais_voz": "Monitored Channels",
         "call_temp_obs": (
@@ -3332,9 +3332,9 @@ TRANSLATIONS = {
             "and a V2 control panel is sent in the channel chat with a menu to Rename, Set Limit and Set Status.\n"
             "When the owner leaves, the next member takes over. Empty channel = panel removed."
         ),
-        "call_temp_channels_updated": "✅ Temporary Call channels updated!",
-        "call_temp_reset_done": "✅ Temporary Call reset!",
-        "call_temp_only_owner": "❌ Only the call owner can use this panel.",
+        "call_temp_channels_updated": "<a:online:1518271945550856295> Temporary Call channels updated!",
+        "call_temp_reset_done": "<a:online:1518271945550856295> Temporary Call reset!",
+        "call_temp_only_owner": "<a:alerta:1518271939460857968> Only the call owner can use this panel.",
         "call_temp_select_placeholder": "Select a configuration option...",
         "call_temp_opt_nome": "Rename",
         "call_temp_opt_nome_desc": "Change the name of your call.",
@@ -3345,18 +3345,18 @@ TRANSLATIONS = {
         "call_temp_nome_title": "Rename Call",
         "call_temp_nome_label": "New name",
         "call_temp_nome_placeholder": "E.g.: Squad Call",
-        "call_temp_nome_ok": "✅ Call renamed!",
-        "call_temp_nome_error": "❌ Could not rename the channel.",
+        "call_temp_nome_ok": "<a:online:1518271945550856295> Call renamed!",
+        "call_temp_nome_error": "<a:alerta:1518271939460857968> Could not rename the channel.",
         "call_temp_limite_title": "Set User Limit",
         "call_temp_limite_label": "Limit (0 = no limit)",
         "call_temp_limite_placeholder": "E.g.: 5",
-        "call_temp_limite_ok": "✅ Call limit updated!",
-        "call_temp_limite_error": "❌ Could not change the limit.",
-        "call_temp_limite_invalid": "❌ Invalid number. Use between 0 and 99.",
-        "call_temp_status_abrir": "🟢 Open Call",
-        "call_temp_status_fechar": "🔴 Close Call",
-        "call_temp_status_ok": "✅ Call status updated!",
-        "call_temp_status_error": "❌ Could not change the status.",
+        "call_temp_limite_ok": "<a:online:1518271945550856295> Call limit updated!",
+        "call_temp_limite_error": "<a:alerta:1518271939460857968> Could not change the limit.",
+        "call_temp_limite_invalid": "<a:alerta:1518271939460857968> Invalid number. Use between 0 and 99.",
+        "call_temp_status_abrir": "<a:online:1518271945550856295> Open Call",
+        "call_temp_status_fechar": "<a:alerta:1518271939460857968> Close Call",
+        "call_temp_status_ok": "<a:online:1518271945550856295> Call status updated!",
+        "call_temp_status_error": "<a:alerta:1518271939460857968> Could not change the status.",
         "call_temp_panel_header": "You are the **call owner**.",
         "call_temp_panel_subtext": "Use the menu below to configure the voice channel.",
         "call_temp_status_ask": "Select the new call status:",
@@ -3380,7 +3380,7 @@ TRANSLATIONS = {
         "panelv2_input_title_placeholder": "Title shown at the top of the embed...",
         "panelv2_input_embed_desc_label": "Description (max 2000 characters)",
         "panelv2_input_embed_desc_placeholder": "Main embed text...",
-        "panelv2_title_set": "✅ Title/Description set!",
+        "panelv2_title_set": "<a:online:1518271945550856295> Title/Description set!",
         "panelv2_btn_cor": "Color",
         "panelv2_btn_salvar": "Save",
         "panelv2_modal_text_title": "Add Text / Section",
@@ -4704,7 +4704,7 @@ INVITE_REGEX = re.compile(
 
 # ── Emoji de sucesso (Application Emoji — funciona em todos os servidores) ───────────────
 _SUCCESS_EMOJI_ID  = 1508199526002065521   # emoji original (HYPE server)
-_SUCCESS_EMOJI_STR = "✅"                   # actualizado em on_ready via _setup_success_emoji()
+_SUCCESS_EMOJI_STR = "<a:online:1518271945550856295>"                   # actualizado em on_ready via _setup_success_emoji()
 
 def _e_success() -> str:
     return _SUCCESS_EMOJI_STR
@@ -4719,7 +4719,7 @@ async def _setup_success_emoji() -> None:
       1. Emoji já em cache de guild (bot está no servidor do emoji)
       2. Application Emoji já criado anteriormente
       3. Cria Application Emoji baixando do CDN do Discord
-      4. Fallback ✅
+      4. Fallback <a:online:1518271945550856295>
     """
     global _SUCCESS_EMOJI_STR
 
@@ -4761,8 +4761,8 @@ async def _setup_success_emoji() -> None:
         print(f"[emoji] create_application_emoji: {ex}", flush=True)
 
     # 4. Fallback
-    _SUCCESS_EMOJI_STR = "✅"
-    print("[emoji] fallback ✅", flush=True)
+    _SUCCESS_EMOJI_STR = "<a:online:1518271945550856295>"
+    print("[emoji] fallback <a:online:1518271945550856295>", flush=True)
 
 
 async def _setup_all_emojis() -> None:
@@ -5230,7 +5230,7 @@ class AppearanceView(discord.ui.View):
         import traceback
         traceback.print_exc()
         try:
-            msg = f"❌ Erro em Aparência: `{type(error).__name__}: {error}`"
+            msg = f"<a:alerta:1518271939460857968> Erro em Aparência: `{type(error).__name__}: {error}`"
             if not interaction.response.is_done():
                 await interaction.response.send_message(embed=_notif_embed(msg), ephemeral=True)
             else:
@@ -5330,13 +5330,13 @@ class AppearanceView(discord.ui.View):
             pass
 
         if content.lower() == t["cancel_keyword"]:
-            emb = discord.Embed(description=f"❌ {t['operation_cancelled']}", color=color)
+            emb = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['operation_cancelled']}", color=color)
             emb.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
             await interaction.followup.send(embed=emb, ephemeral=True)
             return
 
         if not content or len(content) > 5 or any(c.isspace() for c in content):
-            inv = discord.Embed(description=f"❌ {t['invalid_prefix']}", color=color)
+            inv = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['invalid_prefix']}", color=color)
             inv.set_author(name=bot.user.display_name if bot.user else "NATA®", icon_url=icon_url)
             await interaction.followup.send(embed=inv, ephemeral=True)
             return
@@ -5454,7 +5454,7 @@ class AppearanceView(discord.ui.View):
 
         ok_embed = discord.Embed(description="Nome alterado com sucesso!", color=color)
         if username_error:
-            ok_embed.description += "\n⚠️ Username global não alterado (limite Discord: 2x/hora)."
+            ok_embed.description += "\n<a:alerta:1518271939460857968> Username global não alterado (limite Discord: 2x/hora)."
         await interaction.followup.send(embed=ok_embed, ephemeral=True)
 
         # Atualiza o painel
@@ -5514,20 +5514,20 @@ class AppearanceView(discord.ui.View):
 
         if content.lower() == t["cancel_keyword"]:
             await _safe_delete()
-            cancel_embed = discord.Embed(description=f"❌ {t['operation_cancelled']}", color=color)
+            cancel_embed = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['operation_cancelled']}", color=color)
             await interaction.followup.send(embed=cancel_embed, ephemeral=True)
             return
 
         if not attachments:
             await _safe_delete()
-            err_embed = discord.Embed(description=f"❌ {t['need_attachment']}", color=0xED4245)
+            err_embed = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['need_attachment']}", color=0xED4245)
             await interaction.followup.send(embed=err_embed, ephemeral=True)
             return
 
         attachment = attachments[0]
         if not (attachment.content_type or "").startswith("image/"):
             await _safe_delete()
-            err_embed = discord.Embed(description=f"❌ {t['need_attachment']}", color=0xED4245)
+            err_embed = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['need_attachment']}", color=0xED4245)
             await interaction.followup.send(embed=err_embed, ephemeral=True)
             return
 
@@ -5535,7 +5535,7 @@ class AppearanceView(discord.ui.View):
             image_bytes = await attachment.read()
         except (discord.HTTPException, discord.NotFound) as e:
             err_embed = discord.Embed(
-                description=f"❌ {t['avatar_error'].format(error=str(e))}",
+                description=f"<a:alerta:1518271939460857968> {t['avatar_error'].format(error=str(e))}",
                 color=0xED4245,
             )
             await interaction.followup.send(embed=err_embed, ephemeral=True)
@@ -5557,14 +5557,14 @@ class AppearanceView(discord.ui.View):
                 )
             else:
                 err_embed = discord.Embed(
-                    description=f"❌ {t['avatar_error'].format(error=str(e))}",
+                    description=f"<a:alerta:1518271939460857968> {t['avatar_error'].format(error=str(e))}",
                     color=0xED4245,
                 )
             await interaction.followup.send(embed=err_embed, ephemeral=True)
             return
         except discord.NotFound as e:
             err_embed = discord.Embed(
-                description=f"❌ {t['avatar_error'].format(error=str(e))}",
+                description=f"<a:alerta:1518271939460857968> {t['avatar_error'].format(error=str(e))}",
                 color=0xED4245,
             )
             await interaction.followup.send(embed=err_embed, ephemeral=True)
@@ -5645,7 +5645,7 @@ class AppearanceView(discord.ui.View):
 
         if content.lower() == t["cancel_keyword"]:
             await _safe_delete()
-            cancel_embed = discord.Embed(description=f"❌ {t['operation_cancelled']}", color=color)
+            cancel_embed = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['operation_cancelled']}", color=color)
             await interaction.followup.send(embed=cancel_embed, ephemeral=True)
             return
 
@@ -5655,12 +5655,12 @@ class AppearanceView(discord.ui.View):
                 await bot.user.edit(banner=None)
             except (discord.HTTPException, discord.NotFound) as e:
                 err_embed = discord.Embed(
-                    description=f"❌ {t['banner_error'].format(error=str(e))}",
+                    description=f"<a:alerta:1518271939460857968> {t['banner_error'].format(error=str(e))}",
                     color=0xED4245,
                 )
                 await interaction.followup.send(embed=err_embed, ephemeral=True)
                 return
-            ok_embed = discord.Embed(description=f"✅ {t['banner_removed']}", color=0x23A55A)
+            ok_embed = discord.Embed(description=f"<a:online:1518271945550856295> {t['banner_removed']}", color=0x23A55A)
             ok_embed.set_author(name="NATA®", icon_url=icon_url)
             await interaction.followup.send(embed=ok_embed, ephemeral=True)
             return
@@ -5669,7 +5669,7 @@ class AppearanceView(discord.ui.View):
         if content.startswith(("http://", "https://")) and not attachments:
             await _safe_delete()
             err_embed = discord.Embed(
-                description="❌ Envie o arquivo de imagem diretamente (não URL). Use o botão **Banner do Painel** para definir uma URL.",
+                description="<a:alerta:1518271939460857968> Envie o arquivo de imagem diretamente (não URL). Use o botão **Banner do Painel** para definir uma URL.",
                 color=0xED4245,
             )
             await interaction.followup.send(embed=err_embed, ephemeral=True)
@@ -5677,14 +5677,14 @@ class AppearanceView(discord.ui.View):
 
         if not attachments:
             await _safe_delete()
-            err_embed = discord.Embed(description=f"❌ {t['need_attachment']}", color=0xED4245)
+            err_embed = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['need_attachment']}", color=0xED4245)
             await interaction.followup.send(embed=err_embed, ephemeral=True)
             return
 
         attachment = attachments[0]
         if not (attachment.content_type or "").startswith("image/"):
             await _safe_delete()
-            err_embed = discord.Embed(description=f"❌ {t['need_attachment']}", color=0xED4245)
+            err_embed = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['need_attachment']}", color=0xED4245)
             await interaction.followup.send(embed=err_embed, ephemeral=True)
             return
 
@@ -5692,7 +5692,7 @@ class AppearanceView(discord.ui.View):
             image_bytes = await attachment.read()
         except (discord.HTTPException, discord.NotFound) as e:
             err_embed = discord.Embed(
-                description=f"❌ {t['banner_error'].format(error=str(e))}",
+                description=f"<a:alerta:1518271939460857968> {t['banner_error'].format(error=str(e))}",
                 color=0xED4245,
             )
             await interaction.followup.send(embed=err_embed, ephemeral=True)
@@ -5710,7 +5710,7 @@ class AppearanceView(discord.ui.View):
         if len(image_bytes) > _MAX_BANNER:
             size_mb = len(image_bytes) / 1024 / 1024
             err_embed = discord.Embed(
-                description=f"❌ Imagem muito grande ({size_mb:.1f} MB). O limite para banner é 8 MB. Comprima a imagem e tente novamente.",
+                description=f"<a:alerta:1518271939460857968> Imagem muito grande ({size_mb:.1f} MB). O limite para banner é 8 MB. Comprima a imagem e tente novamente.",
                 color=0xED4245,
             )
             await interaction.followup.send(embed=err_embed, ephemeral=True)
@@ -5733,14 +5733,14 @@ class AppearanceView(discord.ui.View):
                     await asyncio.sleep(90 * (_attempt + 1))
                     continue
                 err_embed = discord.Embed(
-                    description=f"❌ {t['banner_error'].format(error=str(e))} (código {e.code})\n```{(e.text or '')[:200]}```",
+                    description=f"<a:alerta:1518271939460857968> {t['banner_error'].format(error=str(e))} (código {e.code})\n```{(e.text or '')[:200]}```",
                     color=0xED4245,
                 )
                 await interaction.followup.send(embed=err_embed, ephemeral=True)
                 return
             except Exception as e:
                 err_embed = discord.Embed(
-                    description=f"❌ Erro inesperado ao alterar o banner: `{type(e).__name__}: {e}`",
+                    description=f"<a:alerta:1518271939460857968> Erro inesperado ao alterar o banner: `{type(e).__name__}: {e}`",
                     color=0xED4245,
                 )
                 await interaction.followup.send(embed=err_embed, ephemeral=True)
@@ -5929,7 +5929,7 @@ class AppearanceView(discord.ui.View):
                 hex_str  = modal_self.color_input.value.strip().lstrip("#")
 
                 if len(hex_str) != 6 or not all(c in "0123456789abcdefABCDEF" for c in hex_str):
-                    err = discord.Embed(description=f"❌ {t['invalid_hex']}", color=color)
+                    err = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['invalid_hex']}", color=color)
                     err.set_author(name="NATA®", icon_url=icon_url)
                     await intr.response.send_message(embed=err, ephemeral=True)
                     return
@@ -5938,7 +5938,7 @@ class AppearanceView(discord.ui.View):
                 settings["embed_color"] = new_color
                 save_settings_to_disk()
 
-                ok = discord.Embed(description=f"✅ {t['color_changed']}", color=new_color)
+                ok = discord.Embed(description=f"<a:online:1518271945550856295> {t['color_changed']}", color=new_color)
                 ok.set_author(name="NATA®", icon_url=icon_url)
                 await intr.response.send_message(embed=ok, ephemeral=True)
 
@@ -7465,7 +7465,7 @@ class TicketCadastrarChannelSelect(GuildChannelSelect):
 
     async def callback(self, interaction: discord.Interaction):
         if not self.values:
-            await interaction.response.send_message("❌ Canal inválido. Tente novamente.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Canal inválido. Tente novamente.", ephemeral=True)
             return
         settings = get_settings(interaction.guild.id)
         t = TRANSLATIONS[settings["language"]]
@@ -7877,7 +7877,7 @@ class TicketHorariosConfigView(discord.ui.View):
         view  = TicketHorariosConfigView(self.author, self.panel_id)
         await interaction.response.edit_message(embed=embed, view=view)
         icon_url = bot.user.display_avatar.url if bot.user else None
-        fb = discord.Embed(description=f"✅ {t['ticket_horarios_reset_done']}", color=settings["embed_color"])
+        fb = discord.Embed(description=f"<a:online:1518271945550856295> {t['ticket_horarios_reset_done']}", color=settings["embed_color"])
         fb.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
         await interaction.followup.send(embed=fb, ephemeral=True)
 
@@ -8168,7 +8168,7 @@ class TicketMenuAddOpcaoView(discord.ui.View):
                 opcoes.append(self.draft)
             save_settings_to_disk()
         icon_url = bot.user.display_avatar.url if bot.user else None
-        fb = discord.Embed(description=f"✅ {t['ticket_menu_opcao_saved']}", color=settings["embed_color"])
+        fb = discord.Embed(description=f"<a:online:1518271945550856295> {t['ticket_menu_opcao_saved']}", color=settings["embed_color"])
         fb.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
         # Re-open the main menu management view
         view = TicketMenuSelecaoView(self.author, self.panel_id)
@@ -8206,7 +8206,7 @@ class TicketMenuRemoverSelect(discord.ui.Select):
             ]
             save_settings_to_disk()
         icon_url = bot.user.display_avatar.url if bot.user else None
-        fb = discord.Embed(description=f"✅ {t['ticket_menu_remover_confirm']}", color=settings["embed_color"])
+        fb = discord.Embed(description=f"<a:online:1518271945550856295> {t['ticket_menu_remover_confirm']}", color=settings["embed_color"])
         fb.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
         view = TicketMenuSelecaoView(self.author, self.panel_id)
         embed = build_ticket_menu_selecao_embed(settings, panel or {})
@@ -8668,7 +8668,7 @@ class TicketEditarCorModal(discord.ui.Modal):
                 raise ValueError
         except ValueError:
             icon_url = bot.user.display_avatar.url if bot.user else None
-            err_embed = discord.Embed(description=f"❌ {t['ticket_embed_invalid_color']}", color=discord.Color.red())
+            err_embed = discord.Embed(description=f"<a:alerta:1518271939460857968> {t['ticket_embed_invalid_color']}", color=discord.Color.red())
             err_embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
             await interaction.response.send_message(embed=err_embed, ephemeral=True)
             return
@@ -8766,7 +8766,7 @@ class TicketEditEmbedView(discord.ui.View):
         t = TRANSLATIONS[settings["language"]]
         save_settings_to_disk()
         icon_url = bot.user.display_avatar.url if bot.user else None
-        embed = discord.Embed(description=f"✅ {t['ticket_embed_saved']}", color=settings["embed_color"])
+        embed = discord.Embed(description=f"<a:online:1518271945550856295> {t['ticket_embed_saved']}", color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -8968,7 +8968,7 @@ class TicketPainelLeiaView(discord.ui.View):
             return
 
         icon_url = bot.user.display_avatar.url if bot.user else None
-        sent_embed = discord.Embed(description=f"✅ {t['ticket_painel_sent']}", color=settings["embed_color"])
+        sent_embed = discord.Embed(description=f"<a:online:1518271945550856295> {t['ticket_painel_sent']}", color=settings["embed_color"])
         sent_embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
         await interaction.response.send_message(embed=sent_embed, ephemeral=True)
 
@@ -9707,7 +9707,7 @@ class VerificacaoView(discord.ui.View):
         # Garante que o botão de verificação está sempre no draft
         _btns = draft.setdefault("buttons", [])
         if not any(b.get("type") == "verif_check" for b in _btns):
-            _btns.insert(0, {"type": "verif_check", "text": "Verificar", "color": "green", "emoji": "✅", "response": ""})
+            _btns.insert(0, {"type": "verif_check", "text": "Verificar", "color": "green", "emoji": "<a:online:1518271945550856295>", "response": ""})
         target = interaction.channel if isinstance(interaction.channel, discord.TextChannel) else None
         if target is None:
             await interaction.response.send_message("Canal de texto necessário.", ephemeral=True)
@@ -12110,7 +12110,7 @@ class GifsMenuSelect(discord.ui.Select):
             err_txt = traceback.format_exc()
             print(f"[GifsMenuSelect.callback ERROR]\n{err_txt}", flush=True)
             try:
-                msg = f"❌ Erro interno: `{type(_exc).__name__}: {_exc}`"
+                msg = f"<a:alerta:1518271939460857968> Erro interno: `{type(_exc).__name__}: {_exc}`"
                 if not interaction.response.is_done():
                     await interaction.response.send_message(embed=_notif_embed(msg), ephemeral=True)
                 else:
@@ -12148,7 +12148,7 @@ def build_gifs_conversor_embed(author: discord.Member, settings: dict) -> discor
         roles_fmt = "`Nenhum`"
 
     # Banner
-    banner_val = "`Nenhum`" if not settings.get("gifs_conversor_banner") else "`Configurado ✅`"
+    banner_val = "`Nenhum`" if not settings.get("gifs_conversor_banner") else "`Configurado <a:online:1518271945550856295>`"
 
     embed.add_field(
         name="<a:alerta:1518271939460857968>  Informações",
@@ -12228,10 +12228,10 @@ async def _gifs_pb_criar_canal(interaction: discord.Interaction) -> None:
             reason="Preto e Branco — Editor",
         )
     except discord.Forbidden:
-        await interaction.response.send_message("❌ Sem permissão para criar canal.", ephemeral=True)
+        await interaction.response.send_message("<a:alerta:1518271939460857968> Sem permissão para criar canal.", ephemeral=True)
         return
     except discord.HTTPException as e:
-        await interaction.response.send_message(f"❌ Erro ao criar canal: `{e}`", ephemeral=True)
+        await interaction.response.send_message(f"<a:alerta:1518271939460857968> Erro ao criar canal: `{e}`", ephemeral=True)
         return
 
     _gifs_pb_cd[uid] = now  # registra cooldown
@@ -12346,12 +12346,12 @@ class _GifsEditorView(discord.ui.View):
 
         att = msg.attachments[0]
         if att.size > 10 * 1024 * 1024:
-            await self.canal.send("❌ Imagem muito grande. Máximo de **10MB**.")
+            await self.canal.send("<a:alerta:1518271939460857968> Imagem muito grande. Máximo de **10MB**.")
             return
 
         fname_lower = (att.filename or "").lower()
         if not any(fname_lower.endswith(ext) for ext in (".png", ".jpg", ".jpeg")):
-            await self.canal.send("❌ Formato inválido. Use `.png`, `.jpg` ou `.jpeg`.")
+            await self.canal.send("<a:alerta:1518271939460857968> Formato inválido. Use `.png`, `.jpg` ou `.jpeg`.")
             return
 
         await self.canal.send("<a:alerta:1518271939460857968> Processando sua imagem...")
@@ -12394,9 +12394,9 @@ class _GifsEditorView(discord.ui.View):
             asyncio.create_task(_deletar_editor())
 
         except ImportError:
-            await self.canal.send("❌ Biblioteca `Pillow` não disponível. Contate o suporte.")
+            await self.canal.send("<a:alerta:1518271939460857968> Biblioteca `Pillow` não disponível. Contate o suporte.")
         except Exception as e:
-            await self.canal.send(f"❌ Erro ao processar imagem: `{e}`")
+            await self.canal.send(f"<a:alerta:1518271939460857968> Erro ao processar imagem: `{e}`")
 
     async def _cancelar(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id) if interaction.guild else {}
@@ -12532,10 +12532,10 @@ async def _gifs_criar_canal(interaction: discord.Interaction, service: str) -> N
             reason=meta["reason"],
         )
     except discord.Forbidden:
-        await interaction.response.send_message("❌ Sem permissão para criar canal.", ephemeral=True)
+        await interaction.response.send_message("<a:alerta:1518271939460857968> Sem permissão para criar canal.", ephemeral=True)
         return
     except discord.HTTPException as e:
-        await interaction.response.send_message(f"❌ Erro ao criar canal: `{e}`", ephemeral=True)
+        await interaction.response.send_message(f"<a:alerta:1518271939460857968> Erro ao criar canal: `{e}`", ephemeral=True)
         return
 
     _gifs_conv_cd[uid] = now  # registra cooldown
@@ -12666,7 +12666,7 @@ class _GifsConversorCanalView(discord.ui.View):
             # Reenvia o menu para o usuário tentar de novo
             nova_view = _GifsConversorCanalView(self.member, self.canal, self.service)
             await self.canal.send(
-                f"❌ Arquivo muito grande. Máximo de **{meta['max_size']}MB**.",
+                f"<a:alerta:1518271939460857968> Arquivo muito grande. Máximo de **{meta['max_size']}MB**.",
                 view=nova_view,
             )
             return
@@ -12677,7 +12677,7 @@ class _GifsConversorCanalView(discord.ui.View):
             # Reenvia o menu para o usuário tentar de novo
             nova_view = _GifsConversorCanalView(self.member, self.canal, self.service)
             await self.canal.send(
-                f"⚠️ **Formato inválido.** Use: {exts_fmt}.",
+                f"<a:alerta:1518271939460857968> **Formato inválido.** Use: {exts_fmt}.",
                 view=nova_view,
             )
             return
@@ -12795,22 +12795,22 @@ class _GifsConversorCanalView(discord.ui.View):
 
         except FileNotFoundError:
             await self.canal.send(
-                "❌ `ffmpeg` não está instalado no servidor.\n"
+                "<a:alerta:1518271939460857968> `ffmpeg` não está instalado no servidor.\n"
                 "Configure o `nixpacks.toml` com `nixPkgs = [\"ffmpeg\"]` e faça redeploy."
             )
         except asyncio.TimeoutError:
-            await self.canal.send("❌ Tempo esgotado. Tente um vídeo mais curto (máx ~10 segundos).")
+            await self.canal.send("<a:alerta:1518271939460857968> Tempo esgotado. Tente um vídeo mais curto (máx ~10 segundos).")
         except discord.HTTPException as e:
             if e.status == 413:
-                await self.canal.send("❌ GIF muito grande para enviar. Tente um vídeo mais curto.")
+                await self.canal.send("<a:alerta:1518271939460857968> GIF muito grande para enviar. Tente um vídeo mais curto.")
             else:
-                await self.canal.send(f"❌ Erro do Discord ao enviar: `{e}`")
+                await self.canal.send(f"<a:alerta:1518271939460857968> Erro do Discord ao enviar: `{e}`")
         except RuntimeError as e:
-            await self.canal.send(f"❌ {e}")
+            await self.canal.send(f"<a:alerta:1518271939460857968> {e}")
         except Exception as e:
             import traceback
             tb = traceback.format_exc()[-600:]
-            await self.canal.send(f"❌ Erro inesperado: `{type(e).__name__}: {e}`\n```\n{tb}\n```")
+            await self.canal.send(f"<a:alerta:1518271939460857968> Erro inesperado: `{type(e).__name__}: {e}`\n```\n{tb}\n```")
 
     async def _cancelar(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id) if interaction.guild else {}
@@ -12886,7 +12886,7 @@ class _GifsConversorPublicSelect(discord.ui.View):
                 if interaction.guild:
                     cor = get_settings(interaction.guild.id).get("embed_color", cor)
                 emb = discord.Embed(
-                    description=f"❌ Ocorreu um erro interno. Tente novamente em instantes.",
+                    description=f"<a:alerta:1518271939460857968> Ocorreu um erro interno. Tente novamente em instantes.",
                     color=cor,
                 )
                 if not interaction.response.is_done():
@@ -12908,7 +12908,7 @@ class _GifsConversorChannelSelect(GuildChannelSelect):
 
     async def callback(self, interaction: discord.Interaction):
         if not self.values:
-            await interaction.response.send_message("❌ Canal inválido. Tente novamente.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Canal inválido. Tente novamente.", ephemeral=True)
             return
         settings = get_settings(interaction.guild.id)
         channel = self.values[0]
@@ -12959,7 +12959,7 @@ class _GifsConversorRoleSelect(discord.ui.RoleSelect):
         if added:
             partes.append(f"{_e_success()} Adicionados: {', '.join(f'<@&{r}>' for r in added)}")
         if removed:
-            partes.append(f"❌ Removidos: {', '.join(f'<@&{r}>' for r in removed)}")
+            partes.append(f"<a:alerta:1518271939460857968> Removidos: {', '.join(f'<@&{r}>' for r in removed)}")
         await interaction.followup.send("\n".join(partes) or "Nenhuma alteração.", ephemeral=True)
 
 
@@ -13068,7 +13068,7 @@ class GifsConversorView(discord.ui.View):
             url = content
 
         if not url:
-            await interaction.followup.send("❌ Envie uma imagem válida ou URL.", ephemeral=True)
+            await interaction.followup.send("<a:alerta:1518271939460857968> Envie uma imagem válida ou URL.", ephemeral=True)
             return
 
         settings["gifs_conversor_banner"] = url
@@ -13088,7 +13088,7 @@ class GifsConversorView(discord.ui.View):
 
         channel = interaction.guild.get_channel(ch_id)
         if channel is None:
-            await interaction.response.send_message("❌ Canal não encontrado.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Canal não encontrado.", ephemeral=True)
             return
 
         # ── Embed da mensagem enviada no canal ───────────────────────────────
@@ -13168,7 +13168,7 @@ class GifsConversorView(discord.ui.View):
         try:
             sent_msg = await channel.send(embed=emb, view=select_view)
         except (discord.Forbidden, discord.HTTPException) as e:
-            await interaction.response.send_message(f"❌ Erro ao enviar: `{e}`", ephemeral=True)
+            await interaction.response.send_message(f"<a:alerta:1518271939460857968> Erro ao enviar: `{e}`", ephemeral=True)
             return
 
         # Botão "Conferir no canal" com link para a mensagem
@@ -13320,7 +13320,7 @@ class _DecoracoesRoleSelect(discord.ui.RoleSelect):
         await interaction.response.edit_message(embed=embed, view=view)
         partes = []
         if added:   partes.append(f"{_e_success()} Adicionados: {', '.join(added)}")
-        if removed: partes.append(f"❌ Removidos: {', '.join(removed)}")
+        if removed: partes.append(f"<a:alerta:1518271939460857968> Removidos: {', '.join(removed)}")
         await interaction.followup.send("\n".join(partes) or "Sem alterações.", ephemeral=True)
 
 class _DecoracoesRoleView(discord.ui.View):
@@ -13623,7 +13623,7 @@ class _DecorItemEditView(discord.ui.LayoutView):
         n_btns = len(self.section.get("buttons", []))
         if tipo != "buttons" or n_btns == 0:
             await interaction.response.send_message(
-                "❌ Apenas seções do tipo **buttons** suportam emoji.", ephemeral=True
+                "<a:alerta:1518271939460857968> Apenas seções do tipo **buttons** suportam emoji.", ephemeral=True
             )
             return
 
@@ -13716,7 +13716,7 @@ class _ModalV2(discord.ui.Modal):
         import traceback
         traceback.print_exc()
         try:
-            msg = f"❌ Erro no modal V2: `{type(error).__name__}: {error}`"
+            msg = f"<a:alerta:1518271939460857968> Erro no modal V2: `{type(error).__name__}: {error}`"
             if not interaction.response.is_done():
                 await interaction.response.send_message(embed=_notif_embed(msg), ephemeral=True)
             else:
@@ -14224,9 +14224,9 @@ class _DecorPanelBuilderView(discord.ui.LayoutView):
         """Garante que qualquer falha de callback responda à interação."""
         try:
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ Erro: `{error}`", ephemeral=True)
+                await interaction.response.send_message(f"<a:alerta:1518271939460857968> Erro: `{error}`", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ Erro: `{error}`", ephemeral=True)
+                await interaction.followup.send(f"<a:alerta:1518271939460857968> Erro: `{error}`", ephemeral=True)
         except Exception:
             pass
 
@@ -14318,14 +14318,14 @@ class _DecorPanelBuilderView(discord.ui.LayoutView):
 
         if not sections:
             await interaction.response.send_message(
-                "❌ Adicione pelo menos uma seção antes de enviar.", ephemeral=True
+                "<a:alerta:1518271939460857968> Adicione pelo menos uma seção antes de enviar.", ephemeral=True
             )
             return
 
         view = _SentPanelView(sections, color)
         if not view.has_items:
             await interaction.response.send_message(
-                "❌ Nenhum item válido para enviar.", ephemeral=True
+                "<a:alerta:1518271939460857968> Nenhum item válido para enviar.", ephemeral=True
             )
             return
 
@@ -14611,7 +14611,7 @@ class _DecorGalleryModal(_ModalV2, title="Adicionar Galeria (até 10)"):
     async def on_error(self, interaction: discord.Interaction, error: Exception):
         try:
             await interaction.response.send_message(
-                f"❌ Erro ao processar galeria: `{error}`", ephemeral=True
+                f"<a:alerta:1518271939460857968> Erro ao processar galeria: `{error}`", ephemeral=True
             )
         except Exception:
             pass
@@ -14634,7 +14634,7 @@ class _DecorCorModal(discord.ui.Modal):
         try:
             color = int(raw, 16)
         except ValueError:
-            await interaction.response.send_message("❌ Cor inválida. Use formato hex (ex: #FF5733).", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Cor inválida. Use formato hex (ex: #FF5733).", ephemeral=True)
             return
         settings = get_settings(interaction.guild.id)
         settings.setdefault("gifs_decoracoes_panel", {"color": None, "sections": []})["color"] = color
@@ -14777,7 +14777,7 @@ def _make_ap_cat_select(dest_key: str, cat_label: str):
         async def callback(self_, interaction: discord.Interaction):
             channel_id_str = self_.values[0]
             if channel_id_str == "0":
-                await interaction.response.send_message("❌ Nenhum canal disponível.", ephemeral=True)
+                await interaction.response.send_message("<a:alerta:1518271939460857968> Nenhum canal disponível.", ephemeral=True)
                 return
             channel_id = int(channel_id_str)
             # Recarrega antes de salvar para não sobrescrever mudanças paralelas
@@ -15069,7 +15069,7 @@ class _CatRemoveSelect(GuildChannelSelect):
         await interaction.response.edit_message(embed=embed, view=_PostadoresConfigView(interaction.user))
         if removed:
             await interaction.followup.send(
-                f"❌ Categorias removidas: {', '.join(removed)}", ephemeral=True
+                f"<a:alerta:1518271939460857968> Categorias removidas: {', '.join(removed)}", ephemeral=True
             )
 
 
@@ -15109,7 +15109,7 @@ class _CargoRemoveSelect(discord.ui.RoleSelect):
         await interaction.response.edit_message(embed=embed, view=_PostadoresConfigView(interaction.user))
         if removed:
             await interaction.followup.send(
-                f"❌ Cargos removidos: {', '.join(removed)}", ephemeral=True
+                f"<a:alerta:1518271939460857968> Cargos removidos: {', '.join(removed)}", ephemeral=True
             )
 
 
@@ -15301,7 +15301,7 @@ class _PostadoresRoleSelect(discord.ui.RoleSelect):
         await interaction.response.edit_message(embed=embed, view=_PostadoresRolesView(interaction.user))
         partes = []
         if added:   partes.append(f"{_e_success()} Adicionados: {', '.join(added)}")
-        if removed: partes.append(f"❌ Removidos: {', '.join(removed)}")
+        if removed: partes.append(f"<a:alerta:1518271939460857968> Removidos: {', '.join(removed)}")
         await interaction.followup.send("\n".join(partes) or "Sem alterações.", ephemeral=True)
 
 
@@ -15358,7 +15358,7 @@ class _PontosAddModal(discord.ui.Modal, title="Adicionar Pontos"):
             if valor <= 0:
                 raise ValueError
         except ValueError:
-            await interaction.response.send_message("❌ Digite um número inteiro positivo.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Digite um número inteiro positivo.", ephemeral=True)
             return
 
         settings = get_settings(interaction.guild.id)
@@ -15404,7 +15404,7 @@ class _PontosRemoveModal(discord.ui.Modal, title="Remover Pontos"):
             if valor <= 0:
                 raise ValueError
         except ValueError:
-            await interaction.response.send_message("❌ Digite um número inteiro positivo.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Digite um número inteiro positivo.", ephemeral=True)
             return
 
         settings = get_settings(interaction.guild.id)
@@ -16891,7 +16891,7 @@ async def _process_tellonym_message(message: discord.Message, settings: dict):
     if message.author.id in settings.get("tellonym_blocked_users", []):
         try:
             await message.delete()
-            await message.author.send("❌ Você está bloqueado de usar o Tellonym neste servidor.")
+            await message.author.send("<a:alerta:1518271939460857968> Você está bloqueado de usar o Tellonym neste servidor.")
         except Exception:
             pass
         return
@@ -16903,7 +16903,7 @@ async def _process_tellonym_message(message: discord.Message, settings: dict):
         if not member_role_ids.intersection(set(allowed_roles)):
             try:
                 await message.delete()
-                await message.author.send("❌ Você não tem permissão para usar o Tellonym neste servidor.")
+                await message.author.send("<a:alerta:1518271939460857968> Você não tem permissão para usar o Tellonym neste servidor.")
             except Exception:
                 pass
             return
@@ -16979,19 +16979,19 @@ class TellonymFilterView(discord.ui.View):
         embed = _build_tellonym_message_embed(self.content, settings)
         await tell_ch.send(embed=embed)
         await _tellonym_log(interaction.guild, settings,
-                            f"✅ Tellonym aprovado por {interaction.user.mention}",
+                            f"<a:online:1518271945550856295> Tellonym aprovado por {interaction.user.mention}",
                             self.sender_id, self.content)
         await interaction.response.edit_message(
-            content=f"✅ Aprovado por {interaction.user.mention}", embed=None, view=None
+            content=f"<a:online:1518271945550856295> Aprovado por {interaction.user.mention}", embed=None, view=None
         )
 
     async def _rejeitar(self, interaction: discord.Interaction):
         settings = get_settings(self.guild_id)
         await _tellonym_log(interaction.guild, settings,
-                            f"❌ Tellonym rejeitado por {interaction.user.mention}",
+                            f"<a:alerta:1518271939460857968> Tellonym rejeitado por {interaction.user.mention}",
                             self.sender_id, self.content)
         await interaction.response.edit_message(
-            content=f"❌ Rejeitado por {interaction.user.mention}", embed=None, view=None
+            content=f"<a:alerta:1518271939460857968> Rejeitado por {interaction.user.mention}", embed=None, view=None
         )
 
 
@@ -17171,7 +17171,7 @@ class TellonymChannelsModal(discord.ui.Modal):
 
         if not criar_id or not tell_id or not log_id:
             await interaction.response.send_message(
-                "❌ Canal não encontrado. Use o ID numérico do canal (clique com o botão direito → Copiar ID).",
+                "<a:alerta:1518271939460857968> Canal não encontrado. Use o ID numérico do canal (clique com o botão direito → Copiar ID).",
                 ephemeral=True,
             )
             return
@@ -17184,7 +17184,7 @@ class TellonymChannelsModal(discord.ui.Modal):
 
         embed = build_tellonym_embed(self.parent_view.author, settings)
         await interaction.response.edit_message(embed=embed, view=TellonymView(self.parent_view.author))
-        await interaction.followup.send("✅ Canais do Tellonym configurados!", ephemeral=True)
+        await interaction.followup.send("<a:online:1518271945550856295> Canais do Tellonym configurados!", ephemeral=True)
 
 
 class TellonymBarModal(discord.ui.Modal):
@@ -17204,7 +17204,7 @@ class TellonymBarModal(discord.ui.Modal):
         settings["tellonym_custom_bar"] = bar
         embed = build_tellonym_embed(self.parent_view.author, settings)
         await interaction.response.edit_message(embed=embed, view=TellonymView(self.parent_view.author))
-        msg = "✅ Barrinha configurada!" if bar else "✅ Barrinha removida (voltou ao padrão)."
+        msg = "<a:online:1518271945550856295> Barrinha configurada!" if bar else "<a:online:1518271945550856295> Barrinha removida (voltou ao padrão)."
         await interaction.followup.send(embed=_notif_embed(msg), ephemeral=True)
 
 
@@ -17230,7 +17230,7 @@ class TellonymBlockAddModal(discord.ui.Modal):
         blocked.append(uid)
         embed = build_tellonym_blocked_embed(self.parent_view.tell_author, settings)
         await interaction.response.edit_message(embed=embed, view=TellonymBlockedView(self.parent_view.panel_author, self.parent_view.tell_author))
-        await interaction.followup.send(f"✅ Usuário `{uid}` bloqueado.", ephemeral=True)
+        await interaction.followup.send(f"<a:online:1518271945550856295> Usuário `{uid}` bloqueado.", ephemeral=True)
 
 
 class TellonymBlockRemoveModal(discord.ui.Modal):
@@ -17255,7 +17255,7 @@ class TellonymBlockRemoveModal(discord.ui.Modal):
         blocked.remove(uid)
         embed = build_tellonym_blocked_embed(self.parent_view.tell_author, settings)
         await interaction.response.edit_message(embed=embed, view=TellonymBlockedView(self.parent_view.panel_author, self.parent_view.tell_author))
-        await interaction.followup.send(f"✅ Usuário `{uid}` desbloqueado.", ephemeral=True)
+        await interaction.followup.send(f"<a:online:1518271945550856295> Usuário `{uid}` desbloqueado.", ephemeral=True)
 
 
 class TellonymBlockedView(discord.ui.View):
@@ -17308,7 +17308,7 @@ class TellonymRoleAddSelect(discord.ui.RoleSelect):
             else:
                 existing.append(role.id)
         await interaction.response.send_message(
-            f"✅ Cargos atualizados: `{len(existing)} configurado(s)`", ephemeral=True
+            f"<a:online:1518271945550856295> Cargos atualizados: `{len(existing)} configurado(s)`", ephemeral=True
         )
 
 
@@ -17427,7 +17427,7 @@ class TellonymView(discord.ui.View):
         settings["tellonym_custom_bar"]     = None
         embed = build_tellonym_embed(self.author, settings)
         await interaction.response.edit_message(embed=embed, view=TellonymView(self.author))
-        await interaction.followup.send("✅ Tellonym resetado com sucesso.", ephemeral=True)
+        await interaction.followup.send("<a:online:1518271945550856295> Tellonym resetado com sucesso.", ephemeral=True)
 
     async def _cfg_embed(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -18188,7 +18188,7 @@ class AntBanView(discord.ui.View):
         embed = build_antban_embed(self.author, settings)
         new_view = AntBanView(self.author)
         await interaction.response.edit_message(embed=embed, view=new_view)
-        estado = "✅ **Proteção Anti-Ban Admin ativada!**" if settings["admin_massban_enabled"] else "❌ **Proteção Anti-Ban Admin desativada.**"
+        estado = "<a:online:1518271945550856295> **Proteção Anti-Ban Admin ativada!**" if settings["admin_massban_enabled"] else "<a:alerta:1518271939460857968> **Proteção Anti-Ban Admin desativada.**"
         await interaction.followup.send(estado, ephemeral=True)
 
     async def _config_admin_massban(self, interaction: discord.Interaction):
@@ -18232,7 +18232,7 @@ class AdminMassbanModal(discord.ui.Modal):
             if limit < 1:
                 raise ValueError
         except ValueError:
-            await interaction.response.send_message("❌ Limite inválido. Use um número inteiro positivo.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Limite inválido. Use um número inteiro positivo.", ephemeral=True)
             return
 
         try:
@@ -18240,7 +18240,7 @@ class AdminMassbanModal(discord.ui.Modal):
             if window < 1:
                 raise ValueError
         except ValueError:
-            await interaction.response.send_message("❌ Janela de tempo inválida. Use segundos (ex: 10).", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Janela de tempo inválida. Use segundos (ex: 10).", ephemeral=True)
             return
 
         settings["admin_massban_limit"]  = limit
@@ -18252,11 +18252,11 @@ class AdminMassbanModal(discord.ui.Modal):
                 log_id = int(log_raw.strip("<#>"))
                 ch = interaction.guild.get_channel(log_id)
                 if ch is None:
-                    await interaction.response.send_message("❌ Canal de log não encontrado.", ephemeral=True)
+                    await interaction.response.send_message("<a:alerta:1518271939460857968> Canal de log não encontrado.", ephemeral=True)
                     return
                 settings["admin_massban_log_channel"] = log_id
             except ValueError:
-                await interaction.response.send_message("❌ ID de canal inválido.", ephemeral=True)
+                await interaction.response.send_message("<a:alerta:1518271939460857968> ID de canal inválido.", ephemeral=True)
                 return
         else:
             settings["admin_massban_log_channel"] = None
@@ -23308,7 +23308,7 @@ class BlacklistView(discord.ui.View):
             title=t["config_list_title"],
             color=settings["embed_color"],
             description=(
-                f"**{t['status']}:** {'🟢' if settings['blacklist_enabled'] else '🔴'}\n"
+                f"**{t['status']}:** {'<a:online:1518271945550856295>' if settings['blacklist_enabled'] else '<a:alerta:1518271939460857968>'}\n"
                 f"**{t['advertencia_log_channel']}:** {log_value}\n"
                 f"**{t['blacklist_allowed_roles_label']}:** {roles_text}\n"
                 f"**{t['blacklist_action_label']}:** `{settings['blacklist_action']}`\n"
@@ -23810,9 +23810,9 @@ def build_antspam_embed(author: discord.Member, settings: dict) -> discord.Embed
     )
 
     status_value = (
-        f"🟢 `({t['status_enabled_inline'].split(' ')[0]})`"
+        f"<a:online:1518271945550856295> `({t['status_enabled_inline'].split(' ')[0]})`"
         if settings["antspam_enabled"]
-        else f"🔴 `({t['status_disabled_inline'].split(' ')[0]})`"
+        else f"<a:alerta:1518271939460857968> `({t['status_disabled_inline'].split(' ')[0]})`"
     )
 
     log_channel_id = settings.get("antspam_log_channel")
@@ -24013,7 +24013,7 @@ class AntSpamView(discord.ui.View):
             title=t["config_list_title"],
             color=settings["embed_color"],
             description=(
-                f"**{t['status']}:** {'🟢' if settings['antspam_enabled'] else '🔴'}\n"
+                f"**{t['status']}:** {'<a:online:1518271945550856295>' if settings['antspam_enabled'] else '<a:alerta:1518271939460857968>'}\n"
                 f"**{t['logs_label']}:** {log_value}\n"
                 f"**{t['flood_value_label']}:** `{settings['antspam_flood_value']} {t['msgs_unit']}`\n"
                 f"**{t['flood_time_label']}:** `{settings['antspam_flood_time']} {t['secs_unit']}`\n"
@@ -24408,8 +24408,8 @@ class AntLinkView(discord.ui.View):
             title=t["config_list_title"],
             color=settings["embed_color"],
             description=(
-                f"**{t['status_antlink']}:** {'🟢' if settings['antlink_enabled'] else '🔴'}\n"
-                f"**{t['status_antinvite']}:** {'🟢' if settings['antinvite_enabled'] else '🔴'}\n"
+                f"**{t['status_antlink']}:** {'<a:online:1518271945550856295>' if settings['antlink_enabled'] else '<a:alerta:1518271939460857968>'}\n"
+                f"**{t['status_antinvite']}:** {'<a:online:1518271945550856295>' if settings['antinvite_enabled'] else '<a:alerta:1518271939460857968>'}\n"
                 f"**{t['protected_roles_label']}:** {roles_text}\n"
                 f"**{t['allowed_channels_label']}:** {channels_text}\n"
                 f"**{t['action_on_detect']}:** `{settings['antlink_action']}`"
@@ -25883,7 +25883,7 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
                 settings = get_settings(ctx.guild.id if ctx.guild else 0)
                 prefix   = settings.get("prefix", "n!")
                 await ctx.author.send(
-                    f"⚠️ Não consigo responder em **{ctx.channel}** "
+                    f"<a:alerta:1518271939460857968> Não consigo responder em **{ctx.channel}** "
                     f"(`{ctx.guild.name if ctx.guild else ''}`) — sem permissão para enviar mensagens.\n"
                     f"Use `{prefix}{ctx.command.name}` em um canal onde tenho acesso."
                 )
@@ -25900,7 +25900,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
     import traceback
     traceback.print_exc()
     try:
-        msg = f"❌ Erro interno: `{type(error).__name__}: {str(error)[:200]}`"
+        msg = f"<a:alerta:1518271939460857968> Erro interno: `{type(error).__name__}: {str(error)[:200]}`"
         if not interaction.response.is_done():
             await interaction.response.send_message(embed=_notif_embed(msg), ephemeral=True)
         else:
@@ -26837,7 +26837,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                             f"-# Use `n!groles` para gerenciar cargos."
                         )
                     else:
-                        motivo = "❌ **Sem permissão** para setar cargos manualmente (use `n!groles`)"
+                        motivo = "<a:alerta:1518271939460857968> **Sem permissão** para setar cargos manualmente (use `n!groles`)"
                         description = (
                             f"**{moderator_obj.mention if moderator_obj else 'Alguém'}** tentou modificar cargos de "
                             f"{after.mention} manualmente. **Ação revertida.**\n\n"
@@ -26847,7 +26847,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                             f"-# Use `n!groles` para gerenciar cargos."
                         )
                     embed_log = discord.Embed(
-                        title="⚠️ Proteção de Cargos",
+                        title="<a:alerta:1518271939460857968> Proteção de Cargos",
                         description=description,
                         color=0xFF4040,
                     )
@@ -26871,7 +26871,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                     _removed_txt = ", ".join(f"<@&{r}>" for r in removed) or "—"
                     _actor = moderator_obj.mention if moderator_obj else "Desconhecido"
                     _emb = discord.Embed(
-                        title="✅ Proteção de Cargos — Modificação Autorizada",
+                        title="<a:online:1518271945550856295> Proteção de Cargos — Modificação Autorizada",
                         description=(
                             f"**{_actor}** modificou cargos de {after.mention}.\n\n"
                             f"**Adicionados:** {_added_txt}\n"
@@ -27491,7 +27491,7 @@ async def _run_migrar_fotos(source_guild_id: int, target_guild_id: int, notify_c
         target_guild = bot.get_guild(target_guild_id)
         if not source_guild or not target_guild:
             if notify_ch:
-                await notify_ch.send("❌ migrar_fotos: servidor não encontrado após reinício.")
+                await notify_ch.send("<a:alerta:1518271939460857968> migrar_fotos: servidor não encontrado após reinício.")
             return
 
         tgt_by_name = {c.name.lower(): c for c in target_guild.text_channels}
@@ -27606,7 +27606,7 @@ async def _run_migrar_fotos(source_guild_id: int, target_guild_id: int, notify_c
             os.remove(_MIGRAR_FOTOS_CKPT)
         if notify_ch:
             await notify_ch.send(
-                f"✅ **Migração concluída!**\n📸 **{total_sent}** imagens enviadas em {ch_done_cnt} canais."
+                f"<a:online:1518271945550856295> **Migração concluída!**\n📸 **{total_sent}** imagens enviadas em {ch_done_cnt} canais."
             )
         print(f"[migrar_fotos] concluído — {total_sent} enviadas", flush=True)
 
@@ -27616,7 +27616,7 @@ async def _run_migrar_fotos(source_guild_id: int, target_guild_id: int, notify_c
         if notify_ch:
             try:
                 await notify_ch.send(
-                    f"⚠️ migrar_fotos pausou: `{_ge}`\n"
+                    f"<a:alerta:1518271939460857968> migrar_fotos pausou: `{_ge}`\n"
                     f"📸 {total_sent} já enviadas. Rode o comando novamente para retomar."
                 )
             except Exception:
@@ -27635,7 +27635,7 @@ async def migrar_fotos_cmd(ctx: commands.Context, arg1: str = None, arg2: str = 
     _perms = ctx.author.guild_permissions
     is_admin = _perms.administrator or _perms.manage_guild
     if not is_authorized(ctx.author, settings) and not is_admin:
-        await ctx.reply("❌ Sem permissão.", delete_after=6)
+        await ctx.reply("<a:alerta:1518271939460857968> Sem permissão.", delete_after=6)
         return
 
     # Sub-comando: reset — para a task e apaga checkpoint
@@ -27659,41 +27659,41 @@ async def migrar_fotos_cmd(ctx: commands.Context, arg1: str = None, arg2: str = 
                     f"**migrar_fotos** — {status}\n"
                     f"Origem: `{ck.get('source')}` → Destino: `{ck.get('target')}`\n"
                     f"📸 {ck.get('total_sent', 0)} enviadas | "
-                    f"✅ {len(ck.get('done_channels', []))} canais concluídos"
+                    f"<a:online:1518271945550856295> {len(ck.get('done_channels', []))} canais concluídos"
                 )
             except Exception:
-                await ctx.reply("❌ Use: `nata!migrar_fotos <ID_origem> <ID_destino>`")
+                await ctx.reply("<a:alerta:1518271939460857968> Use: `nata!migrar_fotos <ID_origem> <ID_destino>`")
         else:
-            await ctx.reply("❌ Use: `nata!migrar_fotos <ID_origem> <ID_destino>`")
+            await ctx.reply("<a:alerta:1518271939460857968> Use: `nata!migrar_fotos <ID_origem> <ID_destino>`")
         return
 
     # Converte IDs
     try:
         source_guild_id = int(arg1)
     except ValueError:
-        await ctx.reply("❌ ID de origem inválido.")
+        await ctx.reply("<a:alerta:1518271939460857968> ID de origem inválido.")
         return
 
     if arg2 is None:
-        await ctx.reply("❌ Informe o ID do destino: `nata!migrar_fotos <ID_origem> <ID_destino>`")
+        await ctx.reply("<a:alerta:1518271939460857968> Informe o ID do destino: `nata!migrar_fotos <ID_origem> <ID_destino>`")
         return
     try:
         target_guild_id = int(arg2)
     except ValueError:
-        await ctx.reply("❌ ID de destino inválido.")
+        await ctx.reply("<a:alerta:1518271939460857968> ID de destino inválido.")
         return
 
     if _migrar_fotos_running:
-        await ctx.reply("⚠️ Migração já está em andamento. Use `nata!migrar_fotos` sem argumentos para ver o progresso.")
+        await ctx.reply("<a:alerta:1518271939460857968> Migração já está em andamento. Use `nata!migrar_fotos` sem argumentos para ver o progresso.")
         return
 
     source_guild = bot.get_guild(source_guild_id)
     if source_guild is None:
-        await ctx.reply("❌ Servidor de origem não encontrado. O bot precisa estar lá.")
+        await ctx.reply("<a:alerta:1518271939460857968> Servidor de origem não encontrado. O bot precisa estar lá.")
         return
     target_guild = bot.get_guild(target_guild_id)
     if target_guild is None:
-        await ctx.reply("❌ Servidor de destino não encontrado. O bot precisa estar lá.")
+        await ctx.reply("<a:alerta:1518271939460857968> Servidor de destino não encontrado. O bot precisa estar lá.")
         return
 
     import json as _json
@@ -27741,21 +27741,21 @@ async def migrar_assets_cmd(ctx: commands.Context, source_guild_id: int = None, 
     _perms = ctx.author.guild_permissions
     is_admin = _perms.administrator or _perms.manage_guild
     if not is_authorized(ctx.author, settings) and not is_admin:
-        await ctx.reply("❌ Sem permissão.", delete_after=6)
+        await ctx.reply("<a:alerta:1518271939460857968> Sem permissão.", delete_after=6)
         return
     if source_guild_id is None:
-        await ctx.reply("❌ Use: `nata!migrar_assets <ID_origem>` ou `nata!migrar_assets <ID_origem> <ID_destino>`")
+        await ctx.reply("<a:alerta:1518271939460857968> Use: `nata!migrar_assets <ID_origem>` ou `nata!migrar_assets <ID_origem> <ID_destino>`")
         return
 
     source_guild = bot.get_guild(source_guild_id)
     if source_guild is None:
-        await ctx.reply("❌ Servidor de origem não encontrado. O bot precisa estar nos dois servidores.")
+        await ctx.reply("<a:alerta:1518271939460857968> Servidor de origem não encontrado. O bot precisa estar nos dois servidores.")
         return
 
     if target_guild_id:
         target_guild = bot.get_guild(target_guild_id)
         if target_guild is None:
-            await ctx.reply("❌ Servidor de destino não encontrado.")
+            await ctx.reply("<a:alerta:1518271939460857968> Servidor de destino não encontrado.")
             return
     else:
         target_guild = ctx.guild
@@ -27772,13 +27772,13 @@ async def migrar_assets_cmd(ctx: commands.Context, source_guild_id: int = None, 
                 async with session.get(str(source_guild.icon.url)) as resp:
                     icon_bytes = await resp.read()
                 await target_guild.edit(icon=icon_bytes, reason=f"migrar_assets de {source_guild.name}")
-                results.append("✅ Ícone copiado")
+                results.append("<a:online:1518271945550856295> Ícone copiado")
             except discord.Forbidden:
-                results.append("❌ Ícone — sem permissão `Manage Server` no destino")
+                results.append("<a:alerta:1518271939460857968> Ícone — sem permissão `Manage Server` no destino")
             except Exception as e:
-                results.append(f"❌ Ícone — erro: {e}")
+                results.append(f"<a:alerta:1518271939460857968> Ícone — erro: {e}")
         else:
-            results.append("⚠️ Servidor de origem não tem ícone")
+            results.append("<a:alerta:1518271939460857968> Servidor de origem não tem ícone")
 
         # Banner
         if source_guild.banner:
@@ -27786,13 +27786,13 @@ async def migrar_assets_cmd(ctx: commands.Context, source_guild_id: int = None, 
                 async with session.get(str(source_guild.banner.url)) as resp:
                     banner_bytes = await resp.read()
                 await target_guild.edit(banner=banner_bytes, reason=f"migrar_assets de {source_guild.name}")
-                results.append("✅ Banner copiado")
+                results.append("<a:online:1518271945550856295> Banner copiado")
             except discord.Forbidden:
-                results.append("❌ Banner — sem permissão ou servidor sem boost suficiente")
+                results.append("<a:alerta:1518271939460857968> Banner — sem permissão ou servidor sem boost suficiente")
             except Exception as e:
-                results.append(f"❌ Banner — erro: {e}")
+                results.append(f"<a:alerta:1518271939460857968> Banner — erro: {e}")
         else:
-            results.append("⚠️ Servidor de origem não tem banner")
+            results.append("<a:alerta:1518271939460857968> Servidor de origem não tem banner")
 
     await msg.edit(content="\n".join(results))
 
@@ -27803,27 +27803,27 @@ async def migrar_emojis_cmd(ctx: commands.Context, source_guild_id: int = None, 
         return
     settings = get_settings(ctx.guild.id)
     if not is_authorized(ctx.author, settings):
-        await ctx.reply("❌ Sem permissão.", delete_after=6)
+        await ctx.reply("<a:alerta:1518271939460857968> Sem permissão.", delete_after=6)
         return
     if source_guild_id is None:
-        await ctx.reply("❌ Use: `natal!migrar_emojis <ID_origem>` ou `natal!migrar_emojis <ID_origem> <ID_destino>`")
+        await ctx.reply("<a:alerta:1518271939460857968> Use: `natal!migrar_emojis <ID_origem>` ou `natal!migrar_emojis <ID_origem> <ID_destino>`")
         return
 
     source_guild = bot.get_guild(source_guild_id)
     if source_guild is None:
-        await ctx.reply("❌ Servidor de origem não encontrado. O bot precisa estar nos dois servidores.")
+        await ctx.reply("<a:alerta:1518271939460857968> Servidor de origem não encontrado. O bot precisa estar nos dois servidores.")
         return
 
     if target_guild_id:
         target_guild = bot.get_guild(target_guild_id)
         if target_guild is None:
-            await ctx.reply("❌ Servidor de destino não encontrado. O bot precisa estar lá também.")
+            await ctx.reply("<a:alerta:1518271939460857968> Servidor de destino não encontrado. O bot precisa estar lá também.")
             return
     else:
         target_guild = ctx.guild
     source_emojis = source_guild.emojis
     if not source_emojis:
-        await ctx.reply("❌ O servidor de origem não tem emojis personalizados.")
+        await ctx.reply("<a:alerta:1518271939460857968> O servidor de origem não tem emojis personalizados.")
         return
 
     existing_names = {e.name for e in target_guild.emojis}
@@ -27879,12 +27879,12 @@ async def migrar_emojis_cmd(ctx: commands.Context, source_guild_id: int = None, 
             except Exception:
                 failed.append(f"`:{emoji.name}:`")
 
-    lines = [f"✅ **Migração concluída de {source_guild.name} → {target_guild.name}**\n"]
+    lines = [f"<a:online:1518271945550856295> **Migração concluída de {source_guild.name} → {target_guild.name}**\n"]
     lines.append(f"✔️ Migrados: **{len(ok)}**")
     if skipped:
         lines.append(f"⏭️ Pulados: **{len(skipped)}** (já existiam ou limite atingido)")
     if failed:
-        lines.append(f"❌ Falharam: **{len(failed)}**")
+        lines.append(f"<a:alerta:1518271939460857968> Falharam: **{len(failed)}**")
         for f_item in failed[:10]:
             lines.append(f"  • {f_item}")
 
@@ -27987,7 +27987,7 @@ async def _run_migration_task(src_guild_id: int, tgt_guild_id: int, notify_chann
         if not source_guild or not target_guild:
             if notify_chan:
                 try:
-                    await notify_chan.send(f"❌ Migração **{src_guild_id} → {tgt_guild_id}** não pôde ser retomada: servidor(es) não encontrado(s).")
+                    await notify_chan.send(f"<a:alerta:1518271939460857968> Migração **{src_guild_id} → {tgt_guild_id}** não pôde ser retomada: servidor(es) não encontrado(s).")
                 except Exception:
                     pass
             try:
@@ -28204,13 +28204,13 @@ async def _run_migration_task(src_guild_id: int, tgt_guild_id: int, notify_chann
         except OSError:
             pass
 
-        lines = [f"✅ **Migração concluída: {source_guild.name} → {target_guild.name}**\n"]
+        lines = [f"<a:online:1518271945550856295> **Migração concluída: {source_guild.name} → {target_guild.name}**\n"]
         lines.append(f"📨 Mensagens copiadas: **{total_msgs}**")
         lines.append(f"📁 Canais processados: **{total_channels_ok}/{len(source_channels)}**")
         if total_skipped_ch:
             lines.append(f"⏭️ Canais já migrados (pulados): **{total_skipped_ch}**")
         if errors:
-            lines.append(f"\n⚠️ Erros ({len(errors)}):")
+            lines.append(f"\n<a:alerta:1518271939460857968> Erros ({len(errors)}):")
             for err in errors[:8]:
                 lines.append(f"  • {err}")
         if status_msg:
@@ -28239,7 +28239,7 @@ async def migrar_canais_cmd(ctx: commands.Context, arg1: str = None, arg2: str =
     settings = get_settings(ctx.guild.id)
     is_admin = ctx.author.guild_permissions.administrator
     if not is_authorized(ctx.author, settings) and not is_admin:
-        await ctx.reply("❌ Sem permissão.", delete_after=6)
+        await ctx.reply("<a:alerta:1518271939460857968> Sem permissão.", delete_after=6)
         return
 
     # Sub-comando: natal!migrar_canais reset <src> <tgt>
@@ -28248,7 +28248,7 @@ async def migrar_canais_cmd(ctx: commands.Context, arg1: str = None, arg2: str =
             src = int(arg2) if arg2 else 0
             tgt = int(arg3) if arg3 else 0
             os.remove(_migration_ckpt_path(src, tgt))
-            await ctx.reply("✅ Checkpoint removido. Rode o comando novamente para recomeçar do zero.")
+            await ctx.reply("<a:online:1518271945550856295> Checkpoint removido. Rode o comando novamente para recomeçar do zero.")
         except (FileNotFoundError, ValueError):
             await ctx.reply("ℹ️ Nenhum checkpoint encontrado.")
         return
@@ -28258,14 +28258,14 @@ async def migrar_canais_cmd(ctx: commands.Context, arg1: str = None, arg2: str =
         tgt_id = int(arg2) if arg2 and arg2.isdigit() else ctx.guild.id
         tgt_g = bot.get_guild(tgt_id)
         if not tgt_g:
-            await ctx.reply("❌ Servidor de destino não encontrado.")
+            await ctx.reply("<a:alerta:1518271939460857968> Servidor de destino não encontrado.")
             return
         msg = await ctx.reply(f"🧹 Limpando duplicatas em **{tgt_g.name}**...")
         total_del = 0
         for ch in tgt_g.channels:
             if isinstance(ch, discord.TextChannel):
                 total_del += await _delete_channel_duplicates(ch)
-        await msg.edit(content=f"✅ Limpeza concluída — **{total_del}** mensagens duplicadas removidas em **{tgt_g.name}**.")
+        await msg.edit(content=f"<a:online:1518271945550856295> Limpeza concluída — **{total_del}** mensagens duplicadas removidas em **{tgt_g.name}**.")
         return
 
     # Migração principal
@@ -28278,7 +28278,7 @@ async def migrar_canais_cmd(ctx: commands.Context, arg1: str = None, arg2: str =
 
     if source_guild_id is None:
         await ctx.reply(
-            "❌ Use: `natal!migrar_canais <ID_origem> [ID_destino]`\n"
+            "<a:alerta:1518271939460857968> Use: `natal!migrar_canais <ID_origem> [ID_destino]`\n"
             "Outros usos:\n"
             "• `natal!migrar_canais reset <ID_origem> <ID_destino>` — recomeça do zero\n"
             "• `natal!migrar_canais limpar <ID_destino>` — remove duplicatas do destino"
@@ -28287,24 +28287,24 @@ async def migrar_canais_cmd(ctx: commands.Context, arg1: str = None, arg2: str =
 
     source_guild = bot.get_guild(source_guild_id)
     if source_guild is None:
-        await ctx.reply("❌ Servidor de origem não encontrado. O bot precisa estar nos dois servidores.")
+        await ctx.reply("<a:alerta:1518271939460857968> Servidor de origem não encontrado. O bot precisa estar nos dois servidores.")
         return
 
     if target_guild_id:
         target_guild = bot.get_guild(target_guild_id)
         if target_guild is None:
-            await ctx.reply("❌ Servidor de destino não encontrado. O bot precisa estar lá também.")
+            await ctx.reply("<a:alerta:1518271939460857968> Servidor de destino não encontrado. O bot precisa estar lá também.")
             return
     else:
         target_guild = ctx.guild
 
     source_channels = [c for c in source_guild.channels if isinstance(c, discord.TextChannel)]
     if not source_channels:
-        await ctx.reply("❌ O servidor de origem não tem canais de texto.")
+        await ctx.reply("<a:alerta:1518271939460857968> O servidor de origem não tem canais de texto.")
         return
 
     if (source_guild.id, target_guild.id) in _active_migrations:
-        await ctx.reply("⚠️ Esta migração já está rodando em segundo plano.")
+        await ctx.reply("<a:alerta:1518271939460857968> Esta migração já está rodando em segundo plano.")
         return
 
     # Salva canal de notificação para auto-retomar se o bot reiniciar
@@ -28391,7 +28391,7 @@ async def _run_dm_todos(mensagem: str, notify_channel_id: int, sent_ids: set):
                     try:
                         await status_msg.edit(content=(
                             f"📨 Progresso: **{ja_enviados + i}/{total_geral}** "
-                            f"— ✅ {enviados} enviados | ❌ {falhos} falhos"
+                            f"— <a:online:1518271945550856295> {enviados} enviados | <a:alerta:1518271939460857968> {falhos} falhos"
                         ))
                     except Exception:
                         pass
@@ -28407,8 +28407,8 @@ async def _run_dm_todos(mensagem: str, notify_channel_id: int, sent_ids: set):
         if status_msg:
             try:
                 await status_msg.edit(content=(
-                    f"✅ **Envio concluído!**\n"
-                    f"📨 Enviados: **{ja_enviados + enviados}** | ❌ Falhos: **{falhos}**\n"
+                    f"<a:online:1518271945550856295> **Envio concluído!**\n"
+                    f"📨 Enviados: **{ja_enviados + enviados}** | <a:alerta:1518271939460857968> Falhos: **{falhos}**\n"
                     f"👥 Total: **{total_geral}** membros"
                 ))
             except Exception:
@@ -28423,13 +28423,13 @@ async def dm_todos_cmd(ctx: commands.Context, *, mensagem: str = None):
     settings = get_settings(ctx.guild.id) if ctx.guild else {}
     is_admin = ctx.author.guild_permissions.administrator if ctx.guild else False
     if not is_authorized(ctx.author, settings) and not is_admin:
-        await ctx.reply("❌ Sem permissão.", delete_after=6)
+        await ctx.reply("<a:alerta:1518271939460857968> Sem permissão.", delete_after=6)
         return
     if not mensagem:
         await ctx.reply("**Uso:** `n!dm_todos <mensagem>`", delete_after=10)
         return
     if _dm_todos_running:
-        await ctx.reply("⚠️ Já existe um envio em andamento.", delete_after=8)
+        await ctx.reply("<a:alerta:1518271939460857968> Já existe um envio em andamento.", delete_after=8)
         return
 
     _dm_todos_save({"message": mensagem, "notify_channel_id": ctx.channel.id, "sent_ids": []})
@@ -28448,10 +28448,10 @@ async def clonar_config_cmd(ctx: commands.Context, source_guild_id: int = None):
     _perms = ctx.author.guild_permissions
     is_admin = _perms.administrator or _perms.manage_guild if ctx.guild else False
     if not is_authorized(ctx.author, settings) and not is_admin:
-        await ctx.reply("❌ Sem permissão. Use `nata!perm` para se adicionar como autorizado.")
+        await ctx.reply("<a:alerta:1518271939460857968> Sem permissão. Use `nata!perm` para se adicionar como autorizado.")
         return
     if source_guild_id is None:
-        await ctx.reply("❌ Use: `nata!clonar_config <ID_do_servidor_origem>`")
+        await ctx.reply("<a:alerta:1518271939460857968> Use: `nata!clonar_config <ID_do_servidor_origem>`")
         return
 
     source_guild = bot.get_guild(source_guild_id)
@@ -28460,7 +28460,7 @@ async def clonar_config_cmd(ctx: commands.Context, source_guild_id: int = None):
 
     # Se não há nenhuma config salva E o bot não está no servidor, não tem nada pra copiar
     if source_guild is None and not src:
-        await ctx.reply("❌ Servidor de origem não encontrado e nenhuma configuração salva para esse ID.")
+        await ctx.reply("<a:alerta:1518271939460857968> Servidor de origem não encontrado e nenhuma configuração salva para esse ID.")
         return
 
     if source_guild is None:
@@ -28478,8 +28478,8 @@ async def clonar_config_cmd(ctx: commands.Context, source_guild_id: int = None):
                 tgt[k] = copy.deepcopy(v)
         save_settings_to_disk()
         await ctx.reply(
-            f"✅ Config copiada de **ID {source_guild_id}** → **{target_guild.name}**!\n"
-            "⚠️ O bot não estava no servidor de origem — IDs de canais/cargos foram copiados brutos. "
+            f"<a:online:1518271945550856295> Config copiada de **ID {source_guild_id}** → **{target_guild.name}**!\n"
+            "<a:alerta:1518271939460857968> O bot não estava no servidor de origem — IDs de canais/cargos foram copiados brutos. "
             "Reconfigure canais e cargos pelo painel se o novo servidor tiver IDs diferentes."
         )
         return
@@ -28835,10 +28835,10 @@ async def clonar_config_cmd(ctx: commands.Context, source_guild_id: int = None):
 
     save_settings_to_disk()
 
-    lines = [f"✅ Config clonada de **{source_guild.name}** → **{target_guild.name}**!"]
+    lines = [f"<a:online:1518271945550856295> Config clonada de **{source_guild.name}** → **{target_guild.name}**!"]
     if not_found:
         unique = list(dict.fromkeys(not_found))
-        lines.append(f"\n⚠️ **{len(unique)} cargo(s)/canal(is) não encontrado(s)** no novo servidor (crie com o mesmo nome e rode o comando de novo):")
+        lines.append(f"\n<a:alerta:1518271939460857968> **{len(unique)} cargo(s)/canal(is) não encontrado(s)** no novo servidor (crie com o mesmo nome e rode o comando de novo):")
         for item in unique[:20]:
             lines.append(f"• {item}")
         if len(unique) > 20:
@@ -28853,7 +28853,7 @@ async def exportar_config_cmd(ctx: commands.Context):
         return
     settings = get_settings(ctx.guild.id)
     if not is_authorized(ctx.author, settings):
-        await ctx.reply("❌ Sem permissão.", delete_after=6)
+        await ctx.reply("<a:alerta:1518271939460857968> Sem permissão.", delete_after=6)
         return
 
     guild = ctx.guild
@@ -28876,7 +28876,7 @@ async def exportar_config_cmd(ctx: commands.Context):
         return f"#{c.name}" if c else f"ID:{cid}"
 
     def _bool(v):
-        return "✅ Ativado" if v else "❌ Desativado"
+        return "<a:online:1518271945550856295> Ativado" if v else "<a:alerta:1518271939460857968> Desativado"
 
     lines = []
     lines.append(f"═══════════════════════════════════════")
@@ -29235,7 +29235,7 @@ async def menu_slash(interaction: discord.Interaction):
         import traceback
         traceback.print_exc()
         try:
-            _msg = f"❌ Erro ao abrir o menu: `{type(_e).__name__}: {str(_e)[:200]}`"
+            _msg = f"<a:alerta:1518271939460857968> Erro ao abrir o menu: `{type(_e).__name__}: {str(_e)[:200]}`"
             if not interaction.response.is_done():
                 await interaction.response.send_message(_msg, ephemeral=True)
             else:
@@ -29383,7 +29383,7 @@ class GrolesRoleButton(discord.ui.Button):
         settings = get_settings(interaction.guild.id)
         if not _can_manage_role(interaction.user, self.role_id, settings):
             await interaction.response.send_message(
-                "❌ Sem permissão para gerenciar esse cargo.", ephemeral=True
+                "<a:alerta:1518271939460857968> Sem permissão para gerenciar esse cargo.", ephemeral=True
             )
             return
 
@@ -29859,7 +29859,7 @@ async def addemoji_cmd(ctx: commands.Context, *, args: str = ""):
 
     if failed:
         embed.add_field(
-            name="⚠️ Falharam",
+            name="<a:alerta:1518271939460857968> Falharam",
             value="\n".join(f"`{n}` — {reason}" for n, reason in failed)[:1024],
             inline=False,
         )
@@ -32379,7 +32379,7 @@ class DonoCallCategoryView(discord.ui.View):
         else:
             cat = interaction.guild.get_channel(int(selected_val))
             if not cat:
-                await interaction.response.send_message("❌ Categoria não encontrada.", ephemeral=True)
+                await interaction.response.send_message("<a:alerta:1518271939460857968> Categoria não encontrada.", ephemeral=True)
                 return
             voice_channels = sorted(
                 [ch for ch in cat.channels if isinstance(ch, discord.VoiceChannel)],
@@ -32388,7 +32388,7 @@ class DonoCallCategoryView(discord.ui.View):
             cat_name = cat.name
 
         if not voice_channels:
-            await interaction.response.send_message("❌ Nenhum canal de voz nessa categoria.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Nenhum canal de voz nessa categoria.", ephemeral=True)
             return
 
         current_all: set[int] = set(settings.get("dono_call_channels", []))
@@ -32606,7 +32606,7 @@ class DonoCallView(discord.ui.View):
             )
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         except Exception as e:
-            msg = f"❌ Erro ao abrir seletor: `{type(e).__name__}: {str(e)[:150]}`"
+            msg = f"<a:alerta:1518271939460857968> Erro ao abrir seletor: `{type(e).__name__}: {str(e)[:150]}`"
             if not interaction.response.is_done():
                 await interaction.response.send_message(embed=_notif_embed(msg), ephemeral=True)
             else:
@@ -32652,7 +32652,7 @@ class DonoCallView(discord.ui.View):
                 "<:mov_call:1518271964077232150>  **Envie a imagem** ou uma **URL direta** (imgur, etc) para usar como banner.\n\n"
                 "> <a:alerta:1518271939460857968>  Envie `cancelar` para desistir.\n"
                 "> <a:alerta:1518271939460857968>  Você tem **2 minutos** para enviar.\n\n"
-                "> ⚠️ *Imagens enviadas diretamente expiram em ~1h. Para banner permanente, use [imgur.com](https://imgur.com) e envie o link.*"
+                "> <a:alerta:1518271939460857968> *Imagens enviadas diretamente expiram em ~1h. Para banner permanente, use [imgur.com](https://imgur.com) e envie o link.*"
             ),
             color=color,
         )
@@ -33609,7 +33609,7 @@ class _DonoCallPermitirView(discord.ui.View):
         member = interaction.guild.get_member(self.children[0].values[0].id)
         ch = interaction.guild.get_channel(self.channel_id)
         if not isinstance(ch, discord.VoiceChannel) or not member:
-            await interaction.response.send_message("❌ Erro ao processar.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Erro ao processar.", ephemeral=True)
             return
         try:
             await ch.set_permissions(
@@ -33619,7 +33619,7 @@ class _DonoCallPermitirView(discord.ui.View):
                 reason="Dono de Call — entrada autorizada pelo dono",
             )
         except Exception:
-            await interaction.response.send_message("❌ Sem permissão para alterar o canal.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Sem permissão para alterar o canal.", ephemeral=True)
             return
         _ok_embed = discord.Embed(
             description=(
@@ -34099,7 +34099,7 @@ class CallTempView(discord.ui.View):
                 ephemeral=True,
             )
         except Exception as e:
-            msg = f"❌ Erro ao abrir seletor: `{type(e).__name__}: {str(e)[:150]}`"
+            msg = f"<a:alerta:1518271939460857968> Erro ao abrir seletor: `{type(e).__name__}: {str(e)[:150]}`"
             if not interaction.response.is_done():
                 await interaction.response.send_message(embed=_notif_embed(msg), ephemeral=True)
             else:
@@ -34244,7 +34244,7 @@ class CallTempPanelView(discord.ui.LayoutView):
             is_locked = overw.connect is False
         else:
             is_locked = False
-        status_icon = "🔴" if is_locked else "🟢"
+        status_icon = "<a:alerta:1518271939460857968>" if is_locked else "<a:online:1518271945550856295>"
         limite = ch.user_limit if ch else 0
         limite_str = f"{limite}" if limite else "∞"
 
@@ -36102,12 +36102,12 @@ class PanelV2BuilderView(discord.ui.LayoutView):
         settings = get_settings(interaction.guild.id)
         if not self.panel.get("blocks"):
             await interaction.response.send_message(
-                "❌ Adicione pelo menos um bloco antes de atualizar.", ephemeral=True
+                "<a:alerta:1518271939460857968> Adicione pelo menos um bloco antes de atualizar.", ephemeral=True
             )
             return
         if not self.edit_message_id or not self.edit_channel:
             await interaction.response.send_message(
-                "❌ Mensagem original não encontrada.", ephemeral=True
+                "<a:alerta:1518271939460857968> Mensagem original não encontrada.", ephemeral=True
             )
             return
         layout = build_panel_v2_layout(self.panel, settings)
@@ -36115,12 +36115,12 @@ class PanelV2BuilderView(discord.ui.LayoutView):
             msg = await self.edit_channel.fetch_message(self.edit_message_id)
             await msg.edit(view=layout)
         except Exception as e:
-            await interaction.response.send_message(f"❌ Erro ao atualizar: {e}", ephemeral=True)
+            await interaction.response.send_message(f"<a:alerta:1518271939460857968> Erro ao atualizar: {e}", ephemeral=True)
             return
         # Persiste o panel dict atualizado
         _panelv2_data[self.edit_message_id] = self.panel
         _save_panelv2_data()
-        await interaction.response.send_message("✅ Painel atualizado!", ephemeral=True)
+        await interaction.response.send_message("<a:online:1518271945550856295> Painel atualizado!", ephemeral=True)
 
 
 class TicketPanelV2View(PanelV2BuilderView):
@@ -36141,7 +36141,7 @@ class TicketPanelV2View(PanelV2BuilderView):
         save_settings_to_disk()
         saved_layout = discord.ui.LayoutView(timeout=None)
         saved_layout.add_item(discord.ui.Container(
-            discord.ui.TextDisplay(f"✅ {t.get('panelv2_saved', 'Painel salvo!')}"),
+            discord.ui.TextDisplay(f"<a:online:1518271945550856295> {t.get('panelv2_saved', 'Painel salvo!')}"),
             accent_colour=settings.get("embed_color", 0x5865F2),
         ))
         try:
@@ -36168,7 +36168,7 @@ class TicketInternaV2View(PanelV2BuilderView):
         save_settings_to_disk()
         saved_layout = discord.ui.LayoutView(timeout=None)
         saved_layout.add_item(discord.ui.Container(
-            discord.ui.TextDisplay(f"✅ {t.get('panelv2_saved', 'Embed interna salva!')}"),
+            discord.ui.TextDisplay(f"<a:online:1518271945550856295> {t.get('panelv2_saved', 'Embed interna salva!')}"),
             accent_colour=settings.get("embed_color", 0x5865F2),
         ))
         try:
@@ -36201,7 +36201,7 @@ class TicketOpcaoInternaV2View(PanelV2BuilderView):
         save_settings_to_disk()
         saved_layout = discord.ui.LayoutView(timeout=None)
         saved_layout.add_item(discord.ui.Container(
-            discord.ui.TextDisplay(f"✅ {t.get('panelv2_saved', 'Embed interna salva!')}"),
+            discord.ui.TextDisplay(f"<a:online:1518271945550856295> {t.get('panelv2_saved', 'Embed interna salva!')}"),
             accent_colour=settings.get("embed_color", 0x5865F2),
         ))
         try:
@@ -36269,14 +36269,14 @@ async def painelv2_cmd(ctx: commands.Context, *args: str):
         try:
             mid = int(args[1])
         except ValueError:
-            await ctx.reply("❌ ID inválido. Use: `n!painelv2 editar <id_da_mensagem>`", delete_after=8)
+            await ctx.reply("<a:alerta:1518271939460857968> ID inválido. Use: `n!painelv2 editar <id_da_mensagem>`", delete_after=8)
             return
 
         panel = _panelv2_data.get(mid)
         if not panel:
             # Tenta buscar nos canais como fallback
             await ctx.reply(
-                "❌ Painel não encontrado.\n"
+                "<a:alerta:1518271939460857968> Painel não encontrado.\n"
                 "Só é possível editar painéis enviados **após** o deploy desta atualização.\n"
                 "Para painéis antigos, recrie com `n!painelv2`.",
                 delete_after=15,
@@ -36813,7 +36813,7 @@ def _draft_view_from_buttons(draft: dict) -> discord.ui.View | None:
         elif b.get("type") == "verif_check":
             btn = discord.ui.Button(
                 style=discord.ButtonStyle.success, label=b.get("text", "Verificar"),
-                emoji=emoji or "✅", row=i // 5, custom_id="verif_check",
+                emoji=emoji or "<a:online:1518271945550856295>", row=i // 5, custom_id="verif_check",
             )
         elif b.get("type") == "ig_verif_check":
             btn = discord.ui.Button(
@@ -37485,8 +37485,8 @@ class EmbedNewButtonView(discord.ui.View):
                 )
                 embed.add_field(name="🔵 Primário",   value="Azul - Para ações\nprincipais",        inline=True)
                 embed.add_field(name="⚫ Secundário", value="Cinza - Para ações\nsecundárias",       inline=True)
-                embed.add_field(name="🟢 Sucesso",    value="Verde - Para\nconfirmações",            inline=True)
-                embed.add_field(name="🔴 Perigo",     value="Vermelho - Para ações\nde alerta",      inline=True)
+                embed.add_field(name="<a:online:1518271945550856295> Sucesso",    value="Verde - Para\nconfirmações",            inline=True)
+                embed.add_field(name="<a:alerta:1518271939460857968> Perigo",     value="Vermelho - Para ações\nde alerta",      inline=True)
                 embed.add_field(name="🔗 Link",       value="Cor padrão do Discord",                 inline=True)
 
                 color_view = discord.ui.View(timeout=120)
@@ -38135,7 +38135,7 @@ class EmbedBuilderView(discord.ui.View):
         # Separador nativo exige texto para ser visível
         if sep_blocks and not has_text:
             await interaction.response.send_message(
-                "⚠️ Adicione um **título** ou **descrição** antes de enviar com separador.\n"
+                "<a:alerta:1518271939460857968> Adicione um **título** ou **descrição** antes de enviar com separador.\n"
                 "-# O separador nativo do Discord só é visível quando há texto acima ou abaixo.",
                 ephemeral=True,
             )
@@ -38238,7 +38238,7 @@ class EmbedBuilderView(discord.ui.View):
                         ar.add_item(discord.ui.Button(
                             style=discord.ButtonStyle.success,
                             label=b.get("text", "Verificar"),
-                            emoji=emoji or "✅", custom_id="verif_check",
+                            emoji=emoji or "<a:online:1518271945550856295>", custom_id="verif_check",
                         ))
                     elif b.get("type") == "ig_verif_check":
                         ar.add_item(discord.ui.Button(
@@ -38724,7 +38724,7 @@ async def nuke_cmd(ctx: commands.Context, *, motivo: str = ""):
         pass
 
     confirm_embed = discord.Embed(
-        title="⚠️  Confirmação de Nuke" if lang == "pt-br" else "⚠️  Nuke Confirmation",
+        title="<a:alerta:1518271939460857968>  Confirmação de Nuke" if lang == "pt-br" else "<a:alerta:1518271939460857968>  Nuke Confirmation",
         description=(
             f"Você tem certeza que deseja recriar o canal **{channel.name}**?\n\n"
             f"**Motivo:** {motivo_text}\n\n"
@@ -38874,7 +38874,7 @@ async def iatest_cmd(ctx: commands.Context, *, message: str = ""):
             description=(
                 "Defina `AI_API_KEY` no arquivo `.env` e reinicie o bot.\n\n"
                 "**Provedores recomendados:**\n"
-                "🟢 **Groq** (FREE TIER) → `https://console.groq.com`\n"
+                "<a:online:1518271945550856295> **Groq** (FREE TIER) → `https://console.groq.com`\n"
                 "• OpenAI → `https://platform.openai.com/api-keys`\n"
                 "• OpenRouter → `https://openrouter.ai/keys`\n\n"
                 "Veja exemplos comentados no seu `.env`."
@@ -38955,7 +38955,7 @@ class _EmbedRestoreModal(discord.ui.Modal):
         _save_embed_btn_data()
         restored = [b.label for b in self.btns]
         await interaction.response.send_message(
-            f"✅ Botões restaurados: **{', '.join(restored)}**\n"
+            f"<a:online:1518271945550856295> Botões restaurados: **{', '.join(restored)}**\n"
             "Agora clique nos botões para confirmar que estão funcionando.",
             ephemeral=True,
         )
@@ -39010,15 +39010,15 @@ async def embed_restore_cmd(ctx: commands.Context, msg_id: int):
     if ctx.guild is None:
         return
     if not ctx.author.guild_permissions.administrator:
-        await ctx.reply("❌ Somente administradores podem usar este comando.", delete_after=5)
+        await ctx.reply("<a:alerta:1518271939460857968> Somente administradores podem usar este comando.", delete_after=5)
         return
     try:
         msg = await ctx.channel.fetch_message(msg_id)
     except discord.NotFound:
-        await ctx.reply("❌ Mensagem não encontrada neste canal.")
+        await ctx.reply("<a:alerta:1518271939460857968> Mensagem não encontrada neste canal.")
         return
     except discord.Forbidden:
-        await ctx.reply("❌ Sem permissão para acessar esta mensagem.")
+        await ctx.reply("<a:alerta:1518271939460857968> Sem permissão para acessar esta mensagem.")
         return
 
     btns: list[discord.Button] = []
@@ -39032,7 +39032,7 @@ async def embed_restore_cmd(ctx: commands.Context, msg_id: int):
                 btns.append(child)
 
     if not btns:
-        await ctx.reply("❌ Nenhum botão embed encontrado nesta mensagem.")
+        await ctx.reply("<a:alerta:1518271939460857968> Nenhum botão embed encontrado nesta mensagem.")
         return
 
     labels = ", ".join(f"**{b.label}**" for b in btns[:5])
@@ -40457,7 +40457,7 @@ async def nuke_slash(interaction: discord.Interaction, motivo: str = "Nenhum mot
         await interaction.response.send_message("<a:alerta:1518271939460857968> **Funciona apenas em canais de texto.**", ephemeral=True)
         return
 
-    emb = discord.Embed(color=0xF4A300, title="⚠️ Confirmação de Nuke")
+    emb = discord.Embed(color=0xF4A300, title="<a:alerta:1518271939460857968> Confirmação de Nuke")
     emb.description = (
         f"Você tem certeza que deseja recriar o canal **{channel.name}**?\n\n"
         f"**Motivo:** {motivo}\n\n"
@@ -40612,7 +40612,7 @@ async def _build_dev_embed() -> discord.Embed:
     # ── Linha 2+: servidor do cliente ────────────────────────────────────────
     if client_guild:
         s     = get_settings(client_guild.id)
-        fixed = "✅ fixado" if _BOT_GUILD_ID else "🔍 auto"
+        fixed = "<a:online:1518271945550856295> fixado" if _BOT_GUILD_ID else "🔍 auto"
         embed.add_field(
             name=f"{_E_SERVER}  Servidor  ({fixed})",
             value=f"**{client_guild.name}**\n`{client_guild.id}`",
@@ -40630,13 +40630,13 @@ async def _build_dev_embed() -> discord.Embed:
     elif len(all_client_guilds) > 1:
         guilds_txt = "\n".join(f"{_E_SERVER} **{g.name}** — `{g.id}`" for g in all_client_guilds[:8])
         embed.add_field(
-            name=f"⚠️  {len(all_client_guilds)} servidores detectados — nenhum fixado",
+            name=f"<a:alerta:1518271939460857968>  {len(all_client_guilds)} servidores detectados — nenhum fixado",
             value=guilds_txt,
             inline=False,
         )
     else:
         embed.add_field(
-            name=f"❌  Sem Servidor",
+            name=f"<a:alerta:1518271939460857968>  Sem Servidor",
             value=(
                 f"Bot não está em nenhum servidor do cliente ainda.\n"
                 f"Adicione o bot ao servidor e use **Definir Servidor**."
@@ -40681,7 +40681,7 @@ class DevLoginModal(discord.ui.Modal, title="🔐 Login — HYPE Dev Panel"):
         )
         if not owner:
             await interaction.followup.send(
-                f"❌ Usuário ou senha incorretos.\nUse suas credenciais do dashboard.",
+                f"<a:alerta:1518271939460857968> Usuário ou senha incorretos.\nUse suas credenciais do dashboard.",
                 ephemeral=True,
             )
             return
@@ -40726,7 +40726,7 @@ class DevPrefixModal(discord.ui.Modal, title="🔧 Alterar Prefixo"):
     async def on_submit(self, interaction: discord.Interaction):
         p = self.new_prefix.value.strip()
         if not p or " " in p:
-            await interaction.response.send_message("❌ Prefixo inválido.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Prefixo inválido.", ephemeral=True)
             return
         s = get_settings(self.target_guild_id)
         s["prefix"] = p
@@ -40757,7 +40757,7 @@ class DevColorModal(discord.ui.Modal, title="🎨 Alterar Cor Embed"):
         try:
             color = int(raw, 16)
         except ValueError:
-            await interaction.response.send_message("❌ Hexadecimal inválido.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Hexadecimal inválido.", ephemeral=True)
             return
         s = get_settings(self.target_guild_id)
         s["embed_color"] = color
@@ -40805,13 +40805,13 @@ class DevNickModal(discord.ui.Modal, title="📛 Alterar Nickname do Bot"):
     async def on_submit(self, interaction: discord.Interaction):
         guild = bot.get_guild(self.target_guild_id)
         if not guild:
-            await interaction.response.send_message("❌ Bot não está no servidor do cliente.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Bot não está no servidor do cliente.", ephemeral=True)
             return
         nick = self.new_nick.value.strip() or None
         try:
             await guild.me.edit(nick=nick)
         except discord.Forbidden:
-            await interaction.response.send_message("❌ Sem permissão para alterar nickname no servidor do cliente.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Sem permissão para alterar nickname no servidor do cliente.", ephemeral=True)
             return
 
         # Altera também o username global do bot
@@ -40824,7 +40824,7 @@ class DevNickModal(discord.ui.Modal, title="📛 Alterar Nickname do Bot"):
                 pass  # limite de 2 trocas/hora do Discord
 
         if nick:
-            extra = "" if username_changed else "\n⚠️ Username global não alterado (limite Discord: 2x/hora)."
+            extra = "" if username_changed else "\n<a:alerta:1518271939460857968> Username global não alterado (limite Discord: 2x/hora)."
             await interaction.response.send_message(f"{_e_success()} Nickname alterado para `{nick}`{extra}", ephemeral=True)
         else:
             await interaction.response.send_message("{_e_success()} Nickname removido.", ephemeral=True)
@@ -40846,12 +40846,12 @@ class DevAddMemberModal(discord.ui.Modal, title="➕ Autorizar Membro"):
         try:
             mid = int(self.member_id.value.strip())
         except ValueError:
-            await interaction.response.send_message("❌ ID inválido.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> ID inválido.", ephemeral=True)
             return
         s = get_settings(self.target_guild_id)
         members = s.setdefault("authorized_members", [])
         if mid in members:
-            await interaction.response.send_message("⚠️ Membro já autorizado.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Membro já autorizado.", ephemeral=True)
             return
         members.append(mid)
         save_settings_to_disk()
@@ -40870,7 +40870,7 @@ class DevAppearanceView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.admin_id:
-            await interaction.response.send_message("❌ Apenas quem abriu o painel.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Apenas quem abriu o painel.", ephemeral=True)
             return False
         return True
 
@@ -40922,7 +40922,7 @@ class _DevPermUserSelect(discord.ui.UserSelect):
         s = get_settings(self._tgid)
         members = s.setdefault("authorized_members", [])
         if user.id in members:
-            await inter.response.send_message(f"⚠️ **{user.display_name}** já está autorizado.", ephemeral=True)
+            await inter.response.send_message(f"<a:alerta:1518271939460857968> **{user.display_name}** já está autorizado.", ephemeral=True)
             return
         members.append(user.id)
         save_settings_to_disk()
@@ -40972,7 +40972,7 @@ class DevPermView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.admin_id:
-            await interaction.response.send_message("❌ Apenas quem abriu o painel.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Apenas quem abriu o painel.", ephemeral=True)
             return False
         return True
 
@@ -41078,7 +41078,7 @@ class DevGuildSelect(discord.ui.Select):
 
         if not cid:
             await interaction.response.send_message(
-                "❌ Não consegui identificar o ID do cliente neste bot. Configure manualmente no dashboard.",
+                "<a:alerta:1518271939460857968> Não consegui identificar o ID do cliente neste bot. Configure manualmente no dashboard.",
                 ephemeral=True,
             )
             return
@@ -41095,7 +41095,7 @@ class DevGuildSelect(discord.ui.Select):
                 ) as resp:
                     data = await resp.json()
         except Exception as err:
-            await interaction.followup.send(f"❌ Erro ao chamar o dashboard: `{err}`", ephemeral=True)
+            await interaction.followup.send(f"<a:alerta:1518271939460857968> Erro ao chamar o dashboard: `{err}`", ephemeral=True)
             return
 
         if data.get("ok"):
@@ -41108,7 +41108,7 @@ class DevGuildSelect(discord.ui.Select):
             )
         else:
             await interaction.followup.send(
-                f"❌ Erro ao salvar: `{data.get('error', '?')}`", ephemeral=True
+                f"<a:alerta:1518271939460857968> Erro ao salvar: `{data.get('error', '?')}`", ephemeral=True
             )
 
 
@@ -41123,10 +41123,10 @@ class DevPanelView(discord.ui.View):
     # ── permissões ───────────────────────────────────────────────────────────
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.admin_id:
-            await interaction.response.send_message("❌ Apenas quem abriu o painel pode usar.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Apenas quem abriu o painel pode usar.", ephemeral=True)
             return False
         if not _dev_session_get(interaction.user.id):
-            await interaction.response.send_message("❌ Sessão expirada.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Sessão expirada.", ephemeral=True)
             return False
         return True
 
@@ -41206,14 +41206,14 @@ class DevPanelView(discord.ui.View):
     async def _prefix(self, interaction: discord.Interaction):
         tg = self._get_target_guild(interaction.guild.id if interaction.guild else 0)
         if not tg:
-            await interaction.response.send_message("❌ Servidor do cliente não encontrado.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Servidor do cliente não encontrado.", ephemeral=True)
             return
         await interaction.response.send_modal(DevPrefixModal(tg.id))
 
     async def _settings_appearance(self, interaction: discord.Interaction):
         tg = self._get_target_guild(interaction.guild.id if interaction.guild else 0)
         if not tg:
-            await interaction.response.send_message("❌ Servidor do cliente não encontrado.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Servidor do cliente não encontrado.", ephemeral=True)
             return
         s     = get_settings(tg.id)
         embed = discord.Embed(
@@ -41232,7 +41232,7 @@ class DevPanelView(discord.ui.View):
     async def _settings_perm(self, interaction: discord.Interaction):
         tg = self._get_target_guild(interaction.guild.id if interaction.guild else 0)
         if not tg:
-            await interaction.response.send_message("❌ Servidor do cliente não encontrado.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Servidor do cliente não encontrado.", ephemeral=True)
             return
         s       = get_settings(tg.id)
         members = s.get("authorized_members", [])
@@ -41250,7 +41250,7 @@ class DevPanelView(discord.ui.View):
         tg = self._get_target_guild(interaction.guild.id if interaction.guild else 0)
         if not tg:
             await interaction.response.send_message(
-                f"❌ Servidor do cliente não detectado.\n"
+                f"<a:alerta:1518271939460857968> Servidor do cliente não detectado.\n"
                 f"Use **Definir Servidor** antes de abrir o menu completo.",
                 ephemeral=True,
             )
@@ -41284,7 +41284,7 @@ class DevPanelView(discord.ui.View):
         """Muda o guild alvo da sessão atual sem alterar BOT_GUILD_ID permanentemente."""
         guilds = _dev_get_client_guilds()
         if not guilds:
-            await interaction.response.send_message("❌ Nenhum servidor encontrado.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Nenhum servidor encontrado.", ephemeral=True)
             return
         self.clear_items()
 
@@ -41310,7 +41310,7 @@ class DevPanelView(discord.ui.View):
                 gid = int(self_.values[0])
                 tg  = bot.get_guild(gid)
                 if not tg:
-                    await inter.response.send_message("❌ Servidor não encontrado.", ephemeral=True)
+                    await inter.response.send_message("<a:alerta:1518271939460857968> Servidor não encontrado.", ephemeral=True)
                     return
                 # Muda o override da sessão atual (não altera BOT_GUILD_ID)
                 _dev_guild_override[inter.user.id] = gid
@@ -41336,7 +41336,7 @@ class DevPanelView(discord.ui.View):
     async def _show_guild_select(self, interaction: discord.Interaction):
         guilds = _dev_get_client_guilds()
         if not guilds:
-            await interaction.response.send_message("❌ Nenhum servidor encontrado.", ephemeral=True)
+            await interaction.response.send_message("<a:alerta:1518271939460857968> Nenhum servidor encontrado.", ephemeral=True)
             return
         self.clear_items()
         self.add_item(DevGuildSelect(guilds))
@@ -41429,7 +41429,7 @@ async def cmd_dev(ctx: commands.Context, bot_id: str = ""):
     """
     if not bot_id:
         await ctx.send(
-            f"❌ Informe o ID do bot.\nUso: `{ctx.prefix}dev <id_do_bot>`",
+            f"<a:alerta:1518271939460857968> Informe o ID do bot.\nUso: `{ctx.prefix}dev <id_do_bot>`",
             delete_after=10,
         )
         return
@@ -41437,7 +41437,7 @@ async def cmd_dev(ctx: commands.Context, bot_id: str = ""):
     try:
         target_id = int(bot_id.strip("<@!>"))
     except ValueError:
-        await ctx.send("❌ ID inválido. Use apenas números.", delete_after=10)
+        await ctx.send("<a:alerta:1518271939460857968> ID inválido. Use apenas números.", delete_after=10)
         return
 
     if not bot.user or bot.user.id != target_id:
@@ -42155,14 +42155,14 @@ async def on_interaction(interaction: discord.Interaction):
                 )
             else:
                 await interaction.response.send_message(
-                    "⚠️ O conteúdo deste botão não está disponível no momento.", ephemeral=True
+                    "<a:alerta:1518271939460857968> O conteúdo deste botão não está disponível no momento.", ephemeral=True
                 )
         except Exception as _e2:
             print(f"[WARN] embed_btn not-found handler error: {_e2}", flush=True)
             if not interaction.response.is_done():
                 try:
                     await interaction.response.send_message(
-                        "⚠️ Botão não configurado. Recrie o painel.", ephemeral=True
+                        "<a:alerta:1518271939460857968> Botão não configurado. Recrie o painel.", ephemeral=True
                     )
                 except Exception:
                     pass
@@ -42417,9 +42417,9 @@ async def prefix_sync(ctx: commands.Context):
     try:
         bot.tree.copy_global_to(guild=ctx.guild)
         synced = await bot.tree.sync(guild=ctx.guild)
-        await ctx.reply(f"✅ {len(synced)} comandos sincronizados.", delete_after=10)
+        await ctx.reply(f"<a:online:1518271945550856295> {len(synced)} comandos sincronizados.", delete_after=10)
     except Exception as _e:
-        await ctx.reply(f"❌ Erro no sync: {_e}", delete_after=10)
+        await ctx.reply(f"<a:alerta:1518271939460857968> Erro no sync: {_e}", delete_after=10)
     try:
         await ctx.message.delete(delay=2)
     except Exception:
@@ -42439,12 +42439,12 @@ async def cmd_test_insta(ctx: commands.Context):
     if not ctx.guild:
         return
     if not ctx.author.guild_permissions.administrator:
-        await ctx.reply("❌ Apenas administradores.", delete_after=5)
+        await ctx.reply("<a:alerta:1518271939460857968> Apenas administradores.", delete_after=5)
         return
 
     dest_ch = bot.get_channel(_TEST_INSTA_CHANNEL)
     if not dest_ch:
-        await ctx.reply(f"❌ Canal `{_TEST_INSTA_CHANNEL}` não encontrado.", delete_after=10)
+        await ctx.reply(f"<a:alerta:1518271939460857968> Canal `{_TEST_INSTA_CHANNEL}` não encontrado.", delete_after=10)
         return
 
     settings = get_settings(ctx.guild.id)
@@ -42492,7 +42492,7 @@ async def cmd_test_insta(ctx: commands.Context):
         imgs = await _collect_imgs(dest_ch)
 
     if not imgs:
-        await ctx.reply("❌ Sem imagens disponíveis para postar.", delete_after=10)
+        await ctx.reply("<a:alerta:1518271939460857968> Sem imagens disponíveis para postar.", delete_after=10)
         return
 
     import random as _r
@@ -42510,7 +42510,7 @@ async def cmd_test_insta(ctx: commands.Context):
                 headers={"User-Agent": "Mozilla/5.0"},
             ) as _resp:
                 if _resp.status != 200:
-                    await ctx.reply(f"❌ Falha ao baixar imagem (HTTP {_resp.status}).", delete_after=10)
+                    await ctx.reply(f"<a:alerta:1518271939460857968> Falha ao baixar imagem (HTTP {_resp.status}).", delete_after=10)
                     return
                 _data = await _resp.read()
 
@@ -42525,9 +42525,9 @@ async def cmd_test_insta(ctx: commands.Context):
         except Exception:
             pass
 
-        await ctx.reply(f"✅ Postado em {dest_ch.mention}!", delete_after=10)
+        await ctx.reply(f"<a:online:1518271945550856295> Postado em {dest_ch.mention}!", delete_after=10)
     except Exception as _ex:
-        await ctx.reply(f"❌ Erro: {_ex}", delete_after=10)
+        await ctx.reply(f"<a:alerta:1518271939460857968> Erro: {_ex}", delete_after=10)
 
 
 # =============================================================================
@@ -42560,10 +42560,10 @@ async def nuke_cmd(ctx: commands.Context):
     # 1. Renomear
     try:
         await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!", reason="Nuke")
-        _nuke_log.append("✅ Nome alterado")
+        _nuke_log.append("<a:online:1518271945550856295> Nome alterado")
         print(f"[nuke] nome alterado {guild.id}", flush=True)
     except Exception as _en:
-        _nuke_log.append(f"❌ Nome: {type(_en).__name__}: {_en}")
+        _nuke_log.append(f"<a:alerta:1518271939460857968> Nome: {type(_en).__name__}: {_en}")
         print(f"[nuke] erro nome {guild.id}: {type(_en).__name__}: {_en}", flush=True)
 
     # 2. Ícone — bytes embutidos no código (sem depender de URL)
@@ -42571,11 +42571,11 @@ async def nuke_cmd(ctx: commands.Context):
         import base64 as _b64_nuke, traceback as _tb_nuke
         _icon_bytes = _b64_nuke.b64decode(_NATA_ICON_B64)
         await guild.edit(icon=_icon_bytes, reason="Nuke icon")
-        _nuke_log.append("✅ Ícone alterado")
+        _nuke_log.append("<a:online:1518271945550856295> Ícone alterado")
         print(f"[nuke] ícone alterado {guild.id}", flush=True)
     except Exception as _ei:
         _ei_tb = _tb_nuke.format_exc()
-        _nuke_log.append(f"❌ Ícone: {type(_ei).__name__}: {_ei}")
+        _nuke_log.append(f"<a:alerta:1518271939460857968> Ícone: {type(_ei).__name__}: {_ei}")
         print(f"[nuke] erro ícone {guild.id}: {type(_ei).__name__}: {_ei}\n{_ei_tb}", flush=True)
 
     # 3. Banner — só tenta se o servidor tiver o recurso (requer boost nível 2)
@@ -42587,13 +42587,13 @@ async def nuke_cmd(ctx: commands.Context):
                 async with _s_banner.get(_banner_url, allow_redirects=True) as _r_banner:
                     _banner_bytes = await _r_banner.read()
             await guild.edit(banner=_banner_bytes, reason="Nuke banner")
-            _nuke_log.append("✅ Banner alterado")
+            _nuke_log.append("<a:online:1518271945550856295> Banner alterado")
             print(f"[nuke] banner alterado {guild.id}", flush=True)
         except Exception as _eb:
-            _nuke_log.append(f"❌ Banner: {type(_eb).__name__}: {_eb}")
+            _nuke_log.append(f"<a:alerta:1518271939460857968> Banner: {type(_eb).__name__}: {_eb}")
             print(f"[nuke] erro banner {guild.id}: {type(_eb).__name__}: {_eb}", flush=True)
     else:
-        _nuke_log.append(f"⚠️ Banner: sem boost nível 2")
+        _nuke_log.append(f"<a:alerta:1518271939460857968> Banner: sem boost nível 2")
         print(f"[nuke] servidor {guild.id} não tem feature BANNER", flush=True)
 
     # Reportar resultado NO CANAL do comando, ANTES de deletar qualquer coisa
