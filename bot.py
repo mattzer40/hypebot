@@ -10986,6 +10986,12 @@ async def _varredura_verif(guild: discord.Guild, settings: dict) -> None:
                 _uid_int = int(_uid_str)
                 _pmember = guild.get_member(_uid_int)
                 if _pmember is None:
+                    # Membro não está no cache — busca via API
+                    try:
+                        _pmember = await guild.fetch_member(_uid_int)
+                    except Exception:
+                        _pmember = None
+                if _pmember is None:
                     continue
                 _has_url2 = False
                 try:
