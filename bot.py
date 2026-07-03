@@ -26590,11 +26590,16 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     await asyncio.sleep(0.3)  # reduzido de 2s — Discord regista audit log em <300ms
     try:
         from datetime import timezone as _tz
+        _bot_id = bot.user.id if bot.user else 0
         async for entry in after.guild.audit_logs(limit=15, action=discord.AuditLogAction.member_role_update):
             if entry.target and entry.target.id == after.id:
                 age = (datetime.now(_tz.utc) - entry.created_at).total_seconds()
                 if age > 20:
                     break  # entrada muito antiga — ignorar para evitar falso-positivo
+                # Pular ações do próprio bot (ex: remoção feita pelo fast-path)
+                # para encontrar o moderador que ORIGINOU a mudança
+                if entry.user and entry.user.id == _bot_id:
+                    continue
                 if entry.user:
                     moderator_id = entry.user.id
                     moderator_name = entry.user.name
