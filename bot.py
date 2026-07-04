@@ -42555,38 +42555,6 @@ async def _criar_ticket_thread(
         _desc_v2,
     ] if p)
 
-    # Container só aceita TextDisplay/Section/Separator/MediaGallery — ActionRow vai na raiz
-    _c_items: list = []
-    if _text_body:
-        if _thumb_v2:
-            _c_items.append({
-                "type": 9,
-                "components": [{"type": 10, "content": _text_body}],
-                "accessory": {"type": 11, "media": {"url": _thumb_v2}},
-            })
-        else:
-            _c_items.append({"type": 10, "content": _text_body})
-    _c_items.append({"type": 10, "content": f"-# {_footer_v2} • {_ts_v2}"})
-
-    _action_row = {
-        "type": 1,
-        "components": [
-            {"type": 2, "label": _t_btn.get("btn_add_remove_user", "Adicionar/Remover Usuário"), "style": 2, "custom_id": "ticket_add_remove_user"},
-            {"type": 2, "label": "Assumir Ticket", "style": 1, "custom_id": "ticket_assumir"},
-            {"type": 2, "label": _t_btn.get("btn_fechar_ticket", "Fechar Ticket"), "style": 4, "custom_id": "ticket_fechar"},
-        ],
-    }
-    _c_items.append({"type": 14, "divider": True, "spacing": 1})
-    _c_items.append(_action_row)
-
-    _v2_payload = {
-        "flags": 32768,
-        "components": [
-            {"type": 17, "accent_color": _color_v2, "components": _c_items},
-        ],
-        "allowed_mentions": {"parse": ["roles", "users", "everyone"]},
-    }
-
     # Envia pings como mensagem separada (notifica sem poluir o embed)
     if ping_content:
         try:
@@ -42597,26 +42565,22 @@ async def _criar_ticket_thread(
         except Exception:
             pass
 
-    # Envia embed V2 com botões dentro do container via raw HTTP
-    import aiohttp as _ah_tkt2
+    # Envia embed V2 com botões DENTRO do container usando LayoutView nativo
     try:
-        async with _ah_tkt2.ClientSession() as _sess_t2:
-            _r_t2 = await _sess_t2.post(
-                f"https://discord.com/api/v10/channels/{thread.id}/messages",
-                headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
-                json=_v2_payload,
-            )
-            _body_t2 = await _r_t2.json()
-        if _r_t2.status not in (200, 201):
-            print(f"[ticket_criado] Erro HTTP {_r_t2.status}: {_body_t2}", flush=True)
-            raise Exception(f"HTTP {_r_t2.status}")
-        _sent_id_v2 = int(_body_t2.get("id", 0))
-        if _sent_id_v2:
-            _ticket_msg_ids[thread.id] = (thread.id, _sent_id_v2)
-            _ticket_msg_payloads.pop(thread.id, None)
-        print(f"[ticket_criado] V2 aiohttp no thread {thread.id}", flush=True)
+        _v2_view = TicketThreadV2View(
+            lang=lang,
+            title=_title_v2,
+            description=_desc_v2,
+            thumb_url=_thumb_v2,
+            footer=_footer_v2,
+            color=_color_v2,
+        )
+        _sent_msg = await thread.send(view=_v2_view)
+        _ticket_msg_ids[thread.id] = (thread.id, _sent_msg.id)
+        _ticket_msg_payloads.pop(thread.id, None)
+        print(f"[ticket_criado] V2 LayoutView no thread {thread.id}", flush=True)
     except Exception as e:
-        print(f"[ticket_criado] Erro V2: {e}", flush=True)
+        print(f"[ticket_criado] Erro V2 LayoutView: {e}", flush=True)
         try:
             _embed.set_footer(text=_footer_v2, icon_url=_icon_url)
             _embed.timestamp = datetime.now()
