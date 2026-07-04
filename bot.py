@@ -1802,16 +1802,16 @@ TRANSLATIONS = {
         "contador_call_funcoes_text": "`{contador}` — Retorna a quantidade de membros em call.",
         "contador_call_info": "Informações",
         "contador_call_estado_label": "Estado",
-        "contador_call_canal_label": "Canal",
+        "contador_call_canal_label": "Categoria",
         "contador_call_mensagem_label": "Mensagem",
-        "btn_contador_call_canal": "Alterar Canal",
+        "btn_contador_call_canal": "Alterar Categoria",
         "btn_contador_call_mensagem": "Alterar Mensagem",
-        "btn_contador_call_reset": "Resetar Canal",
+        "btn_contador_call_reset": "Resetar Categoria",
         "contador_call_activated": "Contador em Call ativado!",
         "contador_call_deactivated": "Contador em Call desativado!",
-        "contador_call_canal_set": "Canal definido: {channel}",
+        "contador_call_canal_set": "Categoria definida: {channel}",
         "contador_call_reset_done": "Contador em Call resetado!",
-        "contador_call_select_canal": "Selecione o canal de exibição...",
+        "contador_call_select_canal": "Selecione a categoria de exibição...",
         "contador_call_mensagem_modal_title": "Alterar Mensagem",
         "contador_call_mensagem_label_input": "Mensagem (use {contador})",
         "contador_call_mensagem_set": "Mensagem atualizada!",
@@ -3520,16 +3520,16 @@ TRANSLATIONS = {
         "contador_call_funcoes_text": "`{contador}` — Returns the number of members in voice calls.",
         "contador_call_info": "Information",
         "contador_call_estado_label": "State",
-        "contador_call_canal_label": "Channel",
+        "contador_call_canal_label": "Category",
         "contador_call_mensagem_label": "Message",
-        "btn_contador_call_canal": "Change Channel",
+        "btn_contador_call_canal": "Change Category",
         "btn_contador_call_mensagem": "Change Message",
-        "btn_contador_call_reset": "Reset Channel",
+        "btn_contador_call_reset": "Reset Category",
         "contador_call_activated": "Call Counter enabled!",
         "contador_call_deactivated": "Call Counter disabled!",
-        "contador_call_canal_set": "Channel set: {channel}",
+        "contador_call_canal_set": "Category set: {channel}",
         "contador_call_reset_done": "Call Counter reset!",
-        "contador_call_select_canal": "Select the display channel...",
+        "contador_call_select_canal": "Select the display category...",
         "contador_call_mensagem_modal_title": "Change Message",
         "contador_call_mensagem_label_input": "Message (use {contador})",
         "contador_call_mensagem_set": "Message updated!",
@@ -35223,13 +35223,15 @@ async def _update_contador_call(guild: discord.Guild):
     ch = guild.get_channel(channel_id)
     if ch is None:
         return
+    # Conta membros (não-bots) em TODOS os canais de voz/stage do servidor
     total = sum(
         len([m for m in vc.members if not m.bot])
         for vc in guild.channels
-        if isinstance(vc, discord.VoiceChannel)
+        if isinstance(vc, (discord.VoiceChannel, discord.StageChannel))
     )
     template = settings.get("contador_call_message", "users in call: {contador}")
     new_name = template.format(contador=total)
+    # Renomeia a CATEGORIA de exibição (Discord limita renome a ~2x/10min por canal)
     try:
         await ch.edit(name=new_name)
     except Exception:
@@ -35283,7 +35285,7 @@ class ContadorCallCanalSelect(GuildChannelSelect):
     def __init__(self, parent_view: "ContadorCallView", placeholder: str):
         super().__init__(
             placeholder=placeholder, min_values=1, max_values=1,
-            channel_types=[discord.ChannelType.voice],
+            channel_types=[discord.ChannelType.category],
         )
         self.parent_view = parent_view
 
@@ -35293,6 +35295,9 @@ class ContadorCallCanalSelect(GuildChannelSelect):
         ch = self.values[0]
         settings["contador_call_channel"] = ch.id
         save_settings_to_disk()
+        # Atualiza o nome da categoria imediatamente
+        if settings.get("contador_call_enabled"):
+            asyncio.create_task(_update_contador_call(interaction.guild))
         embed = build_contador_call_embed(self.parent_view.author, settings)
         view = ContadorCallView(self.parent_view.author)
         await interaction.response.edit_message(embed=embed, view=view)
