@@ -42611,6 +42611,13 @@ class TicketThreadView(discord.ui.View):
         ))
 
     async def _add_remove_user(self, interaction: discord.Interaction):
+        _thr = interaction.channel
+        if isinstance(_thr, discord.Thread) and _ticket_assumed.get(_thr.id) is None:
+            await interaction.response.send_message(
+                "<a:alerta:1518271939460857968> Assuma o ticket antes de adicionar ou remover membros.",
+                ephemeral=True,
+            )
+            return
         guild_id = interaction.guild.id if interaction.guild else 0
         settings = get_settings(guild_id)
         t = TRANSLATIONS[settings["language"]]
@@ -42627,6 +42634,12 @@ class TicketThreadView(discord.ui.View):
         thread = interaction.channel
         if not isinstance(thread, discord.Thread):
             await interaction.response.defer()
+            return
+        if _ticket_assumed.get(thread.id) is None:
+            await interaction.response.send_message(
+                "<a:alerta:1518271939460857968> Assuma o ticket antes de fechá-lo.",
+                ephemeral=True,
+            )
             return
         if settings.get("ticket_motivo_fechar", False):
             await interaction.response.send_modal(
