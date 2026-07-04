@@ -35313,11 +35313,11 @@ def build_contador_call_embed(author: discord.Member, settings: dict) -> discord
     icon_url = bot.user.display_avatar.url if bot.user else None
 
     enabled = settings.get("contador_call_enabled", False)
-    status_value = ("🟢 Ativado" if enabled
-                    else "🔴 Desativado")
+    status_value = ("<a:online:1518271945550856295> Ativado" if enabled
+                    else "<:8118_xmark:1518272072839729182> Desativado")
 
     channel_id = settings.get("contador_call_channel")
-    nd = "⚠️ Não definido"
+    nd = "<:8118_xmark:1518272072839729182> Não definido"
     if channel_id and guild:
         ch = guild.get_channel(channel_id)
         canal_value = ch.mention if ch else nd
@@ -35328,16 +35328,16 @@ def build_contador_call_embed(author: discord.Member, settings: dict) -> discord
 
     embed = discord.Embed(title=t["contador_call_panel_title"], color=color)
     embed.add_field(
-        name=f"🛠️  {t['contador_call_funcoes']}",
+        name=f"<:ferramentas_:1518271998613131274>  {t['contador_call_funcoes']}",
         value=t["contador_call_funcoes_text"],
         inline=False,
     )
     embed.add_field(
-        name=f"📋  {t['contador_call_info']}",
+        name=f"<:entretenimento_:1518271992191779038>  {t['contador_call_info']}",
         value=(
             f"┃ **{t['contador_call_estado_label']}:** {status_value}\n"
-            f"📁 **{t['contador_call_canal_label']}:** {canal_value}\n"
-            f"💬 **{t['contador_call_mensagem_label']}:** `{discord.utils.escape_markdown(msg_template)}`"
+            f"<:mov_call:1518271964077232150> **{t['contador_call_canal_label']}:** {canal_value}\n"
+            f"<:comunidade_:1518272016971595807> **{t['contador_call_mensagem_label']}:** `{discord.utils.escape_markdown(msg_template)}`"
         ),
         inline=False,
     )
