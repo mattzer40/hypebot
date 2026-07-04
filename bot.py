@@ -25821,6 +25821,8 @@ async def on_ready():
         _verif_auto_scan_task.start()
     if not _call_lock_cleanup_task.is_running():
         _call_lock_cleanup_task.start()
+    if not _contador_call_task.is_running():
+        _contador_call_task.start()
 
     # ── Bio / Descrição do perfil ─────────────────────────────────────────────
     _bio_text = "**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot"
@@ -35245,7 +35247,12 @@ class DesmuteView(discord.ui.View):
 # Contador em Call
 # =============================================================================
 
-async def _update_contador_call(guild: discord.Guild):
+# Debounce de renome do contador: channel_id -> timestamp monotônico do último rename.
+# Discord limita renome de canal a ~2x/10min; espaçamos em >=300s para não estourar.
+_contador_last_rename: dict[int, float] = {}
+
+
+async def _update_contador_call(guild: discord.Guild, force: bool = False):
     settings = get_settings(guild.id)
     if not settings.get("contador_call_enabled"):
         return
@@ -35263,11 +35270,40 @@ async def _update_contador_call(guild: discord.Guild):
     )
     template = settings.get("contador_call_message", "users in call: {contador}")
     new_name = template.format(contador=total)
-    # Renomeia a CATEGORIA de exibição (Discord limita renome a ~2x/10min por canal)
+    # Já está com o nome certo → nada a fazer (não gasta o limite de rename à toa)
+    if ch.name == new_name:
+        return
+    # Debounce: só renomeia se passou tempo suficiente desde o último rename deste
+    # canal (Discord limita ~2x/10min por canal). A task periódica garante que o
+    # valor eventualmente atualiza mesmo quando um evento de voz é engolido aqui.
+    now = time.monotonic()
+    if not force and (now - _contador_last_rename.get(ch.id, 0.0)) < 300:
+        return
+    # Renomeia a CATEGORIA de exibição.
     try:
         await ch.edit(name=new_name)
+        _contador_last_rename[ch.id] = now
     except Exception:
         pass
+
+
+@tasks.loop(minutes=6)
+async def _contador_call_task():
+    """Atualiza a categoria do Contador em Call periodicamente, garantindo que o
+    número reflita a quantidade atual mesmo sem eventos de voz (respeitando o
+    limite de rename do Discord via debounce em _update_contador_call)."""
+    for _g in list(bot.guilds):
+        try:
+            _gs = get_settings(_g.id)
+            if _gs.get("contador_call_enabled") and _gs.get("contador_call_channel"):
+                await _update_contador_call(_g)
+        except Exception:
+            pass
+
+
+@_contador_call_task.before_loop
+async def _contador_call_before():
+    await bot.wait_until_ready()
 
 
 def build_contador_call_embed(author: discord.Member, settings: dict) -> discord.Embed:
@@ -35277,11 +35313,11 @@ def build_contador_call_embed(author: discord.Member, settings: dict) -> discord
     icon_url = bot.user.display_avatar.url if bot.user else None
 
     enabled = settings.get("contador_call_enabled", False)
-    status_value = ("<a:on_:1518272007624802375> Ativado" if enabled
-                    else "<a:off_:1518272060870778910> Desativado")
+    status_value = ("🟢 Ativado" if enabled
+                    else "🔴 Desativado")
 
     channel_id = settings.get("contador_call_channel")
-    nd = "<:erro:1518271951914606593> Não definido"
+    nd = "⚠️ Não definido"
     if channel_id and guild:
         ch = guild.get_channel(channel_id)
         canal_value = ch.mention if ch else nd
@@ -35292,16 +35328,16 @@ def build_contador_call_embed(author: discord.Member, settings: dict) -> discord
 
     embed = discord.Embed(title=t["contador_call_panel_title"], color=color)
     embed.add_field(
-        name=f"<:ferramentas_:1518271998613131274>  {t['contador_call_funcoes']}",
+        name=f"🛠️  {t['contador_call_funcoes']}",
         value=t["contador_call_funcoes_text"],
         inline=False,
     )
     embed.add_field(
-        name=f"<:entretenimento_:1518271992191779038>  {t['contador_call_info']}",
+        name=f"📋  {t['contador_call_info']}",
         value=(
             f"┃ **{t['contador_call_estado_label']}:** {status_value}\n"
-            f"<:mov_call:1518271964077232150> **{t['contador_call_canal_label']}:** {canal_value}\n"
-            f"<:comunidade_:1518272016971595807> **{t['contador_call_mensagem_label']}:** `{discord.utils.escape_markdown(msg_template)}`"
+            f"📁 **{t['contador_call_canal_label']}:** {canal_value}\n"
+            f"💬 **{t['contador_call_mensagem_label']}:** `{discord.utils.escape_markdown(msg_template)}`"
         ),
         inline=False,
     )
