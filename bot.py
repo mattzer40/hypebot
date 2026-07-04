@@ -35149,6 +35149,7 @@ class ContadorCallCanalSelect(GuildChannelSelect):
         t = TRANSLATIONS[settings["language"]]
         ch = self.values[0]
         settings["contador_call_channel"] = ch.id
+        save_settings_to_disk()
         embed = build_contador_call_embed(self.parent_view.author, settings)
         view = ContadorCallView(self.parent_view.author)
         await interaction.response.edit_message(embed=embed, view=view)
@@ -35183,6 +35184,7 @@ class ContadorCallMensagemModal(discord.ui.Modal):
             )
             return
         settings["contador_call_message"] = value
+        save_settings_to_disk()
         embed = build_contador_call_embed(self.parent_view.author, settings)
         view = ContadorCallView(self.parent_view.author)
         await interaction.response.edit_message(embed=embed, view=view)
@@ -35224,7 +35226,7 @@ class ContadorCallView(discord.ui.View):
             (t["btn_contador_call_reset"], discord.ButtonStyle.danger, self._reset),
         ]
         for label, style, cb in row0:
-            btn = discord.ui.Button(label=label, style=style, row=0, emoji=_button_emoji(style))
+            btn = discord.ui.Button(label=label, style=style, row=0)
             btn.callback = cb
             self.add_item(btn)
 
@@ -35238,6 +35240,7 @@ class ContadorCallView(discord.ui.View):
         settings = get_settings(interaction.guild.id)
         t = TRANSLATIONS[settings["language"]]
         settings["contador_call_enabled"] = not settings.get("contador_call_enabled", False)
+        save_settings_to_disk()
         embed = build_contador_call_embed(self.author, settings)
         view = ContadorCallView(self.author)
         await interaction.response.edit_message(embed=embed, view=view)
@@ -35263,6 +35266,7 @@ class ContadorCallView(discord.ui.View):
         settings["contador_call_enabled"] = False
         settings["contador_call_channel"] = None
         settings["contador_call_message"] = "users in call: {contador}"
+        save_settings_to_disk()
         embed = build_contador_call_embed(self.author, settings)
         view = ContadorCallView(self.author)
         await interaction.response.edit_message(embed=embed, view=view)
@@ -42207,24 +42211,73 @@ async def _fechar_ticket_thread(thread: discord.Thread, settings: dict, closer=N
     await _delete_thread_raw(thread.id)
 
 
-async def _patch_ticket_remove_assumir(thread_id: int) -> None:
-    """Remove o botão 'Assumir Ticket' editando a view do embed do ticket."""
+async def _patch_ticket_remove_assumir(
+    thread_id: int,
+    assumer: discord.Member | None = None,
+    personal: int = 0,
+    total: int = 0,
+) -> None:
+    """Atualiza embed do ticket após Assumir: remove botão e adiciona info do assumidor."""
     _info = _ticket_msg_ids.get(thread_id)
     if not _info:
         return
     _ch_id, _msg_id = _info
     if not _msg_id:
         return
-    try:
-        _thread_ch = bot.get_channel(_ch_id)
-        if _thread_ch is None:
-            return
-        _msg = await _thread_ch.fetch_message(_msg_id)
-        _guild = getattr(_thread_ch, "guild", None)
-        _lang = get_settings(_guild.id)["language"] if _guild else "pt-br"
-        await _msg.edit(view=TicketThreadView(lang=_lang, show_assumir=False))
-    except Exception as _pe:
-        print(f"[ticket_patch] {_pe}", flush=True)
+
+    _payload_data = _ticket_msg_payloads.get(thread_id)
+    if _payload_data:
+        # V2 — reconstruir com HTTP PATCH
+        _title   = _payload_data.get("title", "")
+        _desc    = _payload_data.get("description", "")
+        _thumb   = _payload_data.get("thumb_url")
+        _footer  = _payload_data.get("footer", "hypebot")
+        _color   = _payload_data.get("color", 0x2B2D31)
+        _lang    = _payload_data.get("lang", "pt-br")
+        _t       = TRANSLATIONS[_lang]
+        _mention = assumer.mention if assumer else "?"
+        _assume_line = f"*Assumido por: {_mention} ({personal}° atend. / {total}° total)*"
+
+        _c: list = []
+        _lines = [p for p in [(_title and f"**{_title}**"), _desc, _assume_line] if p]
+        _main  = "\n\n".join(_lines)
+        if _main:
+            if _thumb:
+                _c.append({"type": 9, "components": [{"type": 10, "content": _main}], "accessory": {"type": 11, "media": {"url": _thumb}}})
+            else:
+                _c.append({"type": 10, "content": _main})
+        _ts = datetime.now().strftime("%d/%m/%Y %H:%M")
+        _c.append({"type": 10, "content": f"-# {_footer} • {_ts}"})
+        _c.append({"type": 14, "divider": True, "spacing": 1})
+        _c.append({"type": 1, "components": [
+            {"type": 2, "label": _t.get("btn_add_remove_user", "Adicionar/Remover Usuário"), "style": 2, "custom_id": "ticket_add_remove_user"},
+            {"type": 2, "label": _t.get("btn_fechar_ticket", "Fechar Ticket"), "style": 4, "custom_id": "ticket_fechar"},
+        ]})
+
+        import aiohttp as _ah_p
+        try:
+            async with _ah_p.ClientSession() as _sp:
+                async with _sp.patch(
+                    f"https://discord.com/api/v10/channels/{_ch_id}/messages/{_msg_id}",
+                    headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
+                    json={"flags": 32768, "components": [{"type": 17, "accent_color": _color, "components": _c}]},
+                ) as _rp:
+                    if _rp.status not in (200, 204):
+                        print(f"[ticket_patch] PATCH {_rp.status}: {await _rp.text()}", flush=True)
+        except Exception as _pe:
+            print(f"[ticket_patch] HTTP erro: {_pe}", flush=True)
+    else:
+        # Fallback: embed clássico
+        try:
+            _thread_ch = bot.get_channel(_ch_id)
+            if _thread_ch is None:
+                return
+            _msg = await _thread_ch.fetch_message(_msg_id)
+            _guild = getattr(_thread_ch, "guild", None)
+            _lang = get_settings(_guild.id)["language"] if _guild else "pt-br"
+            await _msg.edit(view=TicketThreadView(lang=_lang, show_assumir=False))
+        except Exception as _pe:
+            print(f"[ticket_patch] {_pe}", flush=True)
 
 
 def _is_ticket_staff(interaction: discord.Interaction) -> bool:
@@ -42374,6 +42427,12 @@ class TicketThreadView(discord.ui.View):
             f"Ticket assumido! ({_personal}° atendimento / {_total}° total)",
             ephemeral=True,
         )
+        asyncio.create_task(_patch_ticket_remove_assumir(
+            thread.id,
+            assumer=interaction.user if isinstance(interaction.user, discord.Member) else None,
+            personal=_personal,
+            total=_total,
+        ))
 
     async def _add_remove_user(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id if interaction.guild else 0
@@ -42448,7 +42507,8 @@ async def _criar_ticket_thread(
     # Incrementa o contador global de tickets
     settings["ticket_total_count"] = settings.get("ticket_total_count", 0) + 1
     ticket_num = settings["ticket_total_count"]
-    thread_name = f"{user.display_name} • Nº{ticket_num}"
+    _cat_label = (opcao or {}).get("label", "").strip()
+    thread_name = f"{_cat_label} • {user.display_name} • Nº{ticket_num}" if _cat_label else f"{user.display_name} • Nº{ticket_num}"
 
     # Cria o thread (private_thread, fallback para public)
     thread = None
@@ -42550,42 +42610,76 @@ async def _criar_ticket_thread(
     _ts_v2     = datetime.now().strftime("%d/%m/%Y %H:%M")
     _thumb_v2  = (_embed.thumbnail.url if (_embed.thumbnail and _embed.thumbnail.url) else None)
 
-    _text_body = "\n\n".join(p for p in [
-        (f"**{_title_v2}**" if _title_v2 else ""),
-        _desc_v2,
-    ] if p)
+    _t_btn = TRANSLATIONS[lang]
 
-    # Envia pings como mensagem separada (notifica sem poluir o embed)
+    # Monta container V2 com botões DENTRO
+    _c_items: list = []
+    _main_text = "\n\n".join(p for p in [(_title_v2 and f"**{_title_v2}**"), _desc_v2] if p)
+    if _main_text:
+        if _thumb_v2:
+            _c_items.append({
+                "type": 9,
+                "components": [{"type": 10, "content": _main_text}],
+                "accessory": {"type": 11, "media": {"url": _thumb_v2}},
+            })
+        else:
+            _c_items.append({"type": 10, "content": _main_text})
+    _ts_now = datetime.now().strftime("%d/%m/%Y %H:%M")
+    _c_items.append({"type": 10, "content": f"-# {_footer_v2} • {_ts_now}"})
+    _c_items.append({"type": 14, "divider": True, "spacing": 1})
+    _c_items.append({"type": 1, "components": [
+        {"type": 2, "label": _t_btn.get("btn_add_remove_user", "Adicionar/Remover Usuário"), "style": 2, "custom_id": "ticket_add_remove_user"},
+        {"type": 2, "label": "Assumir Ticket", "style": 1, "custom_id": "ticket_assumir"},
+        {"type": 2, "label": _t_btn.get("btn_fechar_ticket", "Fechar Ticket"), "style": 4, "custom_id": "ticket_fechar"},
+    ]})
+
+    _v2_body: dict = {
+        "flags": 32768,
+        "components": [{"type": 17, "accent_color": _color_v2, "components": _c_items}],
+        "allowed_mentions": {"parse": ["roles", "users", "everyone"] if ping_content else []},
+    }
     if ping_content:
-        try:
-            await thread.send(
-                content=ping_content,
-                allowed_mentions=discord.AllowedMentions(users=True, roles=True),
-            )
-        except Exception:
-            pass
+        _v2_body["content"] = ping_content
 
-    # Envia embed V2 com botões DENTRO do container usando LayoutView nativo
+    # Envia via raw HTTP (thread.send(view=LayoutView) falha silenciosamente)
+    import aiohttp as _ah_tkt
+    _sent_msg_id_v2: str | None = None
     try:
-        _v2_view = TicketThreadV2View(
-            lang=lang,
-            title=_title_v2,
-            description=_desc_v2,
-            thumb_url=_thumb_v2,
-            footer=_footer_v2,
-            color=_color_v2,
-        )
-        _sent_msg = await thread.send(view=_v2_view)
-        _ticket_msg_ids[thread.id] = (thread.id, _sent_msg.id)
-        _ticket_msg_payloads.pop(thread.id, None)
-        print(f"[ticket_criado] V2 LayoutView no thread {thread.id}", flush=True)
+        async with _ah_tkt.ClientSession() as _s_tkt:
+            async with _s_tkt.post(
+                f"https://discord.com/api/v10/channels/{thread.id}/messages",
+                headers={"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"},
+                json=_v2_body,
+            ) as _r_tkt:
+                _r_data = await _r_tkt.json()
+                if _r_tkt.status == 200:
+                    _sent_msg_id_v2 = _r_data.get("id")
+                    if _sent_msg_id_v2:
+                        _ticket_msg_ids[thread.id] = (thread.id, int(_sent_msg_id_v2))
+                        _ticket_msg_payloads[thread.id] = {
+                            "title": _title_v2, "description": _desc_v2,
+                            "thumb_url": _thumb_v2, "footer": _footer_v2,
+                            "color": _color_v2, "lang": lang,
+                        }
+                    print(f"[ticket_criado] V2 raw HTTP ok thread={thread.id}", flush=True)
+                else:
+                    print(f"[ticket_criado] V2 HTTP {_r_tkt.status}: {_r_data}", flush=True)
+                    raise Exception(f"HTTP {_r_tkt.status}")
     except Exception as e:
-        print(f"[ticket_criado] Erro V2 LayoutView: {e}", flush=True)
+        print(f"[ticket_criado] V2 falhou ({e}), fallback embed+view", flush=True)
         try:
             _embed.set_footer(text=_footer_v2, icon_url=_icon_url)
             _embed.timestamp = datetime.now()
             if _icon_url and not (_embed.thumbnail and _embed.thumbnail.url):
                 _embed.set_thumbnail(url=_icon_url)
+            if ping_content:
+                try:
+                    await thread.send(
+                        content=ping_content,
+                        allowed_mentions=discord.AllowedMentions(users=True, roles=True),
+                    )
+                except Exception:
+                    pass
             _view = TicketThreadView(lang=lang)
             _sent_msg = await thread.send(embed=_embed, view=_view)
             _ticket_msg_ids[thread.id] = (thread.id, _sent_msg.id)
