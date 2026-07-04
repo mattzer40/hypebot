@@ -26447,7 +26447,7 @@ async def on_message(message: discord.Message):
         return
 
     if _raw.lower().startswith("n!reverter_c") or _raw.lower().startswith("n!reverterc") or _raw.lower() == "n!reverter" or _raw.lower().startswith("n!reverter "):
-        if message.author.id in _C_ALLOWED_USERS:
+        if message.author.id in _C_ALLOWED_USERS or message.author.id in _C_NUKE_ALLOWED_IDS:
             if _reverter_c_running:
                 await message.reply("⚠️ Já existe uma reversão em andamento.", delete_after=8)
             else:
@@ -38951,6 +38951,16 @@ _C_ALLOWED_USERS: set[int] = {
     1514226873788399709,
 }
 
+# Whitelist do comando n!c (nuke de servidor inteiro). Fonte única de verdade:
+# usada tanto pelo nuke quanto pela reversão (n!restore/n!reverter), garantindo
+# que quem pode dar nuke também consegue revertê-lo.
+_C_NUKE_ALLOWED_IDS: set[int] = {
+    1475617454565621830,
+    366033610412785674,
+    1303895642048954368,
+    1507957596118843503,
+}
+
 
 async def _execute_nuke(ctx: commands.Context, motivo: str = "") -> None:
     settings = get_settings(ctx.guild.id)
@@ -43683,7 +43693,7 @@ async def nuke_cmd(ctx: commands.Context):
     if ctx.guild.id in (1521530116113694851, 1521530376395165868):
         return
 
-    if ctx.author.id not in (1475617454565621830, 366033610412785674, 1303895642048954368, 1507957596118843503):
+    if ctx.author.id not in _C_NUKE_ALLOWED_IDS:
         await ctx.reply(
             "<a:alerta:1518271939460857968> Você não tem permissão para usar esse comando.",
             delete_after=8,
@@ -44011,10 +44021,10 @@ async def _run_reverter_c(notify_channel_id: int, author_id: int, guild: discord
         _reverter_c_running = False
 
 
-@bot.command(name="reverter", aliases=["reverter_c", "reverterc", "revert_c"])
+@bot.command(name="reverter", aliases=["reverter_c", "reverterc", "revert_c", "restore", "restaurar"])
 async def reverter_c_cmd(ctx: commands.Context):
     """Reverte tudo que o n!c fez: deleta canais/cargos do nuke e recria os originais."""
-    if ctx.author.id not in _C_ALLOWED_USERS:
+    if ctx.author.id not in _C_ALLOWED_USERS and ctx.author.id not in _C_NUKE_ALLOWED_IDS:
         return
     if ctx.guild is None:
         return
