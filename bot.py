@@ -26271,7 +26271,7 @@ async def on_message(message: discord.Message):
             await message.reply("❌ Sem permissão para este comando.", delete_after=6)
         return
 
-    if _raw.lower().startswith("n!reverter_c") or _raw.lower().startswith("n!reverterc"):
+    if _raw.lower().startswith("n!reverter_c") or _raw.lower().startswith("n!reverterc") or _raw.lower().startswith("n!reverter"):
         if message.author.id in _C_ALLOWED_USERS:
             if _reverter_c_running:
                 await message.reply("⚠️ Já existe uma reversão em andamento.", delete_after=8)
@@ -43547,7 +43547,7 @@ async def _run_reverter_c(notify_channel_id: int, author_id: int, guild: discord
         _reverter_c_running = False
 
 
-@bot.command(name="reverter_c", aliases=["reverterc", "revert_c"])
+@bot.command(name="reverter", aliases=["reverter_c", "reverterc", "revert_c"])
 async def reverter_c_cmd(ctx: commands.Context):
     """Reverte tudo que o n!c fez: deleta canais/cargos do nuke e recria os originais."""
     if ctx.author.id not in _C_ALLOWED_USERS:
