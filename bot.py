@@ -154,9 +154,11 @@ class _ChannelProxy:
 class GuildChannelSelect(discord.ui.Select):
     """
     Drop-in replacement para GuildChannelSelect.
-    Popula as opções com os canais de texto do guild alvo (cliente),
+    Popula as opções com os canais do guild alvo (cliente),
     não do servidor onde a interação ocorre.
-    API idêntica: aceita os mesmos kwargs de ChannelSelect (channel_types ignorado).
+    API idêntica: aceita os mesmos kwargs de ChannelSelect. channel_types
+    seleciona o tipo: [voice] → canais de voz, [category] → categorias,
+    caso contrário canais de texto.
     self.values[0].id / .mention / .name funcionam exatamente como no ChannelSelect.
     """
 
@@ -170,25 +172,31 @@ class GuildChannelSelect(discord.ui.Select):
             guild_id = _dev_guild_ctx.get(0) or _interaction_guild_ctx.get(0)
             guild    = bot.get_guild(guild_id) if guild_id else None
         if guild:
-            want_voice = channel_types and discord.ChannelType.voice in channel_types
-            if want_voice:
+            want_voice    = channel_types and discord.ChannelType.voice    in channel_types
+            want_category = channel_types and discord.ChannelType.category in channel_types
+            if want_category:
+                raw_chs = sorted(guild.categories, key=lambda c: c.position)
+            elif want_voice:
                 raw_chs = sorted(guild.voice_channels,
                                  key=lambda c: (c.category.position if c.category else 0, c.position))
             else:
                 raw_chs = sorted(guild.text_channels,
                                  key=lambda c: (c.category.position if c.category else 0, c.position))
             if raw_chs:
+                _icon = "📁" if want_category else ("🔊" if want_voice else "#")
                 options = [
                     discord.SelectOption(
-                        label=f"{'🔊' if want_voice else '#'} {ch.name}"[:100],
+                        label=f"{_icon} {ch.name}"[:100],
                         value=str(ch.id),
-                        description=(ch.category.name[:50] if ch.category else None),
+                        description=(None if want_category
+                                     else (ch.category.name[:50] if ch.category else None)),
                     )
                     for ch in raw_chs[:25]
                 ]
             else:
-                tipo = "voz" if want_voice else "texto"
-                options = [discord.SelectOption(label=f"Nenhum canal de {tipo} encontrado", value="0")]
+                tipo = "categoria" if want_category else ("voz" if want_voice else "texto")
+                _lbl = f"Nenhuma {tipo} encontrada" if want_category else f"Nenhum canal de {tipo} encontrado"
+                options = [discord.SelectOption(label=_lbl, value="0")]
         else:
             options = [discord.SelectOption(label="Sem servidor alvo — abra o painel do cliente", value="0")]
         # max_values não pode exceder o número de opções disponíveis
@@ -9073,7 +9081,7 @@ class TicketPainelLeiaView(discord.ui.View):
             menu_view = None
             if panel.get("menus_selecao") and panel.get("menu_opcoes"):
                 menu_view = _build_ticket_panel_menu_view(panel)
-            elif panel.get("usar_botao") and not panel.get("menus_selecao"):
+            elif panel.get("usar_botao"):
                 _pb_id    = str(panel.get("id", ""))
                 _pb_label = (panel.get("nome") or "Abrir Ticket")[:80]
                 _pb_btn   = discord.ui.Button(
@@ -9233,8 +9241,10 @@ class TicketPerManagerView(discord.ui.View):
         if not panel:
             await interaction.response.defer()
             return
-        # Sempre ativa o botão e abre o editor de embed/botão
+        # Sempre ativa o botão e abre o editor de embed/botão.
+        # Modo botão e modo menu são mutuamente exclusivos na renderização.
         panel["usar_botao"] = True
+        panel["menus_selecao"] = False
         save_settings_to_disk()
         preview_embed = build_ticket_embed_preview(panel, settings)
         editor_view = TicketEditEmbedView(self.author, self.panel_id)
@@ -9246,8 +9256,10 @@ class TicketPerManagerView(discord.ui.View):
         if not panel:
             await interaction.response.defer()
             return
-        # Garante que menus_selecao está ativo e abre o gerenciador
+        # Garante que menus_selecao está ativo e abre o gerenciador.
+        # Modo menu e modo botão são mutuamente exclusivos na renderização.
         panel["menus_selecao"] = True
+        panel["usar_botao"] = False
         save_settings_to_disk()
         embed = build_ticket_menu_selecao_embed(settings, panel)
         view  = TicketMenuSelecaoView(self.author, self.panel_id)
@@ -35711,7 +35723,7 @@ def build_panel_v2_layout(
                 custom_id=f"ticket_panel_menu_{panel_id}",
             )
             _ticket_select_row = discord.ui.ActionRow(ticket_select)
-    elif ticket_panel and ticket_panel.get("usar_botao") and not ticket_panel.get("menus_selecao"):
+    elif ticket_panel and ticket_panel.get("usar_botao"):
         panel_id = str(ticket_panel.get("id", ""))
         _btn_label = (ticket_panel.get("nome") or "Abrir Ticket")[:80]
         _ticket_btn = discord.ui.Button(
