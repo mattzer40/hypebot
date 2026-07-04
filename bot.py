@@ -43384,6 +43384,20 @@ async def on_interaction(interaction: discord.Interaction):
                 print(f"[ticket_menu] opcao=None panel_opcoes={[o.get('id') for o in (panel or {}).get('menu_opcoes', [])]}", flush=True)
                 return
             await _criar_ticket_thread(interaction, panel, opcao, settings, t)
+            # Reseta o select do painel pra permitir abrir outro ticket.
+            # O Discord NÃO re-dispara o select quando o valor escolhido não muda,
+            # então re-renderizamos a mensagem com um select "limpo" (sem seleção).
+            try:
+                _v2 = panel.get("embed_painel_v2")
+                if _v2 and _v2.get("blocks"):
+                    _reset_layout = build_panel_v2_layout(_v2, settings, ticket_panel=panel)
+                    await interaction.edit_original_response(view=_reset_layout)
+                else:
+                    _menu_view = _build_ticket_panel_menu_view(panel)
+                    if _menu_view is not None:
+                        await interaction.edit_original_response(view=_menu_view)
+            except Exception as _rst:
+                print(f"[ticket_menu] reset do select falhou: {_rst}", flush=True)
         except Exception as _te:
             print(f"[ticket_menu] ERRO: {type(_te).__name__}: {_te}", flush=True)
             if not interaction.response.is_done():
