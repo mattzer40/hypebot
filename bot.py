@@ -42703,11 +42703,12 @@ async def _criar_ticket_thread(
         except Exception as e2:
             print(f"[ticket_criado] fallback erro: {e2}", flush=True)
 
-    # Fecha o indicador de "pensando" sem exibir mensagem ao usuário
-    try:
-        await interaction.delete_original_response()
-    except Exception:
-        pass
+    # NÃO chamar delete_original_response() aqui: o defer dos handlers de painel
+    # (defer(ephemeral=True) em interação de componente) é do tipo type 6
+    # DEFERRED_MESSAGE_UPDATE — o "ephemeral" é ignorado e a "resposta original"
+    # passa a ser a PRÓPRIA mensagem do painel (a embed de suporte). Deletá-la
+    # apagava o painel após cada ticket criado. O defer já reconhece a interação,
+    # então nada mais é necessário no sucesso.
 
 
 @bot.event
