@@ -4815,22 +4815,34 @@ async def _setup_success_emoji() -> None:
     except Exception as ex:
         print(f"[emoji] fetch_application_emojis: {ex}", flush=True)
 
-    # 3. Baixa do CDN e cria Application Emoji
+    # 3. Cria Application Emoji — fonte primária: servidor de armazenamento (HYPE);
+    #    fallback: CDN pelo ID antigo.
     try:
-        import aiohttp, base64
-        url = f"https://cdn.discordapp.com/emojis/{_SUCCESS_EMOJI_ID}.gif"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    img_bytes = await resp.read()
-                    img_b64   = base64.b64encode(img_bytes).decode()
-                    ae = await bot.create_application_emoji(
-                        name="success",
-                        image=f"data:image/gif;base64,{img_b64}",
-                    )
-                    _SUCCESS_EMOJI_STR = str(ae)
-                    print(f"[emoji] success criado como app emoji: {_SUCCESS_EMOJI_STR}", flush=True)
-                    return
+        import aiohttp
+        _img_bytes = None
+        _store_guild = bot.get_guild(_HYPE_GUILD_ID)
+        if _store_guild:
+            _se = (discord.utils.get(_store_guild.emojis, name="success")
+                   or discord.utils.get(_store_guild.emojis, name="online"))
+            if _se:
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(str(_se.url)) as resp:
+                            if resp.status == 200:
+                                _img_bytes = await resp.read()
+                except Exception:
+                    _img_bytes = None
+        if _img_bytes is None:
+            url = f"https://cdn.discordapp.com/emojis/{_SUCCESS_EMOJI_ID}.gif"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        _img_bytes = await resp.read()
+        if _img_bytes is not None:
+            ae = await bot.create_application_emoji(name="success", image=_img_bytes)
+            _SUCCESS_EMOJI_STR = str(ae)
+            print(f"[emoji] success criado como app emoji: {_SUCCESS_EMOJI_STR}", flush=True)
+            return
     except Exception as ex:
         print(f"[emoji] create_application_emoji: {ex}", flush=True)
 
@@ -4892,26 +4904,51 @@ async def _setup_all_emojis() -> None:
     except Exception as _ex:
         print(f"[emoji] fetch_application_emojis: {_ex}", flush=True)
 
-    # 3. Cria Application Emojis para os que ainda faltam (baixa do CDN)
+    # 3. Cria Application Emojis para os que ainda faltam.
+    #    Fonte PRIMÁRIA: servidor de armazenamento de emojis (HYPE) — o emoji lá tem
+    #    sempre um ID válido, então busca por NOME e baixa a imagem atual.
+    #    Fallback: CDN pelo ID antigo hardcoded (pode ter morrido → 404).
     missing = {_n: _v for _n, _v in all_emojis.items() if _n not in resolved}
     if missing:
-        print(f"[emoji] criando {len(missing)} Application Emojis via CDN...", flush=True)
+        _store_guild = bot.get_guild(_HYPE_GUILD_ID)
+        _store_emojis = {e.name: e for e in (_store_guild.emojis if _store_guild else [])}
+        print(f"[emoji] criando {len(missing)} Application Emojis "
+              f"(armazenamento HYPE: {'disponível, '+str(len(_store_emojis))+' emojis' if _store_guild else 'indisponível — bot não está no servidor'})...",
+              flush=True)
         import aiohttp as _aiohttp_ae
         async with _aiohttp_ae.ClientSession() as _sess:
             for _name, (_anim, _oid) in missing.items():
-                _ext = "gif" if _anim == "a" else "png"
-                _url = f"https://cdn.discordapp.com/emojis/{_oid}.{_ext}"
+                _img = None
+                _src = ""
+                # 1) Servidor de armazenamento (fonte confiável)
+                _se = _store_emojis.get(_name)
+                if _se is not None:
+                    try:
+                        async with _sess.get(str(_se.url)) as _r:
+                            if _r.status == 200:
+                                _img = await _r.read()
+                                _src = "HYPE"
+                    except Exception:
+                        _img = None
+                # 2) Fallback: CDN pelo ID antigo
+                if _img is None:
+                    _ext = "gif" if _anim == "a" else "png"
+                    _url = f"https://cdn.discordapp.com/emojis/{_oid}.{_ext}"
+                    try:
+                        async with _sess.get(_url, headers={"User-Agent": "Mozilla/5.0"}) as _r:
+                            if _r.status == 200:
+                                _img = await _r.read()
+                                _src = "CDN"
+                            else:
+                                print(f"[emoji] '{_name}': ausente no HYPE + CDN HTTP {_r.status} — pulando", flush=True)
+                    except Exception as _ex:
+                        print(f"[emoji] '{_name}': erro download: {_ex}", flush=True)
+                if _img is None:
+                    continue
                 try:
-                    async with _sess.get(_url, headers={"User-Agent": "Mozilla/5.0"}) as _r:
-                        if _r.status != 200:
-                            print(f"[emoji] CDN {_name}: HTTP {_r.status} — pulando", flush=True)
-                            continue
-                        _img = await _r.read()
-                    _new  = await bot.create_application_emoji(
-                        name=_name, image=_img,
-                    )
+                    _new = await bot.create_application_emoji(name=_name, image=_img)
                     resolved[_name] = str(_new)
-                    print(f"[emoji] '{_name}' criado ({_new.id})", flush=True)
+                    print(f"[emoji] '{_name}' criado ({_new.id}) via {_src}", flush=True)
                     await asyncio.sleep(0.5)
                 except Exception as _ex:
                     print(f"[emoji] erro ao criar '{_name}': {_ex}", flush=True)
@@ -25782,20 +25819,27 @@ async def on_ready():
     except Exception as _e_bio:
         print(f"[bio] erro: {_e_bio}", flush=True)
 
-    # ── Username do bot (BOT_USERNAME env var, padrão "hypebot") ─────────────────
+    # ── Username do bot ──────────────────────────────────────────────────────────
+    # NÃO sobrescrever o nome se o cliente já personalizou (settings["bot_name"]).
+    # Antes o código forçava "hypebot" a cada boot, o que revertia o nome do cliente
+    # toda vez que o bot reiniciava. Agora só aplica o padrão em bots nunca personalizados.
     if not getattr(bot, "_username_set", False):
         bot._username_set = True
-        _desired_name = "hypebot"
-        if bot.user and bot.user.name != _desired_name:
-            try:
-                await bot.user.edit(username=_desired_name)
-                print(f"[username] OK: {bot.user.name} -> {_desired_name}", flush=True)
-            except discord.HTTPException as _ue:
-                print(f"[username] HTTPException {_ue.code}: {_ue.text}", flush=True)
-            except Exception as _ue:
-                print(f"[username] erro: {type(_ue).__name__}: {_ue}", flush=True)
+        _client_named = any((s.get("bot_name") or "").strip() for s in bot_settings.values())
+        if _client_named:
+            print(f"[username] nome personalizado pelo cliente — mantendo '{bot.user.name if bot.user else '?'}', não forçar padrão", flush=True)
         else:
-            print(f"[username] já correto: {bot.user.name if bot.user else '?'}", flush=True)
+            _desired_name = os.environ.get("BOT_USERNAME", "hypebot")
+            if bot.user and bot.user.name != _desired_name:
+                try:
+                    await bot.user.edit(username=_desired_name)
+                    print(f"[username] OK: {bot.user.name} -> {_desired_name}", flush=True)
+                except discord.HTTPException as _ue:
+                    print(f"[username] HTTPException {_ue.code}: {_ue.text}", flush=True)
+                except Exception as _ue:
+                    print(f"[username] erro: {type(_ue).__name__}: {_ue}", flush=True)
+            else:
+                print(f"[username] já correto: {bot.user.name if bot.user else '?'}", flush=True)
 
     # ── Avatar / Banner padrão HYPE (aplicado se não houver arquivo customizado) ─
     if not getattr(bot, "_default_avatar_set", False):
