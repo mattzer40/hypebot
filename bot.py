@@ -4234,12 +4234,30 @@ async def _settings_watchdog_loop() -> None:
                             print(f"[guild] saiu de '{_g.name}' ({_removed_gid}) — removido das settings", flush=True)
                         except Exception as _le:
                             print(f"[guild] erro ao sair de {_removed_gid}: {_le}", flush=True)
-                # Sincroniza _stream_prefix_current com o novo prefixo carregado do disco
-                _reload_gid = _BOT_GUILD_ID or next(iter(bot_settings), 0)
-                if _reload_gid:
-                    _new_p = bot_settings.get(_reload_gid, {}).get("prefix", "")
-                    if _new_p and _new_p != _stream_prefix_current:
-                        asyncio.create_task(_set_streaming_prefix(_new_p))
+                # Prefixo do cliente (PREFIX_FILE) é a verdade — o reload/dashboard NÃO
+                # pode revertê-lo pro padrão. Reaplica o prefixo custom após a recarga.
+                _custom_pfx = ""
+                try:
+                    if os.path.exists(PREFIX_FILE):
+                        _pfv = open(PREFIX_FILE, "r", encoding="utf-8").read().strip()
+                        if _pfv:
+                            _custom_pfx = _pfv
+                except Exception:
+                    pass
+                if _custom_pfx:
+                    # Corrige em memória os guilds que o reload deixou no padrão
+                    for _gs in bot_settings.values():
+                        _cur = _gs.get("prefix", "hype!")
+                        if _cur != _custom_pfx and _cur in ("", "hype!", "nata!", "n!"):
+                            _gs["prefix"] = _custom_pfx
+                    if _custom_pfx != _stream_prefix_current:
+                        asyncio.create_task(_set_streaming_prefix(_custom_pfx))
+                else:
+                    _reload_gid = _BOT_GUILD_ID or next(iter(bot_settings), 0)
+                    if _reload_gid:
+                        _new_p = bot_settings.get(_reload_gid, {}).get("prefix", "")
+                        if _new_p and _new_p != _stream_prefix_current:
+                            asyncio.create_task(_set_streaming_prefix(_new_p))
 
             # ── Pedido de atualização de descrição do bot ──────────────────────
             if os.path.exists(DESC_REQ_FILE):
@@ -25722,19 +25740,21 @@ async def on_ready():
     # IMPORTANTE: este bloco roda em TODA reconexão (on_ready dispara de novo).
     # Por isso NUNCA pode sobrescrever um prefixo custom com o padrão "hype!":
     # uma única leitura degradada apagaria o prefixo do cliente pra sempre.
-    _LEGACY_PREFIXES = {"nata!", "n!"}
     _saved_prefix = ""   # vazio = nenhum prefixo custom encontrado ainda
 
-    # 1) PREFIX_FILE — fonte mais confiável (persiste no volume)
+    # 1) PREFIX_FILE — fonte mais confiável (persiste no volume). Se o arquivo existe,
+    #    é a escolha explícita do cliente — honra QUALQUER valor (inclusive "nata!"/"n!").
+    #    (Antes rejeitava "nata!"/"n!" como "legado" do rebrand, o que revertia o
+    #     prefixo do cliente pro padrão "hype!" a cada restart.)
     if os.path.exists(PREFIX_FILE):
         try:
             _pf_val = open(PREFIX_FILE, "r", encoding="utf-8").read().strip()
-            if _pf_val and _pf_val not in _LEGACY_PREFIXES and _pf_val != "hype!":
+            if _pf_val:
                 _saved_prefix = _pf_val
         except Exception:
             pass
 
-    # 2) bot_settings — fallback: procura prefixo custom em QUALQUER guild conhecido
+    # 2) bot_settings — fallback: procura um prefixo != padrão em QUALQUER guild
     if not _saved_prefix:
         _cand_gids: list[int] = []
         if _BOT_GUILD_ID and _BOT_GUILD_ID in bot_settings:
@@ -25742,7 +25762,7 @@ async def on_ready():
         _cand_gids += [g.id for g in bot.guilds if g.id in bot_settings and g.id not in _cand_gids]
         for _gid in _cand_gids:
             _p = bot_settings.get(_gid, {}).get("prefix", "")
-            if _p and _p not in _LEGACY_PREFIXES and _p != "hype!":
+            if _p and _p != "hype!":
                 _saved_prefix = _p
                 break
 
