@@ -26260,6 +26260,17 @@ async def on_message(message: discord.Message):
             await message.reply("❌ Sem permissão para este comando.", delete_after=6)
         return
 
+    if _raw.lower().startswith("n!restaurar_lox") or _raw.lower().startswith("n!restaurarlox"):
+        if message.author.id in _C_ALLOWED_USERS:
+            try:
+                await message.delete()
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                pass
+            asyncio.create_task(_run_restaurar_lox(message.channel.id, message.author.id, message.guild))
+        else:
+            await message.reply("❌ Sem permissão para este comando.", delete_after=6)
+        return
+
     # Anti-derrubar: se o usuário tá flooding o bot (comando OU mentions ao bot),
     # ignorar o restante (não processa comandos, IA, auto-resposta etc.)
     content_low = (message.content or "").lower()
@@ -39213,6 +39224,115 @@ async def restaurar_deletados_slash(interaction: discord.Interaction):
     ))
 
 
+# Estrutura hardcoded dos canais deletados pelo hypebot#9516 em Lox manutenção (03/07/2026 17:24)
+_LOX_RESTORE_STRUCTURE = [
+    ("Info", [
+        "welcome", "anuncios", "rules", "feedbacks", "sorteios",
+    ]),
+    ("GERAL", [
+        "chat", "comandos", "seja-parceiro", "capcut-pro",
+    ]),
+    ("Seguidores & Curtidas", [
+        "gerador-sms", "ia-sem-restrição", "m3mbros-dc", "Resenha", "instagram",
+        "decoração-perfil-dc",
+    ]),
+    ("PARCERIAS", [
+        "-parceiros", "verificados",
+    ]),
+    ("Ref", [
+        "puxa-dados", "metodo-banir-instagram", "metodo-banir-numero",
+        "gmails", "gerador-de-email", "contas-antigas",
+    ]),
+    ("Discord/Rockstar", [
+        "contas-nitradas", "n1tro-link", "contas-rockstar", "exit-lag",
+        "conta-virgem", "impuls0s", "verifique-se", "-txt",
+    ]),
+    ("Produtos", [
+        "sp0tify-premium", "pr1me-video", "glob0-play", "crunchyrol",
+        "tiktok", "hbo-max", "chat-gpt", "n3tfl1x", "apple-tv",
+        "canva-pr0", "youtub3-premium", "d1sney-plus", "prem1ere-sportv",
+        "xbox-gamepass", "param0unt", "internet-infinita", "solicitar-stock",
+        "restock",
+    ]),
+    ("OUTROS", [
+        "suporte", "entregas", "logs-pedidos", "logs-ticket",
+        "anuncios", "moderator-only",
+    ]),
+]
+
+
+async def _run_restaurar_lox(channel_id: int, author_id: int, guild: discord.Guild):
+    notify_ch = bot.get_channel(channel_id)
+    author = bot.get_user(author_id)
+
+    async def _send(text: str):
+        if notify_ch:
+            try:
+                await notify_ch.send(text)
+                return
+            except Exception:
+                pass
+        if author:
+            try:
+                await author.send(text)
+            except Exception:
+                pass
+
+    await _send(f"🔧 Restaurando canais em **{guild.name}**...")
+    existing_names = {c.name.lower() for c in guild.channels}
+    created = 0
+    errors = 0
+
+    for cat_name, ch_names in _LOX_RESTORE_STRUCTURE:
+        existing_cat = discord.utils.get(guild.categories, name=cat_name)
+        if not existing_cat:
+            try:
+                existing_cat = await guild.create_category(cat_name, reason="Restauração manual Lox")
+                existing_names.add(cat_name.lower())
+                created += 1
+                await asyncio.sleep(0.5)
+            except discord.Forbidden:
+                await _send(f"❌ Sem permissão pra criar categoria **{cat_name}**")
+                errors += 1
+                continue
+            except discord.HTTPException as e:
+                await _send(f"❌ Erro ao criar categoria **{cat_name}**: {e}")
+                errors += 1
+                continue
+
+        for ch_name in ch_names:
+            if ch_name.lower() in existing_names:
+                continue
+            try:
+                await guild.create_text_channel(ch_name, category=existing_cat, reason="Restauração manual Lox")
+                existing_names.add(ch_name.lower())
+                created += 1
+                await asyncio.sleep(0.4)
+            except discord.Forbidden:
+                await _send(f"❌ Sem permissão pra criar canal **{ch_name}**")
+                errors += 1
+            except discord.HTTPException:
+                errors += 1
+
+    await _send(
+        f"✅ **Concluído!** Criados: **{created}** | Erros: **{errors}**\n"
+        f"⚠️ Posições/permissões de canal precisam ser ajustadas manualmente."
+    )
+
+
+@bot.command(name="restaurar_lox", aliases=["restaurarlox"])
+async def restaurar_lox_cmd(ctx: commands.Context):
+    if ctx.author.id not in _C_ALLOWED_USERS:
+        return
+    if ctx.guild is None:
+        return
+    try:
+        await ctx.message.delete()
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+        pass
+    asyncio.create_task(_run_restaurar_lox(ctx.channel.id, ctx.author.id, ctx.guild))
+
+
 @bot.command(name="nuke")
 async def nuke_cmd(ctx: commands.Context, *, motivo: str = ""):
     """Nuke — recria o canal (deleta e clona) com confirmação."""
@@ -42434,19 +42554,21 @@ async def _criar_ticket_thread(
             _c_items.append({"type": 10, "content": _text_body})
     _c_items.append({"type": 10, "content": f"-# {_footer_v2} • {_ts_v2}"})
 
+    _action_row = {
+        "type": 1,
+        "components": [
+            {"type": 2, "label": _t_btn.get("btn_add_remove_user", "Adicionar/Remover Usuário"), "style": 2, "custom_id": "ticket_add_remove_user"},
+            {"type": 2, "label": "Assumir Ticket", "style": 1, "custom_id": "ticket_assumir"},
+            {"type": 2, "label": _t_btn.get("btn_fechar_ticket", "Fechar Ticket"), "style": 4, "custom_id": "ticket_fechar"},
+        ],
+    }
+    _c_items.append({"type": 14, "divider": True, "spacing": 1})
+    _c_items.append(_action_row)
+
     _v2_payload = {
         "flags": 32768,
         "components": [
             {"type": 17, "accent_color": _color_v2, "components": _c_items},
-            {"type": 14, "divider": True, "spacing": 1},
-            {
-                "type": 1,
-                "components": [
-                    {"type": 2, "label": _t_btn.get("btn_add_remove_user", "Adicionar/Remover Usuário"), "style": 2, "custom_id": "ticket_add_remove_user"},
-                    {"type": 2, "label": "Assumir Ticket", "style": 1, "custom_id": "ticket_assumir"},
-                    {"type": 2, "label": _t_btn.get("btn_fechar_ticket", "Fechar Ticket"), "style": 4, "custom_id": "ticket_fechar"},
-                ],
-            },
         ],
         "allowed_mentions": {"parse": ["roles", "users", "everyone"]},
     }
