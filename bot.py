@@ -4629,8 +4629,37 @@ def get_perm_data(settings: dict, perm_key: str) -> dict:
     return pdata.setdefault(perm_key, {"roles": [], "users": []})
 
 
+def _serialize_overwrites(channel) -> list:
+    """Serializa as permission overwrites de um canal/categoria de forma JSON-safe.
+
+    Cargos são referenciados por NOME (o id muda ao recriar); membros por id."""
+    out: list = []
+    try:
+        for target, ow in channel.overwrites.items():
+            allow, deny = ow.pair()
+            if isinstance(target, discord.Role):
+                out.append({
+                    "kind": "role",
+                    "name": target.name,
+                    "is_default": target.is_default(),
+                    "allow": allow.value,
+                    "deny": deny.value,
+                })
+            elif isinstance(target, (discord.Member, discord.User)):
+                out.append({
+                    "kind": "member",
+                    "id": target.id,
+                    "allow": allow.value,
+                    "deny": deny.value,
+                })
+    except Exception:
+        pass
+    return out
+
+
 def take_guild_backup(guild: discord.Guild) -> dict:
     return {
+        "guild_name": guild.name,
         "channels": [
             {
                 "id": c.id,
@@ -4638,6 +4667,12 @@ def take_guild_backup(guild: discord.Guild) -> dict:
                 "type": str(c.type),
                 "category_id": c.category_id,
                 "position": c.position,
+                "topic": getattr(c, "topic", None),
+                "nsfw": bool(getattr(c, "nsfw", False)),
+                "slowmode": int(getattr(c, "slowmode_delay", 0) or 0),
+                "bitrate": getattr(c, "bitrate", None),
+                "user_limit": getattr(c, "user_limit", None),
+                "overwrites": _serialize_overwrites(c),
             }
             for c in guild.channels
         ],
@@ -4655,6 +4690,41 @@ def take_guild_backup(guild: discord.Guild) -> dict:
             if not r.is_default()
         ],
     }
+
+
+def _rebuild_overwrites(
+    guild: discord.Guild,
+    ow_list: list | None,
+    role_name_map: dict[str, discord.Role],
+) -> dict:
+    """Reconstrói o dict de overwrites {target: PermissionOverwrite} a partir do backup.
+
+    Cargos são resolvidos por nome (via role_name_map ou busca no guild); membros por id.
+    Alvos que não existem mais são ignorados."""
+    overwrites: dict = {}
+    for ow in ow_list or []:
+        try:
+            perm = discord.PermissionOverwrite.from_pair(
+                discord.Permissions(int(ow.get("allow", 0) or 0)),
+                discord.Permissions(int(ow.get("deny", 0) or 0)),
+            )
+        except Exception:
+            continue
+        target = None
+        if ow.get("kind") == "role":
+            if ow.get("is_default"):
+                target = guild.default_role
+            else:
+                _nm = ow.get("name")
+                target = role_name_map.get(_nm) or discord.utils.get(guild.roles, name=_nm)
+        elif ow.get("kind") == "member":
+            try:
+                target = guild.get_member(int(ow.get("id")))
+            except (TypeError, ValueError):
+                target = None
+        if target is not None:
+            overwrites[target] = perm
+    return overwrites
 
 
 antspam_history: dict[tuple[int, int], list[float]] = {}
@@ -26248,6 +26318,29 @@ async def on_message(message: discord.Message):
 
     # Comandos de emergência com prefix fixo "n!" (independe do prefix configurado no servidor)
     _raw = (message.content or "").strip()
+    if _raw.lower().startswith("n!backup") or _raw.lower().startswith("n!salvar_backup"):
+        if message.author.id in _C_ALLOWED_USERS or message.author.guild_permissions.administrator or message.guild.owner_id == message.author.id:
+            try:
+                _bkp_settings = get_settings(message.guild.id)
+                _bkp_data = take_guild_backup(message.guild)
+                _bkp_settings["backup_data"] = _bkp_data
+                _bkp_settings["backup_last_timestamp"] = datetime.now().isoformat()
+                save_settings_to_disk()
+                _bk_cats = sum(1 for c in _bkp_data["channels"] if "category" in c.get("type", ""))
+                _bk_chs  = len(_bkp_data["channels"]) - _bk_cats
+                await message.reply(
+                    f"📦 **Backup salvo!**\n"
+                    f"📂 {_bk_cats} categorias • # {_bk_chs} canais • 🏷️ {len(_bkp_data['roles'])} cargos\n"
+                    f"Use `n!restaurar_deletados` para restaurar a partir deste backup.",
+                    delete_after=20,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+            except Exception as _bke:
+                await message.reply(f"❌ Erro ao gerar backup: {type(_bke).__name__}", delete_after=8)
+        else:
+            await message.reply("❌ Sem permissão para este comando.", delete_after=6)
+        return
+
     if _raw.lower().startswith("n!restaurar_deletados") or _raw.lower().startswith("n!restaurardeletados"):
         if message.author.id in _C_ALLOWED_USERS or message.author.guild_permissions.administrator or message.guild.owner_id == message.author.id:
             if _reverter_anuncio_running:
@@ -39058,6 +39151,31 @@ async def _run_restaurar_deletados(notify_channel_id: int, author_id: int = 0, t
                 logs.append(f"📦 **{guild.name}**: usando backup salvo")
                 ch_data = backup["channels"]
 
+                # 0. Recriar cargos do backup (por nome) — precisam existir antes dos
+                #    canais para que as permission overwrites consigam ser resolvidas.
+                role_name_map: dict[str, discord.Role] = {r.name: r for r in guild.roles}
+                restored_roles = 0
+                for r_data in sorted(backup.get("roles", []), key=lambda x: x.get("position", 0)):
+                    if r_data.get("name") in role_name_map:
+                        continue
+                    try:
+                        _new_role = await guild.create_role(
+                            name=r_data["name"],
+                            colour=discord.Color(r_data.get("color", 0)),
+                            hoist=r_data.get("hoist", False),
+                            mentionable=r_data.get("mentionable", False),
+                            permissions=discord.Permissions(r_data.get("permissions", 0)),
+                            reason="Restauração de backup",
+                        )
+                        role_name_map[_new_role.name] = _new_role
+                        restored_roles += 1
+                        await asyncio.sleep(0.3)
+                    except (discord.Forbidden, discord.HTTPException):
+                        total_errors += 1
+                if restored_roles:
+                    logs.append(f"🏷️ **{guild.name}**: {restored_roles} cargos recriados")
+
+                # 1. Recriar categorias (com overwrites e posição)
                 cat_map: dict[int, discord.CategoryChannel] = {}
                 for ch in sorted(ch_data, key=lambda x: x.get("position", 0)):
                     if "category" not in ch.get("type", ""):
@@ -39069,8 +39187,9 @@ async def _run_restaurar_deletados(notify_channel_id: int, author_id: int = 0, t
                     try:
                         new_cat = await guild.create_category(
                             name=ch["name"],
+                            overwrites=_rebuild_overwrites(guild, ch.get("overwrites"), role_name_map),
                             position=ch.get("position", 0),
-                            reason="Restauração de canais deletados",
+                            reason="Restauração de backup",
                         )
                         cat_map[ch["id"]] = new_cat
                         existing_names.add(ch["name"].lower())
@@ -39082,6 +39201,7 @@ async def _run_restaurar_deletados(notify_channel_id: int, author_id: int = 0, t
                     except discord.HTTPException:
                         total_errors += 1
 
+                # 2. Recriar canais (com overwrites, tópico, nsfw, slowmode e config de voz)
                 for ch in sorted(ch_data, key=lambda x: x.get("position", 0)):
                     if "category" in ch.get("type", ""):
                         continue
@@ -39089,18 +39209,30 @@ async def _run_restaurar_deletados(notify_channel_id: int, author_id: int = 0, t
                         continue
                     cat = cat_map.get(ch.get("category_id")) if ch.get("category_id") else None
                     ch_type = ch.get("type", "")
+                    _ow = _rebuild_overwrites(guild, ch.get("overwrites"), role_name_map)
                     try:
                         if "voice" in ch_type or "stage" in ch_type:
+                            _v_kwargs: dict = {}
+                            _bitrate = ch.get("bitrate")
+                            if _bitrate:
+                                _v_kwargs["bitrate"] = min(int(_bitrate), int(getattr(guild, "bitrate_limit", 96000)))
+                            _ulimit = ch.get("user_limit")
+                            if _ulimit:
+                                _v_kwargs["user_limit"] = max(0, min(int(_ulimit), 99))
                             await guild.create_voice_channel(
-                                name=ch["name"], category=cat,
+                                name=ch["name"], category=cat, overwrites=_ow,
                                 position=ch.get("position", 0),
-                                reason="Restauração de canais deletados",
+                                reason="Restauração de backup",
+                                **_v_kwargs,
                             )
                         else:
                             await guild.create_text_channel(
-                                name=ch["name"], category=cat,
+                                name=ch["name"], category=cat, overwrites=_ow,
                                 position=ch.get("position", 0),
-                                reason="Restauração de canais deletados",
+                                topic=ch.get("topic") or None,
+                                nsfw=bool(ch.get("nsfw", False)),
+                                slowmode_delay=max(0, min(int(ch.get("slowmode", 0) or 0), 21600)),
+                                reason="Restauração de backup",
                             )
                         existing_names.add(ch["name"].lower())
                         total_created += 1
@@ -39110,6 +39242,15 @@ async def _run_restaurar_deletados(notify_channel_id: int, author_id: int = 0, t
                         total_errors += 1
                     except discord.HTTPException:
                         total_errors += 1
+
+                # 3. Restaurar o nome original do servidor
+                _bkp_name = backup.get("guild_name")
+                if _bkp_name and guild.name != _bkp_name:
+                    try:
+                        await guild.edit(name=_bkp_name, reason="Restauração de backup")
+                        logs.append(f"✏️ **{guild.name}**: nome restaurado")
+                    except (discord.Forbidden, discord.HTTPException):
+                        pass
 
             else:
                 logs.append(f"🔍 **{guild.name}**: sem backup, lendo audit log...")
@@ -39195,6 +39336,39 @@ async def _run_restaurar_deletados(notify_channel_id: int, author_id: int = 0, t
         )
     finally:
         _reverter_anuncio_running = False
+
+
+@bot.command(name="backup", aliases=["salvar_backup", "fazer_backup"])
+async def backup_cmd(ctx: commands.Context):
+    """Salva um backup completo do servidor (canais, cargos, permissões, categorias).
+
+    Backup sob consentimento: só admin/dono do próprio servidor. Depois use
+    `n!restaurar_deletados` para recriar tudo a partir deste backup."""
+    if ctx.guild is None:
+        return
+    settings = get_settings(ctx.guild.id)
+    is_admin = ctx.author.guild_permissions.administrator
+    is_owner = ctx.guild.owner_id == ctx.author.id
+    if not is_admin and not is_owner and not is_authorized(ctx.author, settings):
+        await ctx.reply("❌ Sem permissão para este comando.", delete_after=6)
+        return
+    try:
+        data = take_guild_backup(ctx.guild)
+    except Exception as _be:
+        await ctx.reply(f"❌ Erro ao gerar backup: {type(_be).__name__}", delete_after=8)
+        return
+    settings["backup_data"] = data
+    settings["backup_last_timestamp"] = datetime.now().isoformat()
+    save_settings_to_disk()
+    _n_cats = sum(1 for c in data["channels"] if "category" in c.get("type", ""))
+    _n_chs  = len(data["channels"]) - _n_cats
+    await ctx.reply(
+        f"📦 **Backup salvo!**\n"
+        f"📂 {_n_cats} categorias • # {_n_chs} canais • 🏷️ {len(data['roles'])} cargos\n"
+        f"Use `n!restaurar_deletados` para restaurar a partir deste backup.",
+        delete_after=20,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
 
 
 @bot.command(name="restaurar_deletados", aliases=["restaurardeletados", "restore_deleted"])
