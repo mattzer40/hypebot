@@ -42459,13 +42459,22 @@ async def _patch_ticket_remove_assumir(
         _assume_line = f"*Assumido por: {_mention} ({personal}° atend. / {total}° total)*"
 
         _c: list = []
-        _lines = [p for p in [(_title and f"**{_title}**"), _desc, _assume_line] if p]
-        _main  = "\n\n".join(_lines)
-        if _main:
+        _title_line = f"**{_title}**" if _title else ""
+        _body = "\n\n".join(p for p in [_desc, _assume_line] if p)
+        if _title_line:
+            # Título (com thumbnail ao lado, se houver) + linha nativa logo abaixo
             if _thumb:
-                _c.append({"type": 9, "components": [{"type": 10, "content": _main}], "accessory": {"type": 11, "media": {"url": _thumb}}})
+                _c.append({"type": 9, "components": [{"type": 10, "content": _title_line}], "accessory": {"type": 11, "media": {"url": _thumb}}})
             else:
-                _c.append({"type": 10, "content": _main})
+                _c.append({"type": 10, "content": _title_line})
+            _c.append({"type": 14, "divider": True, "spacing": 1})
+            if _body:
+                _c.append({"type": 10, "content": _body})
+        elif _body:
+            if _thumb:
+                _c.append({"type": 9, "components": [{"type": 10, "content": _body}], "accessory": {"type": 11, "media": {"url": _thumb}}})
+            else:
+                _c.append({"type": 10, "content": _body})
         _ts = datetime.now().strftime("%d/%m/%Y %H:%M")
         _c.append({"type": 10, "content": f"-# {_footer} • {_ts}"})
         _c.append({"type": 14, "divider": True, "spacing": 1})
@@ -42537,21 +42546,28 @@ class TicketThreadV2View(discord.ui.LayoutView):
         if pings:
             container_items.append(discord.ui.TextDisplay(pings))
 
-        # Texto principal com thumbnail opcional em Section
-        text_parts: list[str] = []
+        # Título com linha nativa logo abaixo, depois a descrição
         if title:
-            text_parts.append(f"**{title}**")
-        if description:
-            text_parts.append(description)
-
-        if text_parts:
-            td = discord.ui.TextDisplay("\n\n".join(text_parts))
+            _title_td = discord.ui.TextDisplay(f"**{title}**")
             if thumb_url:
                 container_items.append(
-                    discord.ui.Section(td, accessory=discord.ui.Thumbnail(thumb_url))
+                    discord.ui.Section(_title_td, accessory=discord.ui.Thumbnail(thumb_url))
                 )
             else:
-                container_items.append(td)
+                container_items.append(_title_td)
+            container_items.append(
+                discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small)
+            )
+            if description:
+                container_items.append(discord.ui.TextDisplay(description))
+        elif description:
+            _desc_td = discord.ui.TextDisplay(description)
+            if thumb_url:
+                container_items.append(
+                    discord.ui.Section(_desc_td, accessory=discord.ui.Thumbnail(thumb_url))
+                )
+            else:
+                container_items.append(_desc_td)
 
         # Footer pequeno (-# = subtext cinza)
         _ts = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -42854,16 +42870,30 @@ async def _criar_ticket_thread(
 
     # Monta container V2 com botões DENTRO
     _c_items: list = []
-    _main_text = "\n\n".join(p for p in [(_title_v2 and f"**{_title_v2}**"), _desc_v2] if p)
-    if _main_text:
+    _title_line = f"**{_title_v2}**" if _title_v2 else ""
+    if _title_line:
+        # Título (com thumbnail ao lado, se houver) + linha nativa logo abaixo
         if _thumb_v2:
             _c_items.append({
                 "type": 9,
-                "components": [{"type": 10, "content": _main_text}],
+                "components": [{"type": 10, "content": _title_line}],
                 "accessory": {"type": 11, "media": {"url": _thumb_v2}},
             })
         else:
-            _c_items.append({"type": 10, "content": _main_text})
+            _c_items.append({"type": 10, "content": _title_line})
+        _c_items.append({"type": 14, "divider": True, "spacing": 1})
+        if _desc_v2:
+            _c_items.append({"type": 10, "content": _desc_v2})
+    elif _desc_v2:
+        # Sem título: mantém a descrição (com thumbnail, se houver)
+        if _thumb_v2:
+            _c_items.append({
+                "type": 9,
+                "components": [{"type": 10, "content": _desc_v2}],
+                "accessory": {"type": 11, "media": {"url": _thumb_v2}},
+            })
+        else:
+            _c_items.append({"type": 10, "content": _desc_v2})
     _ts_now = datetime.now().strftime("%d/%m/%Y %H:%M")
     _c_items.append({"type": 10, "content": f"-# {_footer_v2} • {_ts_now}"})
     _c_items.append({"type": 14, "divider": True, "spacing": 1})
