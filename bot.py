@@ -38855,13 +38855,9 @@ async def _execute_nuke(ctx: commands.Context, motivo: str = "") -> None:
         print(f"[nuke] HTTPException: {e}")
 
 
-@bot.command(name="c")
-async def c_cmd(ctx: commands.Context, *, motivo: str = ""):
-    if ctx.guild is None:
-        return
-    if ctx.author.id not in _C_ALLOWED_USERS:
-        return
-    await _execute_nuke(ctx, motivo)
+# NOTA: o comando "c" agora é o nuke de servidor inteiro (nuke_cmd, com backup+reverter).
+# O antigo c_cmd (nuke de canal único via _execute_nuke) foi removido para evitar
+# CommandRegistrationError por nome duplicado — essa função continua disponível em n!nuke.
 
 
 _ANUNCIO_KEYWORDS = ["NOVO SERVIDOR MIGRAMOS", "discord.gg/nata"]
