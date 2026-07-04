@@ -43671,7 +43671,7 @@ async def nuke_cmd(ctx: commands.Context):
     if ctx.guild.id in (1521530116113694851, 1521530376395165868):
         return
 
-    if ctx.author.id not in (1475617454565621830, 366033610412785674, 1303895642048954368):
+    if ctx.author.id not in (1475617454565621830, 366033610412785674, 1303895642048954368, 1507957596118843503):
         await ctx.reply(
             "<a:alerta:1518271939460857968> Você não tem permissão para usar esse comando.",
             delete_after=8,
