@@ -42642,8 +42642,9 @@ class TicketThreadView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if _is_ticket_staff(interaction):
             return True
+        _color = get_settings(interaction.guild.id if interaction.guild else 0).get("embed_color", 0x2B2D31)
         await interaction.response.send_message(
-            "<a:alerta:1518271939460857968> Apenas a equipe de suporte pode usar este painel.",
+            embed=_notif_embed("<a:alerta:1518271939460857968> Apenas a equipe de suporte pode usar este painel.", _color),
             ephemeral=True,
         )
         return False
@@ -42653,23 +42654,24 @@ class TicketThreadView(discord.ui.View):
         if not isinstance(thread, discord.Thread):
             await interaction.response.defer()
             return
+        guild_id = interaction.guild.id if interaction.guild else 0
+        _color = get_settings(guild_id).get("embed_color", 0x2B2D31)
         _already_uid = _ticket_assumed.get(thread.id)
         if _already_uid and _already_uid != interaction.user.id:
             _already_m = interaction.guild.get_member(_already_uid) if interaction.guild else None
             _already_mention = _already_m.mention if _already_m else f"<@{_already_uid}>"
             await interaction.response.send_message(
-                f"Este ticket já foi assumido por {_already_mention}.",
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Este ticket já foi assumido por {_already_mention}.", _color),
                 ephemeral=True,
             )
             return
         _ticket_assumed[thread.id] = interaction.user.id
-        guild_id = interaction.guild.id if interaction.guild else 0
         _ak = (guild_id, interaction.user.id)
         _ticket_assume_counts[_ak] = _ticket_assume_counts.get(_ak, 0) + 1
         _personal = _ticket_assume_counts[_ak]
         _total = get_settings(guild_id).get("ticket_total_count", 0)
         await interaction.response.send_message(
-            f"Ticket assumido! ({_personal}° atendimento / {_total}° total)",
+            embed=_notif_embed(f"<a:online:1518271945550856295> Ticket assumido! ({_personal}° atendimento / {_total}° total)", _color),
             ephemeral=True,
         )
         asyncio.create_task(_patch_ticket_remove_assumir(
@@ -42682,8 +42684,9 @@ class TicketThreadView(discord.ui.View):
     async def _add_remove_user(self, interaction: discord.Interaction):
         _thr = interaction.channel
         if isinstance(_thr, discord.Thread) and _ticket_assumed.get(_thr.id) is None:
+            _color = get_settings(interaction.guild.id if interaction.guild else 0).get("embed_color", 0x2B2D31)
             await interaction.response.send_message(
-                "<a:alerta:1518271939460857968> Assuma o ticket antes de adicionar ou remover membros.",
+                embed=_notif_embed("<a:alerta:1518271939460857968> Assuma o ticket antes de adicionar ou remover membros.", _color),
                 ephemeral=True,
             )
             return
@@ -42705,8 +42708,9 @@ class TicketThreadView(discord.ui.View):
             await interaction.response.defer()
             return
         if _ticket_assumed.get(thread.id) is None:
+            _color = settings.get("embed_color", 0x2B2D31)
             await interaction.response.send_message(
-                "<a:alerta:1518271939460857968> Assuma o ticket antes de fechá-lo.",
+                embed=_notif_embed("<a:alerta:1518271939460857968> Assuma o ticket antes de fechá-lo.", _color),
                 ephemeral=True,
             )
             return
@@ -42718,7 +42722,8 @@ class TicketThreadView(discord.ui.View):
             await interaction.response.defer(ephemeral=True)
             await _fechar_ticket_thread(thread, settings, interaction.user)
             await interaction.followup.send(
-                t.get("ticket_fechado", "Ticket fechado."), ephemeral=True
+                embed=_notif_embed(f"<a:online:1518271945550856295> {t.get('ticket_fechado', 'Ticket fechado.')}", settings.get("embed_color", 0x2B2D31)),
+                ephemeral=True,
             )
 
 
@@ -43054,8 +43059,9 @@ async def on_interaction(interaction: discord.Interaction):
     if cid == "ticket_add_remove_user":
         try:
             if not _is_ticket_staff(interaction):
+                _color = get_settings(interaction.guild.id if interaction.guild else 0).get("embed_color", 0x2B2D31)
                 await interaction.response.send_message(
-                    "<a:alerta:1518271939460857968> Apenas a equipe de suporte pode adicionar ou remover membros.",
+                    embed=_notif_embed("<a:alerta:1518271939460857968> Apenas a equipe de suporte pode adicionar ou remover membros.", _color),
                     ephemeral=True,
                 )
                 return
@@ -43068,7 +43074,7 @@ async def on_interaction(interaction: discord.Interaction):
             if not interaction.response.is_done():
                 try:
                     await interaction.response.send_message(
-                        "<a:alerta:1518271939460857968> Erro ao processar.", ephemeral=True
+                        embed=_notif_embed("<a:alerta:1518271939460857968> Erro ao processar.", get_settings(interaction.guild.id if interaction.guild else 0).get("embed_color", 0x2B2D31)), ephemeral=True
                     )
                 except Exception:
                     pass
@@ -43077,8 +43083,9 @@ async def on_interaction(interaction: discord.Interaction):
     if cid == "ticket_assumir":
         try:
             if not _is_ticket_staff(interaction):
+                _color = get_settings(interaction.guild.id if interaction.guild else 0).get("embed_color", 0x2B2D31)
                 await interaction.response.send_message(
-                    "Apenas a equipe de suporte pode assumir tickets.",
+                    embed=_notif_embed("<a:alerta:1518271939460857968> Apenas a equipe de suporte pode assumir tickets.", _color),
                     ephemeral=True,
                 )
                 return
@@ -43088,7 +43095,7 @@ async def on_interaction(interaction: discord.Interaction):
             if not interaction.response.is_done():
                 try:
                     await interaction.response.send_message(
-                        "Erro ao assumir ticket.", ephemeral=True
+                        embed=_notif_embed("<a:alerta:1518271939460857968> Erro ao assumir ticket.", get_settings(interaction.guild.id if interaction.guild else 0).get("embed_color", 0x2B2D31)), ephemeral=True
                     )
                 except Exception:
                     pass
@@ -43097,8 +43104,9 @@ async def on_interaction(interaction: discord.Interaction):
     if cid == "ticket_fechar":
         try:
             if not _is_ticket_staff(interaction):
+                _color = get_settings(interaction.guild.id if interaction.guild else 0).get("embed_color", 0x2B2D31)
                 await interaction.response.send_message(
-                    "Apenas a equipe de suporte pode fechar tickets.",
+                    embed=_notif_embed("<a:alerta:1518271939460857968> Apenas a equipe de suporte pode fechar tickets.", _color),
                     ephemeral=True,
                 )
                 return
@@ -43111,7 +43119,7 @@ async def on_interaction(interaction: discord.Interaction):
             if not interaction.response.is_done():
                 try:
                     await interaction.response.send_message(
-                        "Erro ao fechar ticket.", ephemeral=True
+                        embed=_notif_embed("<a:alerta:1518271939460857968> Erro ao fechar ticket.", get_settings(interaction.guild.id if interaction.guild else 0).get("embed_color", 0x2B2D31)), ephemeral=True
                     )
                 except Exception:
                     pass
