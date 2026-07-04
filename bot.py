@@ -25611,48 +25611,54 @@ async def on_ready():
             print(f"[desc] erro ao ler descrição salva: {_dse}", flush=True)
 
     # ── Restaurar prefixo persistido ──────────────────────────────────────────
-    # Prioridade: PREFIX_FILE (/data persistente) → bot_settings → "n!"
-    _saved_prefix = "hype!"
+    # Prioridade: PREFIX_FILE (/data persistente) → bot_settings → "hype!"
+    # IMPORTANTE: este bloco roda em TODA reconexão (on_ready dispara de novo).
+    # Por isso NUNCA pode sobrescrever um prefixo custom com o padrão "hype!":
+    # uma única leitura degradada apagaria o prefixo do cliente pra sempre.
+    _LEGACY_PREFIXES = {"nata!", "n!"}
+    _saved_prefix = ""   # vazio = nenhum prefixo custom encontrado ainda
 
-    # 1) PREFIX_FILE é atualizado sempre que o cliente muda o prefixo — fonte mais confiável
+    # 1) PREFIX_FILE — fonte mais confiável (persiste no volume)
     if os.path.exists(PREFIX_FILE):
         try:
             _pf_val = open(PREFIX_FILE, "r", encoding="utf-8").read().strip()
-            # "nata!" e "n!" eram o antigo padrão hardcoded — migrar para o novo padrão "hype!"
-            if _pf_val and _pf_val not in {"nata!", "n!"}:
+            if _pf_val and _pf_val not in _LEGACY_PREFIXES and _pf_val != "hype!":
                 _saved_prefix = _pf_val
         except Exception:
             pass
 
-    # 2) Se PREFIX_FILE tem "n!" ou não existe, tenta bot_settings como fallback
-    _LEGACY_PREFIXES = {"nata!", "n!"}
-    if _saved_prefix == "hype!":
+    # 2) bot_settings — fallback: procura prefixo custom em QUALQUER guild conhecido
+    if not _saved_prefix:
+        _cand_gids: list[int] = []
         if _BOT_GUILD_ID and _BOT_GUILD_ID in bot_settings:
-            _p = bot_settings[_BOT_GUILD_ID].get("prefix", "hype!")
+            _cand_gids.append(_BOT_GUILD_ID)
+        _cand_gids += [g.id for g in bot.guilds if g.id in bot_settings and g.id not in _cand_gids]
+        for _gid in _cand_gids:
+            _p = bot_settings.get(_gid, {}).get("prefix", "")
             if _p and _p not in _LEGACY_PREFIXES and _p != "hype!":
                 _saved_prefix = _p
+                break
+
+    # Determina se achamos um prefixo custom confiável
+    _found_custom = bool(_saved_prefix)
+    if not _found_custom:
+        _saved_prefix = "hype!"
+
+    # Só grava/sincroniza quando há prefixo custom — NUNCA sobrescreve com o padrão.
+    if _found_custom:
+        try:
+            with open(PREFIX_FILE, "w", encoding="utf-8") as _pf:
+                _pf.write(_saved_prefix)
+        except Exception:
+            pass
+        if _BOT_GUILD_ID and _BOT_GUILD_ID in bot_settings:
+            bot_settings[_BOT_GUILD_ID]["prefix"] = _saved_prefix
         elif bot.guilds:
             for _g in bot.guilds:
                 if _g.id in bot_settings:
-                    _p = bot_settings[_g.id].get("prefix", "hype!")
-                    if _p and _p not in _LEGACY_PREFIXES and _p != "hype!":
-                        _saved_prefix = _p
-                        break
-
-    # Salva no PREFIX_FILE para próximos restarts e sincroniza bot_settings
-    try:
-        with open(PREFIX_FILE, "w", encoding="utf-8") as _pf:
-            _pf.write(_saved_prefix)
-    except Exception:
-        pass
-    if _BOT_GUILD_ID and _BOT_GUILD_ID in bot_settings:
-        bot_settings[_BOT_GUILD_ID]["prefix"] = _saved_prefix
-    elif bot.guilds:
-        for _g in bot.guilds:
-            if _g.id in bot_settings:
-                bot_settings[_g.id]["prefix"] = _saved_prefix
-                break
-    print(f"[prefix] restaurado: '{_saved_prefix}' de '{PREFIX_FILE}'", flush=True)
+                    bot_settings[_g.id]["prefix"] = _saved_prefix
+                    break
+    print(f"[prefix] restaurado: '{_saved_prefix}' (custom={_found_custom}) de '{PREFIX_FILE}'", flush=True)
 
     _stream_prefix_current = _saved_prefix
 
@@ -42486,12 +42492,16 @@ async def _criar_ticket_thread(
         return
 
     # Verificar ticket duplicado (busca threads abertas do usuário nesse canal)
+    _color_ja = settings.get("embed_color", 0x2B2D31)
     for thread in channel.threads:
         if (not thread.archived
                 and thread.owner_id == user.id
                 and str(panel.get("id", "")) in (thread.name or "")):
             await interaction.followup.send(
-                t.get("ticket_ja_aberto", "Você já tem um ticket aberto.").format(thread=thread.mention),
+                embed=_notif_embed(
+                    t.get("ticket_ja_aberto", "Você já tem um ticket aberto.").format(thread=thread.mention),
+                    _color_ja,
+                ),
                 ephemeral=True,
             )
             return
@@ -42499,7 +42509,10 @@ async def _criar_ticket_thread(
     for thread in channel.threads:
         if not thread.archived and user.display_name in (thread.name or ""):
             await interaction.followup.send(
-                t.get("ticket_ja_aberto", "Você já tem um ticket aberto.").format(thread=thread.mention),
+                embed=_notif_embed(
+                    t.get("ticket_ja_aberto", "Você já tem um ticket aberto.").format(thread=thread.mention),
+                    _color_ja,
+                ),
                 ephemeral=True,
             )
             return
@@ -42633,13 +42646,19 @@ async def _criar_ticket_thread(
         {"type": 2, "label": _t_btn.get("btn_fechar_ticket", "Fechar Ticket"), "style": 4, "custom_id": "ticket_fechar"},
     ]})
 
+    # Pings vão como TextDisplay no TOPO (componente irmão do container).
+    # NÃO usar "content" junto da flag 32768 — Components V2 rejeita content/embeds,
+    # e é isso que fazia o V2 falhar e cair no fallback (botões fora do container).
+    _top_components: list = []
+    if ping_content:
+        _top_components.append({"type": 10, "content": ping_content})
+    _top_components.append({"type": 17, "accent_color": _color_v2, "components": _c_items})
+
     _v2_body: dict = {
         "flags": 32768,
-        "components": [{"type": 17, "accent_color": _color_v2, "components": _c_items}],
+        "components": _top_components,
         "allowed_mentions": {"parse": ["roles", "users", "everyone"] if ping_content else []},
     }
-    if ping_content:
-        _v2_body["content"] = ping_content
 
     # Envia via raw HTTP (thread.send(view=LayoutView) falha silenciosamente)
     import aiohttp as _ah_tkt
