@@ -36238,7 +36238,7 @@ class PanelV2BuilderView(discord.ui.LayoutView):
         editor = PanelV2EditSelect(self, t)
         self.add_item(discord.ui.ActionRow(editor))
 
-        # ── ActionRow: Cor / Salvar / Enviar ──────────────────────────────────
+        # ── ActionRow: Cor / Salvar / (Enviar) ────────────────────────────────
         cor_btn = discord.ui.Button(label=t["panelv2_btn_cor"], style=discord.ButtonStyle.secondary)
         cor_btn.callback = self._cor
         salvar_btn = discord.ui.Button(
@@ -36246,18 +36246,23 @@ class PanelV2BuilderView(discord.ui.LayoutView):
             emoji="<a:online:1518271945550856295>",
         )
         salvar_btn.callback = self._salvar
-        if self.edit_message_id:
-            enviar_btn = discord.ui.Button(
-                label="Atualizar Painel", style=discord.ButtonStyle.primary,
-                emoji="✏️",
-            )
-            enviar_btn.callback = self._atualizar
-        else:
-            enviar_btn = discord.ui.Button(
-                label=t["btn_enviar"], style=discord.ButtonStyle.primary,
-            )
-            enviar_btn.callback = self._enviar
-        self.add_item(discord.ui.ActionRow(cor_btn, salvar_btn, enviar_btn))
+        _row_btns = [cor_btn, salvar_btn]
+        # Embeds internas (ticket) não têm "Enviar" — são aplicadas ao abrir o ticket,
+        # não enviadas a um canal. Só o editor do painel mostra o "Enviar".
+        if getattr(self, "_show_enviar", True):
+            if self.edit_message_id:
+                enviar_btn = discord.ui.Button(
+                    label="Atualizar Painel", style=discord.ButtonStyle.primary,
+                    emoji="✏️",
+                )
+                enviar_btn.callback = self._atualizar
+            else:
+                enviar_btn = discord.ui.Button(
+                    label=t["btn_enviar"], style=discord.ButtonStyle.primary,
+                )
+                enviar_btn.callback = self._enviar
+            _row_btns.append(enviar_btn)
+        self.add_item(discord.ui.ActionRow(*_row_btns))
 
     def _rebuild(self) -> "PanelV2BuilderView":
         """Recria a view do mesmo tipo. Subclasses sobrescrevem para preservar ticket ref."""
@@ -36355,6 +36360,8 @@ class TicketPanelV2View(PanelV2BuilderView):
 class TicketInternaV2View(PanelV2BuilderView):
     """PanelV2BuilderView para a embed interna do ticket (mensagem enviada ao abrir o ticket)."""
 
+    _show_enviar = False  # embed interna é aplicada ao abrir o ticket, não enviada a um canal
+
     def __init__(self, author: discord.Member, ticket_panel_ref: dict, panel_id: str):
         self._ticket_panel_ref = ticket_panel_ref
         self._ticket_panel_id  = panel_id
@@ -36381,6 +36388,8 @@ class TicketInternaV2View(PanelV2BuilderView):
 
 class TicketOpcaoInternaV2View(PanelV2BuilderView):
     """PanelV2BuilderView para a embed_interna de uma opcao individual do menu de ticket."""
+
+    _show_enviar = False  # embed interna é aplicada ao abrir o ticket, não enviada a um canal
 
     def __init__(self, author: discord.Member, panel_ref: dict, panel_id: str, opcao_id: str):
         self._panel_ref = panel_ref
@@ -42713,6 +42722,62 @@ class TicketThreadView(discord.ui.View):
             )
 
 
+def _v2_blocks_to_raw_items(blocks: list) -> list:
+    """Converte blocos do editor V2 (texto/separador/galeria) em componentes raw
+    Components V2 (JSON), para irem DENTRO de um container type 17.
+    Espelha _build_v2_panel_items — assim a embed interna do ticket renderiza
+    exatamente como o cliente montou no editor (inclusive linhas nativas)."""
+    def _seg(seg: list) -> list:
+        items: list = []
+        topo: set = set()
+        # Galerias no topo do segmento
+        for i, b in enumerate(seg):
+            if b.get("type") == "gallery" and b.get("position", "Topo") != "Rodape":
+                imgs = b.get("images") or []
+                if imgs:
+                    items.append({"type": 12, "items": [{"media": {"url": u}} for u in imgs[:10]]})
+                    topo.add(i)
+        for i, b in enumerate(seg):
+            if i in topo:
+                continue
+            bt = b.get("type")
+            if bt == "text":
+                txt = b.get("text") or ""
+                if not txt.strip():
+                    continue
+                th = (b.get("thumbnail") or "").strip()
+                bl = (b.get("button_label") or "").strip()
+                bu = (b.get("button_url") or "").strip()
+                if bl and bu:
+                    items.append({"type": 9, "components": [{"type": 10, "content": txt}],
+                                  "accessory": {"type": 2, "style": 5, "label": bl[:80], "url": bu}})
+                elif th:
+                    items.append({"type": 9, "components": [{"type": 10, "content": txt}],
+                                  "accessory": {"type": 11, "media": {"url": th}}})
+                else:
+                    items.append({"type": 10, "content": txt})
+            elif bt == "gallery":
+                imgs = b.get("images") or []
+                if imgs:
+                    items.append({"type": 12, "items": [{"media": {"url": u}} for u in imgs[:10]]})
+        return items
+
+    out: list = []
+    cur: list = []
+    for b in (blocks or []):
+        if b.get("type") == "separator":
+            out.extend(_seg(cur)); cur = []
+            out.append({
+                "type": 14,
+                "divider": (b.get("style", "Com linha") == "Com linha"),
+                "spacing": 2 if b.get("spacing") == "Grande" else 1,
+            })
+        else:
+            cur.append(b)
+    out.extend(_seg(cur))
+    return out
+
+
 async def _criar_ticket_thread(
     interaction: discord.Interaction,
     panel: dict,
@@ -42870,30 +42935,35 @@ async def _criar_ticket_thread(
 
     # Monta container V2 com botões DENTRO
     _c_items: list = []
-    _title_line = f"**{_title_v2}**" if _title_v2 else ""
-    if _title_line:
-        # Título (com thumbnail ao lado, se houver) + linha nativa logo abaixo
-        if _thumb_v2:
-            _c_items.append({
-                "type": 9,
-                "components": [{"type": 10, "content": _title_line}],
-                "accessory": {"type": 11, "media": {"url": _thumb_v2}},
-            })
-        else:
-            _c_items.append({"type": 10, "content": _title_line})
-        _c_items.append({"type": 14, "divider": True, "spacing": 1})
-        if _desc_v2:
-            _c_items.append({"type": 10, "content": _desc_v2})
-    elif _desc_v2:
-        # Sem título: mantém a descrição (com thumbnail, se houver)
-        if _thumb_v2:
-            _c_items.append({
-                "type": 9,
-                "components": [{"type": 10, "content": _desc_v2}],
-                "accessory": {"type": 11, "media": {"url": _thumb_v2}},
-            })
-        else:
-            _c_items.append({"type": 10, "content": _desc_v2})
+    _ei_blocks = ei_v2.get("blocks") if ei_v2 else None
+    if _ei_blocks:
+        # Renderiza os blocos EXATAMENTE como o cliente montou no editor
+        # (texto, separadores/linhas nativas, galerias).
+        _c_items = _v2_blocks_to_raw_items(_ei_blocks)
+    else:
+        # Sem blocos V2: título + linha nativa + descrição (clássico/padrão)
+        _title_line = f"**{_title_v2}**" if _title_v2 else ""
+        if _title_line:
+            if _thumb_v2:
+                _c_items.append({
+                    "type": 9,
+                    "components": [{"type": 10, "content": _title_line}],
+                    "accessory": {"type": 11, "media": {"url": _thumb_v2}},
+                })
+            else:
+                _c_items.append({"type": 10, "content": _title_line})
+            _c_items.append({"type": 14, "divider": True, "spacing": 1})
+            if _desc_v2:
+                _c_items.append({"type": 10, "content": _desc_v2})
+        elif _desc_v2:
+            if _thumb_v2:
+                _c_items.append({
+                    "type": 9,
+                    "components": [{"type": 10, "content": _desc_v2}],
+                    "accessory": {"type": 11, "media": {"url": _thumb_v2}},
+                })
+            else:
+                _c_items.append({"type": 10, "content": _desc_v2})
     _ts_now = datetime.now().strftime("%d/%m/%Y %H:%M")
     _c_items.append({"type": 10, "content": f"-# {_footer_v2} • {_ts_now}"})
     _c_items.append({"type": 14, "divider": True, "spacing": 1})
