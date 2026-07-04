@@ -12,6 +12,15 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, date
 
+# Fuso horário do processo: horários exibidos (strftime) usam America/Sao_Paulo.
+# Railway roda em UTC → sem isto os rodapés/datas apareciam +3h. Só afeta datetime
+# naive/local; a lógica sensível a UTC usa discord.utils.utcnow() (aware), intacta.
+os.environ["TZ"] = "America/Sao_Paulo"
+try:
+    time.tzset()  # Unix (Railway); inexistente no Windows → ignora
+except AttributeError:
+    pass
+
 import aiohttp
 import discord
 from discord.ext import commands, tasks
