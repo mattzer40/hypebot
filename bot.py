@@ -10587,7 +10587,9 @@ class IgVerifTicketView(discord.ui.LayoutView):
             _ig_photo = _ig_verif_photos.pop(interaction.channel.id if interaction.channel else 0, None)
             if _ig_photo:
                 try:
-                    await _send_ig_card(guild, target, _ig_photo, settings)
+                    _ig_post_ch_id = _resolve_ig_verif_post_channel_id(guild, settings)
+                    if _ig_post_ch_id:
+                        await _send_ig_card(guild, target, _ig_photo, settings, force_channel_id=_ig_post_ch_id)
                 except Exception as _igce:
                     print(f"[ig_verif] erro ao postar card: {_igce}", flush=True)
 
@@ -16233,6 +16235,7 @@ async def _send_ig_card(
     media_url: str,
     settings: dict,
     fallback_channel_id: int | None = None,
+    force_channel_id: int | None = None,
 ) -> None:
     """Monta o card V2 do Instagram e envia para os canais configurados."""
     guild_icon = str(guild.icon.url) if (guild and guild.icon) else None
@@ -16302,7 +16305,17 @@ async def _send_ig_card(
     ig_channels = settings.get("ig_channels", [])
 
     async with _ah_ig.ClientSession() as _s:
-        if ig_channels:
+        if force_channel_id:
+            # Post de usuário verificado: SEMPRE no canal correto do fluxo de verificação,
+            # independente do sistema de destaque (ig_channels) estar ou não configurado —
+            # os dois sistemas são independentes e não devem se misturar.
+            async with _s.post(
+                f"https://discord.com/api/v10/channels/{force_channel_id}/messages",
+                json=_payload, headers=_h,
+            ) as _r:
+                if _r.status not in (200, 201):
+                    print(f"[ig_card] POST force_channel {_r.status}: {await _r.text()}", flush=True)
+        elif ig_channels:
             for _ch in ig_channels:
                 _pid  = _ch.get("post_channel_id")
                 _hid  = _ch.get("highlight_channel_id")
@@ -16432,7 +16445,7 @@ async def _process_ig_post(message: discord.Message, settings: dict) -> None:
     if not media_url:
         return
 
-    await _send_ig_card(guild, author, media_url, settings, fallback_channel_id=message.channel.id)
+    await _send_ig_card(guild, author, media_url, settings, force_channel_id=message.channel.id)
 
     try:
         await message.delete()
