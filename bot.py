@@ -26735,13 +26735,25 @@ async def on_message(message: discord.Message):
         and isinstance(message.author, discord.Member)
     ):
         _ig_post_ch = _resolve_ig_verif_post_channel_id(message.guild, settings)
+        _ig_role = message.guild.get_role(settings["ig_verif_role"]) if settings.get("ig_verif_role") else None
+        _ig_has_role = bool(_ig_role and _ig_role in message.author.roles)
+        print(
+            f"[ig_post_gate] guild={message.guild.id} author={message.author.id} "
+            f"channel={message.channel.id} resolved_post_ch={_ig_post_ch} "
+            f"channel_match={_ig_post_ch == message.channel.id} "
+            f"verif_role_id={settings.get('ig_verif_role')} role_found={_ig_role is not None} "
+            f"author_has_role={_ig_has_role}",
+            flush=True,
+        )
         if _ig_post_ch and message.channel.id == _ig_post_ch:
-            _ig_role = message.guild.get_role(settings["ig_verif_role"])
-            if _ig_role and _ig_role in message.author.roles:
+            if _ig_role and _ig_has_role:
                 try:
                     await _process_ig_post(message, settings)
+                    print(f"[ig_post_gate] _process_ig_post concluído sem exceção", flush=True)
                 except Exception as _igp_e:
-                    print(f"[ig_post] erro: {_igp_e}", flush=True)
+                    import traceback as _ig_tb
+                    print(f"[ig_post] erro: {type(_igp_e).__name__}: {_igp_e}", flush=True)
+                    print(_ig_tb.format_exc(), flush=True)
                 await bot.process_commands(message)
                 return
 
