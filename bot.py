@@ -10175,6 +10175,29 @@ class IgVerifView(discord.ui.View):
         await interaction.followup.send("<a:alerta:1518271939460857968> Verificação Instagram resetada!", ephemeral=True)
 
 
+def _resolve_ig_verif_post_channel_id(guild: "discord.Guild | None", settings: dict) -> int | None:
+    """Resolve o canal onde verificados podem postar: ig_verif_post_channel > ig_channels[0] >
+    canal chamado 'insta'. Usado tanto na DM de aprovação quanto no gate de postagem em
+    on_message — mantém a promessa feita ao usuário consistente com o que é de fato aceito."""
+    post_ch_id = settings.get("ig_verif_post_channel")
+    if post_ch_id:
+        return post_ch_id
+    ig_chs = settings.get("ig_channels", [])
+    if ig_chs:
+        first = ig_chs[0]
+        cid = first.get("post_channel_id") if isinstance(first, dict) else first
+        if cid:
+            return cid
+    if guild:
+        insta_ch = discord.utils.find(
+            lambda c: "insta" in c.name.lower() and isinstance(c, discord.TextChannel),
+            guild.channels,
+        )
+        if insta_ch:
+            return insta_ch.id
+    return None
+
+
 async def _handle_ig_verif_check(interaction: discord.Interaction) -> None:
     """Usuário clicou em 'verificar' — cria thread de ticket para verificação Instagram."""
     guild    = interaction.guild
@@ -10512,20 +10535,7 @@ class IgVerifTicketView(discord.ui.LayoutView):
         if target:
             try:
                 _role_name = f"**@{role.name}**" if role else "**verificado**"
-                # Canal de postagem: ig_verif_post_channel > ig_channels > canal com "insta" no nome
-                _post_ch_id = settings.get("ig_verif_post_channel")
-                if not _post_ch_id:
-                    _ig_chs = settings.get("ig_channels", [])
-                    if _ig_chs:
-                        _first = _ig_chs[0]
-                        _post_ch_id = _first.get("post_channel_id") if isinstance(_first, dict) else _first
-                if not _post_ch_id:
-                    _insta_ch = discord.utils.find(
-                        lambda c: "insta" in c.name.lower() and isinstance(c, discord.TextChannel),
-                        guild.channels,
-                    )
-                    if _insta_ch:
-                        _post_ch_id = _insta_ch.id
+                _post_ch_id = _resolve_ig_verif_post_channel_id(guild, settings)
                 _ig_ch_mention = f" (<#{_post_ch_id}>)" if _post_ch_id else ""
                 dm_emb = discord.Embed(
                     description=(
@@ -26708,7 +26718,7 @@ async def on_message(message: discord.Message):
         and settings.get("ig_verif_role")
         and isinstance(message.author, discord.Member)
     ):
-        _ig_post_ch = settings.get("ig_verif_post_channel")
+        _ig_post_ch = _resolve_ig_verif_post_channel_id(message.guild, settings)
         if _ig_post_ch and message.channel.id == _ig_post_ch:
             _ig_role = message.guild.get_role(settings["ig_verif_role"])
             if _ig_role and _ig_role in message.author.roles:
