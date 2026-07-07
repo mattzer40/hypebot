@@ -76,6 +76,7 @@ _ig_verif_threads: dict[int, int] = {}  # thread_id → user_id (verificação I
 _ig_verif_vcs: dict[int, int] = {}     # thread_id → vc_id (canal de voz do Criar call)
 _ig_verif_photos: dict[int, str] = {}  # thread_id → URL da foto enviada no ticket de IG
 _ticket_assumed: dict[int, int] = {}         # thread_id → user_id (quem assumiu o ticket)
+_ticket_thread_option: dict[int, str] = {}   # thread_id → option_id (qual opção do menu abriu o ticket)
 _ticket_assume_counts: dict[tuple, int] = {}  # (guild_id, user_id) → total assumidos
 _ticket_msg_ids: dict[int, tuple] = {}        # thread_id → (channel_id, message_id) do embed do ticket
 _ticket_msg_payloads: dict[int, dict] = {}    # thread_id → payload V2 original (para PATCH after assume)
@@ -42610,8 +42611,28 @@ async def _patch_ticket_remove_assumir(
             print(f"[ticket_patch] {_pe}", flush=True)
 
 
+def _ticket_option_for_thread(settings: dict, panel: dict, thread: discord.Thread) -> dict | None:
+    """Retorna a opção do menu que abriu este ticket. Prioriza o id em memória;
+    faz fallback pelo label no início do nome da thread (tickets antigos/pós-restart)."""
+    opts = panel.get("menu_opcoes", []) or []
+    if not opts:
+        return None
+    opt_id = _ticket_thread_option.get(thread.id)
+    if opt_id:
+        for op in opts:
+            if op.get("id") == opt_id:
+                return op
+    label = (thread.name or "").split(" • ")[0].strip()
+    if label:
+        for op in opts:
+            if (op.get("label") or "").strip() == label:
+                return op
+    return None
+
+
 def _is_ticket_staff(interaction: discord.Interaction) -> bool:
-    """Retorna True se o usuário tem permissão para gerenciar tickets (cargo responsável ou admin)."""
+    """True se o usuário pode gerenciar ESTE ticket: admin/owner, ou tem o cargo
+    responsável da OPÇÃO que o abriu (fallback: cargos responsáveis do painel)."""
     member = interaction.user
     guild  = interaction.guild
 
@@ -42622,13 +42643,15 @@ def _is_ticket_staff(interaction: discord.Interaction) -> bool:
     thread = interaction.channel
     if isinstance(thread, discord.Thread):
         settings = get_settings(guild.id)
+        _member_roles = {r.id for r in member.roles}
         for panel in settings.get("ticket_panels", []):
-            if panel.get("channel_id") == thread.parent_id:
-                resp_ids: set[int] = set(panel.get("responsible_roles", []))
-                for op in panel.get("menu_opcoes", []):
-                    resp_ids |= set(op.get("responsible_roles", []))
-                if resp_ids & {r.id for r in member.roles}:
-                    return True
+            if panel.get("channel_id") != thread.parent_id:
+                continue
+            _opt = _ticket_option_for_thread(settings, panel, thread)
+            # Cargos da opção que abriu o ticket; se a opção não tem, usa os do painel.
+            resp_ids: set[int] = set((_opt or {}).get("responsible_roles", [])) or set(panel.get("responsible_roles", []))
+            if resp_ids & _member_roles:
+                return True
     return False
 
 
@@ -42971,6 +42994,11 @@ async def _criar_ticket_thread(
         await thread.add_user(user)
     except Exception:
         pass
+
+    # Vincula a thread à opção que a abriu (para checar o cargo responsável certo
+    # ao assumir/gerenciar). Fallback pelo label do nome cobre restart/tickets antigos.
+    if opcao is not None and opcao.get("id"):
+        _ticket_thread_option[thread.id] = opcao.get("id")
 
     # Monta string de menção (membro + cargos responsáveis)
     marcar = settings.get("ticket_marcar", True)
