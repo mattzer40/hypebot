@@ -27064,10 +27064,12 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     moderator_id = None
     moderator_name = "Sistema"
     moderator_obj = None
+    _only_bot_entries = False  # True se só houver entradas do próprio bot p/ esta mudança (sem humano por trás)
     await asyncio.sleep(0.3)  # reduzido de 2s — Discord regista audit log em <300ms
     try:
         from datetime import timezone as _tz
         _bot_id = bot.user.id if bot.user else 0
+        _saw_bot_entry = False
         async for entry in after.guild.audit_logs(limit=15, action=discord.AuditLogAction.member_role_update):
             if entry.target and entry.target.id == after.id:
                 age = (datetime.now(_tz.utc) - entry.created_at).total_seconds()
@@ -27076,12 +27078,17 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 # Pular ações do próprio bot (ex: remoção feita pelo fast-path)
                 # para encontrar o moderador que ORIGINOU a mudança
                 if entry.user and entry.user.id == _bot_id:
+                    _saw_bot_entry = True
                     continue
                 if entry.user:
                     moderator_id = entry.user.id
                     moderator_name = entry.user.name
                     moderator_obj = entry.user
                 break
+        else:
+            # Loop esgotou sem encontrar um humano: se só havia entradas do próprio bot,
+            # a mudança não tem autor humano por trás — não deve ser tratada como não autorizada.
+            _only_bot_entries = _saw_bot_entry and moderator_obj is None
     except (discord.Forbidden, discord.HTTPException) as e:
         print(f"[protecao_cargos] Falha ao ler audit log: {e}")
 
@@ -27113,7 +27120,13 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             return
 
     if settings.get("protecao_cargos_enabled"):
-        is_bot_action = bot.user and moderator_obj and moderator_obj.id == bot.user.id
+        # is_bot_action: moderator_obj nunca é o bot (o loop acima pula entradas do bot de propósito,
+        # buscando o humano que originou a mudança) — então também conta como ação do bot quando o
+        # audit log só tinha entradas do bot e nenhum humano foi encontrado (_only_bot_entries).
+        is_bot_action = bool(
+            (bot.user and moderator_obj and moderator_obj.id == bot.user.id)
+            or _only_bot_entries
+        )
 
         moderator_member = None
         if moderator_obj:
