@@ -10527,6 +10527,9 @@ class IgVerifTicketView(discord.ui.LayoutView):
 
         if role and target:
             try:
+                # Registra ANTES de conceder — evita que a Proteção de Cargos reverta
+                # esta concessão legítima do bot caso o cargo esteja protegido/bloqueado.
+                _register_bot_role_action(target.id, role.id, "add")
                 await target.add_roles(role, reason=f"Verificação Instagram — aprovado por {interaction.user}")
             except Exception:
                 pass
