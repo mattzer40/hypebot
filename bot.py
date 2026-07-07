@@ -4530,6 +4530,8 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("ig_mensagem", None)
     settings.setdefault("ig_canal_mensagem", None)
     settings.setdefault("ig_last_highlight", {})  # {channel_id_str: message_id}
+    settings.setdefault("ig_card_instagram_url", None)  # link do botão Instagram no card
+    settings.setdefault("ig_post_likes", {})  # {message_id_str: [user_id, ...]}
     settings.setdefault("verif_enabled", False)
     settings.setdefault("verif_urls", [])
     settings.setdefault("verif_token", None)
@@ -16177,6 +16179,29 @@ class CalendarioView(discord.ui.View):
 # Entretenimento — Instagram
 # -----------------------------------------------------------------------------
 
+def _ig_emoji_api_dict(raw: str) -> dict:
+    """Converte um emoji configurado (unicode ou <a?:nome:id>) para o formato
+    de dict cru exigido pela API de componentes (V2)."""
+    m = re.match(r"^<(a?):(\w+):(\d+)>$", raw or "")
+    if m:
+        anim, name, eid = m.groups()
+        return {"name": name, "id": eid, "animated": bool(anim)}
+    return {"name": raw or "❤️"}
+
+
+def _update_like_button_label(components: list, count: int) -> bool:
+    """Percorre a árvore de componentes (aninhada, V2) procurando o botão de
+    curtir (custom_id ig_post_like) e atualiza seu label. True se encontrado."""
+    for comp in components:
+        if comp.get("type") == 2 and comp.get("custom_id") == "ig_post_like":
+            comp["label"] = str(count)
+            return True
+        sub = comp.get("components")
+        if sub and _update_like_button_label(sub, count):
+            return True
+    return False
+
+
 async def _send_ig_card(
     guild: "discord.Guild",
     author: "discord.Member",
@@ -16188,6 +16213,33 @@ async def _send_ig_card(
     guild_icon = str(guild.icon.url) if (guild and guild.icon) else None
     guild_name = guild.name if guild else "Instagram"
     color      = 0xE1306C  # Instagram pink
+    ig_emj     = settings.get("ig_emojis", {}) or {}
+
+    _action_buttons: list = [
+        {
+            "type": 2,
+            "style": 2,
+            "label": "0",
+            "custom_id": "ig_post_like",
+            "emoji": _ig_emoji_api_dict(ig_emj.get("curtir", "💗")),
+        },
+    ]
+    _insta_url = settings.get("ig_card_instagram_url")
+    if _insta_url:
+        _action_buttons.append({
+            "type": 2,
+            "style": 5,  # Link
+            "label": "Instagram",
+            "url": _insta_url,
+            "emoji": _ig_emoji_api_dict(ig_emj.get("botao_instagram", "📷")),
+        })
+    _action_buttons.append({
+        "type": 2,
+        "style": 4,
+        "label": "Deletar",
+        "custom_id": f"ig_post_delete_{author.id}",
+        "emoji": _ig_emoji_api_dict(ig_emj.get("deletar", "🗑️")),
+    })
 
     _components: list = [
         {
@@ -16204,15 +16256,7 @@ async def _send_ig_card(
         },
         {
             "type": 1,
-            "components": [
-                {
-                    "type": 2,
-                    "style": 4,
-                    "label": "Deletar",
-                    "custom_id": f"ig_post_delete_{author.id}",
-                    "emoji": {"name": "🗑️"},
-                }
-            ],
+            "components": _action_buttons,
         },
     ]
     if guild_icon:
@@ -16294,6 +16338,59 @@ async def _send_ig_card(
                     json=_payload, headers=_h,
                 ) as _r:
                     pass
+
+
+async def _handle_ig_post_like(interaction: discord.Interaction) -> None:
+    """Alterna a curtida do usuário no card de Instagram e atualiza o contador."""
+    msg   = interaction.message
+    guild = interaction.guild
+    if msg is None or guild is None:
+        try:
+            await interaction.response.defer()
+        except Exception:
+            pass
+        return
+
+    settings = get_settings(guild.id)
+    likes: dict = settings.setdefault("ig_post_likes", {})
+    key   = str(msg.id)
+    liked = set(likes.get(key, []))
+    uid   = interaction.user.id
+    if uid in liked:
+        liked.discard(uid)
+    else:
+        liked.add(uid)
+    likes[key] = list(liked)
+    save_settings_to_disk()
+    count = len(liked)
+
+    try:
+        await interaction.response.defer()
+    except Exception:
+        pass
+
+    import aiohttp as _ah_like
+    _headers = {"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"}
+    try:
+        async with _ah_like.ClientSession() as _s:
+            async with _s.get(
+                f"https://discord.com/api/v10/channels/{msg.channel.id}/messages/{msg.id}",
+                headers=_headers,
+            ) as _r:
+                if _r.status != 200:
+                    return
+                _data = await _r.json()
+            _comps = _data.get("components", [])
+            if _update_like_button_label(_comps, count):
+                async with _s.patch(
+                    f"https://discord.com/api/v10/channels/{msg.channel.id}/messages/{msg.id}",
+                    headers=_headers,
+                    json={"components": _comps},
+                ) as _r2:
+                    if _r2.status not in (200, 204):
+                        print(f"[ig_like] PATCH {_r2.status}: {await _r2.text()}", flush=True)
+    except Exception as _le:
+        print(f"[ig_like] erro: {_le}", flush=True)
 
 
 async def _process_ig_post(message: discord.Message, settings: dict) -> None:
@@ -16825,12 +16922,19 @@ class InstagramView(discord.ui.View):
             (t["btn_resetar_destaque"], discord.ButtonStyle.danger, self._reset_destaque),
             (t["btn_resetar_tudo_simples_ig"], discord.ButtonStyle.danger, self._reset_all),
         ]
+        row2 = [
+            ("Link do Instagram", discord.ButtonStyle.secondary, self._cfg_card_url),
+        ]
         for label, style, cb in row0:
             btn = discord.ui.Button(label=label, style=style, row=0, emoji=_button_emoji(style))
             btn.callback = cb
             self.add_item(btn)
         for label, style, cb in row1:
             btn = discord.ui.Button(label=label, style=style, row=1, emoji=_button_emoji(style))
+            btn.callback = cb
+            self.add_item(btn)
+        for label, style, cb in row2:
+            btn = discord.ui.Button(label=label, style=style, row=2, emoji=_button_emoji(style))
             btn.callback = cb
             self.add_item(btn)
 
@@ -16916,6 +17020,37 @@ class InstagramView(discord.ui.View):
         embed = build_ig_verif_admin_embed(self.author, settings)
         view  = IgVerifView(self.author, from_entretenimento=True)
         await interaction.response.edit_message(embed=embed, view=view)
+
+    async def _cfg_card_url(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        modal = IgCardInstagramUrlModal(settings.get("ig_card_instagram_url"))
+        await interaction.response.send_modal(modal)
+
+
+class IgCardInstagramUrlModal(discord.ui.Modal):
+    """Define o link (perfil/página) que o botão Instagram do card abre.
+    Deixar vazio remove o botão do card."""
+    def __init__(self, current: str | None):
+        super().__init__(title="Link do Instagram", timeout=300)
+        self.inp = discord.ui.TextInput(
+            label="URL do Instagram (vazio = sem botão)",
+            placeholder="https://instagram.com/seu_perfil",
+            required=False, max_length=200,
+            default=current,
+        )
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        url = self.inp.value.strip()
+        settings["ig_card_instagram_url"] = url or None
+        await interaction.response.send_message(
+            embed=_notif_embed(
+                "<a:online:1518271945550856295> Link do Instagram atualizado!" if url
+                else "<a:online:1518271945550856295> Link do Instagram removido — o botão não aparecerá mais no card."
+            ),
+            ephemeral=True,
+        )
 
 
 # =============================================================================
@@ -43256,6 +43391,14 @@ async def on_interaction(interaction: discord.Interaction):
                     )
                 except Exception:
                     pass
+        return
+
+    # ── Curtir post de Instagram ────────────────────────────────────────────────
+    if cid == "ig_post_like":
+        try:
+            await _handle_ig_post_like(interaction)
+        except Exception as _ige:
+            print(f"[ig_like] erro no handler: {_ige}", flush=True)
         return
 
     # ── Deletar post de Instagram ──────────────────────────────────────────────
