@@ -42742,6 +42742,15 @@ class TicketThreadView(discord.ui.View):
         return False
 
     async def _assumir_ticket(self, interaction: discord.Interaction):
+        # Só quem tem o cargo de acesso (responsible_roles) — ou admin/owner — assume.
+        # Checagem aqui protege tanto o callback direto quanto o roteamento via on_interaction.
+        if not _is_ticket_staff(interaction):
+            _c = get_settings(interaction.guild.id if interaction.guild else 0).get("embed_color", 0x2B2D31)
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Apenas a equipe de suporte pode assumir tickets.", _c),
+                ephemeral=True,
+            )
+            return
         thread = interaction.channel
         if not isinstance(thread, discord.Thread):
             await interaction.response.defer()
