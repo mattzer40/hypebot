@@ -13726,11 +13726,11 @@ class _DecorItemEditView(discord.ui.LayoutView):
                 "danger":    discord.ButtonStyle.danger,
             }
             prev_btns = []
-            for btn_data in self.section.get("buttons", []):
+            for i, btn_data in enumerate(self.section.get("buttons", [])):
                 style = style_map.get(btn_data.get("style", "secondary"), discord.ButtonStyle.secondary)
-                prev_btns.append(discord.ui.Button(
-                    label=btn_data.get("label", "Botão"), style=style, disabled=True
-                ))
+                pbtn = discord.ui.Button(label=btn_data.get("label", "Botão"), style=style)
+                pbtn.callback = self._make_edit_btn_cb(i)
+                prev_btns.append(pbtn)
             if prev_btns:
                 container_items.append(discord.ui.ActionRow(*prev_btns))
 
@@ -13760,6 +13760,12 @@ class _DecorItemEditView(discord.ui.LayoutView):
     async def interaction_check(self, interaction):
         return interaction.user.id == self.builder.author.id
 
+    def _make_edit_btn_cb(self, idx: int):
+        """Fábrica de callback: abre o editor do botão específico (evita late-binding do idx)."""
+        async def _cb(interaction: discord.Interaction):
+            await interaction.response.send_modal(_DecorBtnEditModal(self, idx))
+        return _cb
+
     async def _editar(self, interaction: discord.Interaction):
         tipo = self.section.get("type")
         if tipo == "text":
@@ -13769,7 +13775,16 @@ class _DecorItemEditView(discord.ui.LayoutView):
         elif tipo == "separator":
             await interaction.response.send_modal(_DecorSepEditModal(self))
         elif tipo == "buttons":
-            await interaction.response.send_modal(_DecorBtnEditModal(self, 0))
+            buttons = self.section.get("buttons", [])
+            if len(buttons) <= 1:
+                # Único botão — edita direto, sem passo extra.
+                await interaction.response.send_modal(_DecorBtnEditModal(self, 0))
+            else:
+                # Múltiplos botões — a prévia acima agora é clicável; cada um abre seu próprio editor.
+                await interaction.response.send_message(
+                    "Toque em um dos botões no preview acima para editá-lo especificamente.",
+                    ephemeral=True,
+                )
         else:
             await interaction.response.send_message("Tipo não suportado para edição.", ephemeral=True)
 
