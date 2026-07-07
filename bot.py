@@ -16503,46 +16503,73 @@ def build_instagram_embed(author: discord.Member, settings: dict) -> discord.Emb
     return embed
 
 
+def build_ig_config_menu_embed(draft: dict, guild: "discord.Guild | None", t: dict, settings: dict) -> discord.Embed:
+    color = settings.get("embed_color", 0x2B2D31)
+    embed = discord.Embed(title=t["ig_modal_title"], color=color)
+
+    def _ch(cid):
+        if not cid:
+            return "`Não definido`"
+        ch = guild.get_channel(cid) if guild else None
+        return ch.mention if ch else f"<#{cid}>"
+
+    def _role(rid):
+        if not rid:
+            return "`Nenhum`"
+        r = guild.get_role(rid) if guild else None
+        return r.mention if r else f"<@&{rid}>"
+
+    embed.add_field(name=t["ig_input_canal_post_label"], value=_ch(draft.get("post_channel_id")), inline=False)
+    embed.add_field(name=t["ig_input_canal_dest_label"], value=_ch(draft.get("highlight_channel_id")), inline=False)
+    embed.add_field(name=t["ig_input_cargo_dest_label"], value=_role(draft.get("role_id")), inline=False)
+    embed.add_field(
+        name=t["ig_limpar_destaque"],
+        value=(t["ig_clear_yes"] if draft.get("clear_highlight") else t["ig_clear_no"]),
+        inline=False,
+    )
+    return embed
+
+
 class IgConfigPostChannelSelect(GuildChannelSelect):
-    def __init__(self, draft: dict, t: dict):
+    def __init__(self, parent_menu: "IgConfigMenuView", t: dict):
         super().__init__(
             placeholder=t["ig_select_post_placeholder"], min_values=1, max_values=1,
             channel_types=[discord.ChannelType.text],
         )
-        self.draft = draft
+        self.parent_menu = parent_menu
 
     async def callback(self, interaction: discord.Interaction):
-        self.draft["post_channel_id"] = self.values[0].id
-        await interaction.response.defer()
+        self.parent_menu.draft["post_channel_id"] = self.values[0].id
+        await self.parent_menu._refresh(interaction)
 
 
 class IgConfigDestChannelSelect(GuildChannelSelect):
-    def __init__(self, draft: dict, t: dict):
+    def __init__(self, parent_menu: "IgConfigMenuView", t: dict):
         super().__init__(
             placeholder=t["ig_select_dest_placeholder"], min_values=1, max_values=1,
             channel_types=[discord.ChannelType.text],
         )
-        self.draft = draft
+        self.parent_menu = parent_menu
 
     async def callback(self, interaction: discord.Interaction):
-        self.draft["highlight_channel_id"] = self.values[0].id
-        await interaction.response.defer()
+        self.parent_menu.draft["highlight_channel_id"] = self.values[0].id
+        await self.parent_menu._refresh(interaction)
 
 
 class IgConfigRoleSelect(discord.ui.RoleSelect):
-    def __init__(self, draft: dict, t: dict):
+    def __init__(self, parent_menu: "IgConfigMenuView", t: dict):
         super().__init__(
             placeholder=t["ig_select_cargo_placeholder"], min_values=1, max_values=1,
         )
-        self.draft = draft
+        self.parent_menu = parent_menu
 
     async def callback(self, interaction: discord.Interaction):
-        self.draft["role_id"] = self.values[0].id
-        await interaction.response.defer()
+        self.parent_menu.draft["role_id"] = self.values[0].id
+        await self.parent_menu._refresh(interaction)
 
 
 class IgConfigClearSelect(discord.ui.Select):
-    def __init__(self, draft: dict, t: dict):
+    def __init__(self, parent_menu: "IgConfigMenuView", t: dict):
         options = [
             discord.SelectOption(label=t["ig_clear_yes"], value="yes",
                                  emoji=_make_select_emoji("<a:online:1518271945550856295>")),
@@ -16551,41 +16578,87 @@ class IgConfigClearSelect(discord.ui.Select):
         ]
         super().__init__(placeholder=t["ig_select_clear_placeholder"],
                          min_values=1, max_values=1, options=options)
-        self.draft = draft
+        self.parent_menu = parent_menu
 
     async def callback(self, interaction: discord.Interaction):
-        self.draft["clear_highlight"] = (self.values[0] == "yes")
-        await interaction.response.defer()
+        self.parent_menu.draft["clear_highlight"] = (self.values[0] == "yes")
+        await self.parent_menu._refresh(interaction)
 
 
-class IgConfigView(discord.ui.View):
-    def __init__(self, parent_view: "InstagramView"):
+class IgConfigMenuView(discord.ui.View):
+    """Menu de configuração do canal de Instagram — um campo por vez
+    (em vez de todos os selects numa única tela)."""
+
+    def __init__(self, parent_view: "InstagramView", draft: dict | None = None):
         super().__init__(timeout=300)
         self.parent_view = parent_view
-        self.draft: dict = {
+        self.draft: dict = draft if draft is not None else {
             "post_channel_id": None,
             "highlight_channel_id": None,
             "role_id": None,
             "clear_highlight": False,
         }
-        settings = get_settings(parent_view.author.guild.id)
-        t = TRANSLATIONS[settings["language"]]
-        self.add_item(IgConfigPostChannelSelect(self.draft, t))
-        self.add_item(IgConfigDestChannelSelect(self.draft, t))
-        self.add_item(IgConfigRoleSelect(self.draft, t))
-        self.add_item(IgConfigClearSelect(self.draft, t))
+        self._build()
 
-        save_btn = discord.ui.Button(
-            label=t["btn_salvar_botao"], style=discord.ButtonStyle.success,
-            emoji="<a:online:1518271945550856295>", row=4,
-        )
-        save_btn.callback = self._save
-        self.add_item(save_btn)
-        cancel_btn = discord.ui.Button(
-            label=t["btn_cancelar"], style=discord.ButtonStyle.danger, row=4,
-        )
-        cancel_btn.callback = self._cancel
-        self.add_item(cancel_btn)
+    def _build(self):
+        self.clear_items()
+        settings = get_settings(self.parent_view.author.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        row0 = [
+            (t["ig_input_canal_post_label"], discord.ButtonStyle.secondary, self._pick_post_channel),
+            (t["ig_input_canal_dest_label"], discord.ButtonStyle.secondary, self._pick_dest_channel),
+        ]
+        row1 = [
+            (t["ig_input_cargo_dest_label"], discord.ButtonStyle.secondary, self._pick_role),
+            (t["ig_limpar_destaque"], discord.ButtonStyle.secondary, self._pick_clear),
+        ]
+        row2 = [
+            (t["btn_salvar_botao"], discord.ButtonStyle.success, self._save),
+            (t["btn_cancelar"], discord.ButtonStyle.danger, self._cancel),
+        ]
+        for label, style, cb in row0:
+            btn = discord.ui.Button(label=label, style=style, row=0)
+            btn.callback = cb
+            self.add_item(btn)
+        for label, style, cb in row1:
+            btn = discord.ui.Button(label=label, style=style, row=1)
+            btn.callback = cb
+            self.add_item(btn)
+        for label, style, cb in row2:
+            btn = discord.ui.Button(label=label, style=style, row=2, emoji=_button_emoji(style))
+            btn.callback = cb
+            self.add_item(btn)
+
+    async def _refresh(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        self._build()
+        embed = build_ig_config_menu_embed(self.draft, interaction.guild, t, settings)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    async def _pick_post_channel(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        view = _SingleSelectView(IgConfigPostChannelSelect(self, t))
+        await interaction.response.edit_message(embed=_notif_embed(t["ig_select_post_placeholder"]), view=view)
+
+    async def _pick_dest_channel(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        view = _SingleSelectView(IgConfigDestChannelSelect(self, t))
+        await interaction.response.edit_message(embed=_notif_embed(t["ig_select_dest_placeholder"]), view=view)
+
+    async def _pick_role(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        view = _SingleSelectView(IgConfigRoleSelect(self, t))
+        await interaction.response.edit_message(embed=_notif_embed(t["ig_select_cargo_placeholder"]), view=view)
+
+    async def _pick_clear(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        view = _SingleSelectView(IgConfigClearSelect(self, t))
+        await interaction.response.edit_message(embed=_notif_embed(t["ig_select_clear_placeholder"]), view=view)
 
     async def _save(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -16594,21 +16667,12 @@ class IgConfigView(discord.ui.View):
             await interaction.response.send_message(embed=_notif_embed(t["panelv2_invalid_value"]), ephemeral=True)
             return
         settings.setdefault("ig_channels", []).append(self.draft.copy())
-        # Update main panel
         embed = build_instagram_embed(self.parent_view.author, settings)
         new_view = InstagramView(self.parent_view.author)
-        try:
-            await interaction.response.edit_message(
-                content=t["ig_channel_added"], embed=embed, view=None
-            )
-        except discord.HTTPException:
-            await interaction.response.send_message(embed=_notif_embed(t["ig_channel_added"]), ephemeral=True)
+        await interaction.response.edit_message(content=t["ig_channel_added"], embed=embed, view=new_view)
 
     async def _cancel(self, interaction: discord.Interaction):
-        try:
-            await interaction.response.edit_message(content="Cancelado.", view=None, embed=None)
-        except discord.HTTPException:
-            await interaction.response.defer()
+        await interaction.response.edit_message(content="Cancelado.", embed=None, view=None)
 
 
 class IgDeleteSpecificSelect(discord.ui.Select):
@@ -16972,8 +17036,9 @@ class InstagramView(discord.ui.View):
     async def _configurar_sistema(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         t = TRANSLATIONS[settings["language"]]
-        view = IgConfigView(self)
-        await interaction.response.send_message(embed=_notif_embed(t["ig_modal_title"]), view=view, ephemeral=True)
+        view = IgConfigMenuView(self)
+        embed = build_ig_config_menu_embed(view.draft, interaction.guild, t, settings)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _deletar(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
