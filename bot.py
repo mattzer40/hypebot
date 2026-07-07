@@ -16241,83 +16241,111 @@ async def _send_ig_card(
     force_channel_id: int | None = None,
 ) -> None:
     """Monta o card V2 do Instagram e envia para os canais configurados."""
+    import aiohttp as _ah_ig
+    from urllib.parse import urlparse as _urlparse
+
     guild_icon = str(guild.icon.url) if (guild and guild.icon) else None
     guild_name = guild.name if guild else "Instagram"
     color      = 0xE1306C  # Instagram pink
     ig_emj     = settings.get("ig_emojis", {}) or {}
 
+    # ── Baixa a mídia para reenviar como anexo real (attachment://). Referenciar a URL
+    #    assinada/expirável do CDN do Discord costuma fazer o POST falhar; anexar é robusto.
+    #    Fallback: se o download falhar, usa a URL direta. ──
+    _fname = ((_urlparse(media_url).path or "").rsplit("/", 1)[-1] or "media")
+    if "." not in _fname:
+        _fname += ".png"
+    _media_bytes: bytes | None = None
+    try:
+        async with _ah_ig.ClientSession() as _dl:
+            async with _dl.get(media_url) as _mr:
+                if _mr.status == 200:
+                    _media_bytes = await _mr.read()
+                else:
+                    print(f"[ig_card] GET mídia {_mr.status} — usando URL direta", flush=True)
+    except Exception as _dle:
+        print(f"[ig_card] download mídia falhou ({_dle}) — usando URL direta", flush=True)
+
+    _media_ref = f"attachment://{_fname}" if _media_bytes is not None else media_url
+
     _action_buttons: list = [
-        {
-            "type": 2,
-            "style": 2,
-            "label": "0",
-            "custom_id": "ig_post_like",
-            "emoji": _ig_emoji_api_dict(ig_emj.get("curtir", "💗")),
-        },
+        {"type": 2, "style": 2, "label": "0", "custom_id": "ig_post_like",
+         "emoji": _ig_emoji_api_dict(ig_emj.get("curtir", "💗"))},
     ]
     _insta_url = settings.get("ig_card_instagram_url")
     if _insta_url:
-        _action_buttons.append({
-            "type": 2,
-            "style": 5,  # Link
-            "label": "Instagram",
-            "url": _insta_url,
-            "emoji": _ig_emoji_api_dict(ig_emj.get("botao_instagram", "📷")),
-        })
-    _action_buttons.append({
-        "type": 2,
-        "style": 4,
-        "label": "Deletar",
-        "custom_id": f"ig_post_delete_{author.id}",
-        "emoji": _ig_emoji_api_dict(ig_emj.get("deletar", "🗑️")),
-    })
+        _action_buttons.append({"type": 2, "style": 5, "label": "Instagram", "url": _insta_url,
+                                "emoji": _ig_emoji_api_dict(ig_emj.get("botao_instagram", "📷"))})
+    _action_buttons.append({"type": 2, "style": 4, "label": "Deletar",
+                            "custom_id": f"ig_post_delete_{author.id}",
+                            "emoji": _ig_emoji_api_dict(ig_emj.get("deletar", "🗑️"))})
+
+    # Cabeçalho: uma Section (type 9) EXIGE accessory. Só usa Section quando há ícone do
+    # server (o accessory). Sem ícone, usa TextDisplay simples — Section sem accessory = 400.
+    if guild_icon:
+        _header = {"type": 9,
+                   "components": [{"type": 10, "content": f"**{guild_name} · Instagram**"}],
+                   "accessory": {"type": 11, "media": {"url": guild_icon}, "description": guild_name}}
+    else:
+        _header = {"type": 10, "content": f"**{guild_name} · Instagram**"}
 
     _components: list = [
-        {
-            "type": 9,  # Section
-            "components": [{"type": 10, "content": f"**{guild_name} · Instagram**"}],
-        },
-        {
-            "type": 10,
-            "content": f"<:comunidade_:1518272016971595807> @{author.display_name}",
-        },
-        {
-            "type": 12,  # MediaGallery
-            "items": [{"media": {"url": media_url}}],
-        },
-        {
-            "type": 1,
-            "components": _action_buttons,
-        },
+        _header,
+        {"type": 10, "content": f"<:comunidade_:1518272016971595807> @{author.display_name}"},
+        {"type": 12, "items": [{"media": {"url": _media_ref}}]},
+        {"type": 1, "components": _action_buttons},
     ]
-    if guild_icon:
-        _components[0]["accessory"] = {
-            "type": 11,
-            "media": {"url": guild_icon},
-            "description": guild_name,
-        }
 
     _payload = {
         "flags": 32768,
         "components": [{"type": 17, "accent_color": color, "components": _components}],
     }
 
-    import aiohttp as _ah_ig
-    _h = {"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"}
+    _h    = {"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"}
+    _h_mp = {"Authorization": f"Bot {bot.http.token}"}  # multipart: aiohttp define o Content-Type
+
+    async def _post_card(_session, _channel_id, _extra: dict | None = None):
+        """Posta o card no canal. Reenvia a mídia como anexo (multipart) quando baixada;
+        senão usa a URL. Retorna o JSON da mensagem criada, ou None em falha."""
+        _p = dict(_payload)
+        if _extra:
+            _p.update(_extra)
+        try:
+            if _media_bytes is not None:
+                _p["attachments"] = [{"id": 0, "filename": _fname}]
+                _form = _ah_ig.FormData()
+                _form.add_field("payload_json", json.dumps(_p), content_type="application/json")
+                _form.add_field("files[0]", _media_bytes, filename=_fname,
+                                content_type="application/octet-stream")
+                async with _session.post(
+                    f"https://discord.com/api/v10/channels/{_channel_id}/messages",
+                    data=_form, headers=_h_mp,
+                ) as _r:
+                    _body = await _r.text()
+            else:
+                async with _session.post(
+                    f"https://discord.com/api/v10/channels/{_channel_id}/messages",
+                    json=_p, headers=_h,
+                ) as _r:
+                    _body = await _r.text()
+            if _r.status not in (200, 201):
+                print(f"[ig_card] POST ch={_channel_id} {_r.status}: {_body[:400]}", flush=True)
+                return None
+            try:
+                return json.loads(_body)
+            except Exception:
+                return {}
+        except Exception as _pe:
+            print(f"[ig_card] POST ch={_channel_id} exceção: {type(_pe).__name__}: {_pe}", flush=True)
+            return None
 
     ig_channels = settings.get("ig_channels", [])
 
     async with _ah_ig.ClientSession() as _s:
         if force_channel_id:
             # Post de usuário verificado: SEMPRE no canal correto do fluxo de verificação,
-            # independente do sistema de destaque (ig_channels) estar ou não configurado —
-            # os dois sistemas são independentes e não devem se misturar.
-            async with _s.post(
-                f"https://discord.com/api/v10/channels/{force_channel_id}/messages",
-                json=_payload, headers=_h,
-            ) as _r:
-                if _r.status not in (200, 201):
-                    print(f"[ig_card] POST force_channel {_r.status}: {await _r.text()}", flush=True)
+            # independente do sistema de destaque (ig_channels) — os dois são independentes.
+            await _post_card(_s, force_channel_id)
         elif ig_channels:
             for _ch in ig_channels:
                 _pid  = _ch.get("post_channel_id")
@@ -16325,19 +16353,14 @@ async def _send_ig_card(
                 _rid  = _ch.get("role_id")
                 _clear = _ch.get("clear_highlight", False)
 
-                _send = dict(_payload)
+                _extra = None
                 if _rid and guild:
                     _role = guild.get_role(_rid)
                     if _role:
-                        _send["content"] = _role.mention
-                        _send["allowed_mentions"] = {"roles": [_rid]}
+                        _extra = {"content": _role.mention, "allowed_mentions": {"roles": [_rid]}}
 
                 if _pid:
-                    async with _s.post(
-                        f"https://discord.com/api/v10/channels/{_pid}/messages",
-                        json=_send, headers=_h,
-                    ) as _r:
-                        pass
+                    await _post_card(_s, _pid, _extra)
 
                 if _hid:
                     if _clear:
@@ -16352,33 +16375,19 @@ async def _send_ig_card(
                                     pass
                             except Exception:
                                 pass
-                    async with _s.post(
-                        f"https://discord.com/api/v10/channels/{_hid}/messages",
-                        json=_send, headers=_h,
-                    ) as _r2:
-                        if _r2.status in (200, 201):
-                            _rd = await _r2.json()
-                            settings.setdefault("ig_last_highlight", {})[str(_hid)] = _rd.get("id")
-                            save_settings_to_disk()
+                    _hres = await _post_card(_s, _hid, _extra)
+                    if _hres and _hres.get("id"):
+                        settings.setdefault("ig_last_highlight", {})[str(_hid)] = _hres["id"]
+                        save_settings_to_disk()
         elif fallback_channel_id:
-            # Sem canais configurados — posta no canal de fallback
-            async with _s.post(
-                f"https://discord.com/api/v10/channels/{fallback_channel_id}/messages",
-                json=_payload, headers=_h,
-            ) as _r:
-                pass
+            await _post_card(_s, fallback_channel_id)
         else:
-            # Tenta encontrar canal com "insta" no nome
             _insta_ch = discord.utils.find(
                 lambda c: "insta" in c.name.lower() and isinstance(c, discord.TextChannel),
                 guild.channels,
             ) if guild else None
             if _insta_ch:
-                async with _s.post(
-                    f"https://discord.com/api/v10/channels/{_insta_ch.id}/messages",
-                    json=_payload, headers=_h,
-                ) as _r:
-                    pass
+                await _post_card(_s, _insta_ch.id)
 
 
 async def _handle_ig_post_like(interaction: discord.Interaction) -> None:
