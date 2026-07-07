@@ -9093,10 +9093,12 @@ class TicketPainelLeiaView(discord.ui.View):
                 menu_view = _build_ticket_panel_menu_view(panel)
             elif panel.get("usar_botao"):
                 _pb_id    = str(panel.get("id", ""))
-                _pb_label = (panel.get("nome") or "Abrir Ticket")[:80]
+                _pb_ecfg  = panel.get("embed", {}) or {}
+                _pb_label = (_pb_ecfg.get("button_label") or panel.get("nome") or "Abrir Ticket")[:80]
                 _pb_btn   = discord.ui.Button(
                     label=_pb_label,
                     style=discord.ButtonStyle.primary,
+                    emoji=_parse_menu_emoji(_pb_ecfg.get("button_emoji")),
                     custom_id=f"ticket_panel_btn_{_pb_id}",
                 )
                 menu_view = discord.ui.View(timeout=None)
@@ -35771,10 +35773,12 @@ def build_panel_v2_layout(
             _ticket_select_row = discord.ui.ActionRow(ticket_select)
     elif ticket_panel and ticket_panel.get("usar_botao"):
         panel_id = str(ticket_panel.get("id", ""))
-        _btn_label = (ticket_panel.get("nome") or "Abrir Ticket")[:80]
+        _tp_ecfg = ticket_panel.get("embed", {}) or {}
+        _btn_label = (_tp_ecfg.get("button_label") or ticket_panel.get("nome") or "Abrir Ticket")[:80]
         _ticket_btn = discord.ui.Button(
             label=_btn_label,
             style=discord.ButtonStyle.primary,
+            emoji=_parse_menu_emoji(_tp_ecfg.get("button_emoji")),
             custom_id=f"ticket_panel_btn_{panel_id}",
         )
         _ticket_select_row = discord.ui.ActionRow(_ticket_btn)
