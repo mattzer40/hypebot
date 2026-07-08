@@ -8953,10 +8953,10 @@ def build_ticket_painel_leia_embed(author: discord.Member, settings: dict) -> di
 
 
 _TICKET_MENU_DEFAULT_EMOJIS = [
-    "<:tickets:1518271952526250155>",
-    "<a:online:1518271945550856295>",
-    "<:estrela:1518272022093877309>",
-    "<:Mov_chat:1518271970008105031>",
+    "🎫",
+    "✅",
+    "⭐",
+    "💬",
 ]
 
 
