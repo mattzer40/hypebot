@@ -7870,8 +7870,12 @@ class TicketCategoriaView(discord.ui.View):
 
 
 class TicketCargosRespSelect(discord.ui.RoleSelect):
-    def __init__(self, panel_id: str, placeholder: str):
-        super().__init__(placeholder=placeholder, min_values=1, max_values=5)
+    def __init__(self, panel_id: str, placeholder: str, default_roles: list[int] | None = None):
+        default_values = [
+            discord.SelectDefaultValue(id=rid, type=discord.SelectDefaultValueType.role)
+            for rid in (default_roles or [])
+        ]
+        super().__init__(placeholder=placeholder, min_values=0, max_values=5, default_values=default_values)
         self.panel_id = panel_id
 
     async def callback(self, interaction: discord.Interaction):
@@ -7880,13 +7884,14 @@ class TicketCargosRespSelect(discord.ui.RoleSelect):
         panel = _find_panel(settings, self.panel_id)
         if panel:
             panel["responsible_roles"] = [r.id for r in self.values][:5]
+            save_settings_to_disk()
         await interaction.response.send_message(embed=_notif_embed(t["ticket_cargos_resp_updated"]), ephemeral=True)
 
 
 class TicketCargosRespView(discord.ui.View):
-    def __init__(self, panel_id: str, t: dict):
+    def __init__(self, panel_id: str, t: dict, default_roles: list[int] | None = None):
         super().__init__(timeout=120)
-        self.add_item(TicketCargosRespSelect(panel_id, t["ticket_cargos_resp_placeholder"]))
+        self.add_item(TicketCargosRespSelect(panel_id, t["ticket_cargos_resp_placeholder"], default_roles))
 
 
 class TicketPerLogChannelSelect(GuildChannelSelect):
@@ -8497,8 +8502,12 @@ class TicketMenuEmbedInternaView(discord.ui.View):
 
 
 class TicketMenuCargosSelect(discord.ui.RoleSelect):
-    def __init__(self, author: discord.Member, panel_id: str, opcao_id: str, placeholder: str):
-        super().__init__(placeholder=placeholder, min_values=1, max_values=5)
+    def __init__(self, author: discord.Member, panel_id: str, opcao_id: str, placeholder: str, default_roles: list[int] | None = None):
+        default_values = [
+            discord.SelectDefaultValue(id=rid, type=discord.SelectDefaultValueType.role)
+            for rid in (default_roles or [])
+        ]
+        super().__init__(placeholder=placeholder, min_values=0, max_values=5, default_values=default_values)
         self.author   = author
         self.panel_id = panel_id
         self.opcao_id = opcao_id
@@ -8581,8 +8590,11 @@ class TicketMenuGerenciarOpcaoView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_cargos_resp_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
+        panel = _find_panel(settings, self.panel_id)
+        opcao = next((op for op in (panel or {}).get("menu_opcoes", []) if op.get("id") == self.opcao_id), {})
+        current_roles = opcao.get("responsible_roles", [])
         view = discord.ui.View(timeout=120)
-        select = TicketMenuCargosSelect(self.author, self.panel_id, self.opcao_id, t["ticket_cargos_resp_placeholder"])
+        select = TicketMenuCargosSelect(self.author, self.panel_id, self.opcao_id, t["ticket_cargos_resp_placeholder"], current_roles)
         view.add_item(select)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
@@ -9231,7 +9243,9 @@ class TicketPerManagerView(discord.ui.View):
     async def _cargos_resp(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         t = TRANSLATIONS[settings["language"]]
-        view = TicketCargosRespView(self.panel_id, t)
+        panel = _find_panel(settings, self.panel_id)
+        current_roles = (panel or {}).get("responsible_roles", [])
+        view = TicketCargosRespView(self.panel_id, t, current_roles)
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_cargos_resp_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
