@@ -93,10 +93,15 @@ for _env_key, _env_val in os.environ.items():
             _existing = _json_bs.loads(_settings_path.read_text(encoding="utf-8"))
             _changed = False
             for _gid, _seed_guild in _seed_data.items():
+                if not isinstance(_seed_guild, dict):
+                    # Seed malformado para este guild (ex: virou lista) — nunca escreve isso
+                    # no volume; evita corromper bot_settings.json e derrubar comandos depois.
+                    print(f"[manager] seed ignorado — guild={_gid} não é dict ({type(_seed_guild).__name__})", flush=True)
+                    continue
                 if _gid not in _existing:
                     _existing[_gid] = _seed_guild
                     _changed = True
-                else:
+                elif isinstance(_existing[_gid], dict):
                     for _k, _v in _seed_guild.items():
                         if _k not in _existing[_gid]:
                             _existing[_gid][_k] = _v
