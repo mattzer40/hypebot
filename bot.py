@@ -36635,7 +36635,16 @@ class PanelV2BuilderView(discord.ui.LayoutView):
     async def _refresh(self, interaction: discord.Interaction):
         new_view = self._rebuild()
         try:
-            await interaction.edit_original_response(view=new_view)
+            if interaction.response.is_done():
+                # Interação já respondida (ex: defer prévio) — edita a resposta original.
+                await interaction.edit_original_response(view=new_view)
+            else:
+                # Interação ainda não respondida (submit de modal, callback de select) —
+                # edit_original_response falharia (não há "resposta original" ainda),
+                # o que impedia o painel de atualizar e derrubava o followup.send()
+                # seguinte com "Algo deu errado". response.edit_message() edita a
+                # mensagem do painel diretamente E conta como a resposta da interação.
+                await interaction.response.edit_message(view=new_view)
         except (discord.HTTPException, discord.NotFound):
             pass
 
