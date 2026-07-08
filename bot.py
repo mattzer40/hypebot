@@ -4339,6 +4339,12 @@ def get_settings(guild_id: int) -> dict:
         guild_id = _ovr
         # Lazy-load: lê do arquivo do bot cliente se ainda não carregado nessa sessão
         _dev_load_client_settings(guild_id)
+    # Auto-cura: se o valor salvo para este guild não for um dict (corrupção — ex: settings.json
+    # ou um seed externo gravou uma lista/valor errado), descarta e recria um padrão limpo em vez
+    # de deixar todo .setdefault()/.get() subsequente quebrar com AttributeError.
+    if guild_id in bot_settings and not isinstance(bot_settings[guild_id], dict):
+        print(f"[settings] guild={guild_id} valor corrompido ({type(bot_settings[guild_id]).__name__}) — recriando padrão", flush=True)
+        del bot_settings[guild_id]
     settings = bot_settings.setdefault(
         guild_id,
         {
@@ -28977,6 +28983,12 @@ async def clonar_config_cmd(ctx: commands.Context, source_guild_id: int = None):
     # Se não há nenhuma config salva E o bot não está no servidor, não tem nada pra copiar
     if source_guild is None and not src:
         await ctx.reply("<a:alerta:1518271939460857968> Servidor de origem não encontrado e nenhuma configuração salva para esse ID.")
+        return
+    if not isinstance(src, dict):
+        await ctx.reply(
+            f"<a:alerta:1518271939460857968> Configuração salva para **ID {source_guild_id}** está corrompida "
+            "(não é possível ler). Não há como clonar a partir dela."
+        )
         return
 
     if source_guild is None:
