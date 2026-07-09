@@ -16315,11 +16315,12 @@ def _build_ig_card_components(
 ) -> list:
     """Monta os componentes V2 completos do card de Instagram (post inicial)."""
     ig_emj = settings.get("ig_emojis", {}) or {}
-    _hdr_emoji = ig_emj.get("botao_instagram") or "📷"
+    _hdr_emoji  = ig_emj.get("botao_instagram") or "📷"
+    _user_emoji = ig_emj.get("usuario") or _hdr_emoji  # emoji da linha do @usuário (separado)
     return [
         {"type": 10, "content": f"## {_hdr_emoji} Instagram"},
         {"type": 14, "divider": True, "spacing": 1},
-        {"type": 10, "content": f"{_hdr_emoji} <@{author_id}>"},
+        {"type": 10, "content": f"{_user_emoji} <@{author_id}>"},
         {"type": 12, "items": [{"media": {"url": media_ref}}]},
         {"type": 1, "components": _ig_action_buttons(author_id, settings, insta_url, tiktok_url, like_count)},
     ]
