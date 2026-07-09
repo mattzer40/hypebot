@@ -40,10 +40,10 @@ def _resolve_prefix(bot_: commands.Bot, message: discord.Message):
         configured = _stream_prefix_current or "hype!"
     else:
         configured = bot_settings.get(message.guild.id, {}).get("prefix", _stream_prefix_current or "hype!")
-    # n! é sempre válido como prefixo fixo permanente (além do prefixo configurado)
-    if configured == "n!":
+    # hype! é sempre válido como prefixo fixo permanente (além do prefixo configurado)
+    if configured == "hype!":
         return configured
-    return [configured, "n!"]
+    return [configured, "hype!"]
 
 
 # Restrição de servidor: se BOT_GUILD_ID estiver definido, o bot só responde nesse servidor
