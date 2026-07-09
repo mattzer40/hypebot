@@ -36,14 +36,11 @@ intents.members = True
 
 
 def _resolve_prefix(bot_: commands.Bot, message: discord.Message):
+    # Só o prefixo configurado do cliente vale (padrão "hype!" quando não definido).
+    # Sem fallback universal: ao mudar o prefixo no menu, só o novo passa a funcionar.
     if message.guild is None:
-        configured = _stream_prefix_current or "hype!"
-    else:
-        configured = bot_settings.get(message.guild.id, {}).get("prefix", _stream_prefix_current or "hype!")
-    # hype! é sempre válido como prefixo fixo permanente (além do prefixo configurado)
-    if configured == "hype!":
-        return configured
-    return [configured, "hype!"]
+        return _stream_prefix_current or "hype!"
+    return bot_settings.get(message.guild.id, {}).get("prefix", _stream_prefix_current or "hype!")
 
 
 # Restrição de servidor: se BOT_GUILD_ID estiver definido, o bot só responde nesse servidor
