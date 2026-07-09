@@ -16264,33 +16264,21 @@ def _update_like_button_label(components: list, count: int) -> bool:
     return False
 
 
-def _ig_action_buttons(
-    author_id: int,
-    settings: dict,
-    insta_url: str | None = None,
-    tiktok_url: str | None = None,
-    like_count: int = 0,
-) -> list:
-    """Botões (ActionRow) do card de Instagram: curtir, links do autor (se
-    definidos), 'Meus links' (só o autor edita) e deletar."""
+def _ig_action_buttons(author_id: int, settings: dict, like_count: int = 0) -> list:
+    """Botões (ActionRow) do card de Instagram: curtir, Instagram e TikTok
+    (o autor clica para definir/editar o próprio link; outros não interagem)
+    e deletar."""
     ig_emj = settings.get("ig_emojis", {}) or {}
-    _btns: list = [
+    return [
         {"type": 2, "style": 2, "label": str(like_count), "custom_id": "ig_post_like",
          "emoji": _ig_emoji_api_dict(ig_emj.get("curtir", "💗"))},
+        {"type": 2, "style": 2, "custom_id": f"ig_post_iglink_{author_id}",
+         "emoji": _ig_emoji_api_dict(ig_emj.get("botao_instagram", "📷"))},
+        {"type": 2, "style": 2, "custom_id": f"ig_post_ttlink_{author_id}",
+         "emoji": _ig_emoji_api_dict(ig_emj.get("botao_tiktok", "🎵"))},
+        {"type": 2, "style": 4, "custom_id": f"ig_post_delete_{author_id}",
+         "emoji": _ig_emoji_api_dict(ig_emj.get("deletar", "🗑️"))},
     ]
-    if insta_url:
-        _btns.append({"type": 2, "style": 5, "url": insta_url,
-                      "emoji": _ig_emoji_api_dict(ig_emj.get("botao_instagram", "📷"))})
-    if tiktok_url:
-        _btns.append({"type": 2, "style": 5, "url": tiktok_url,
-                      "emoji": _ig_emoji_api_dict(ig_emj.get("botao_tiktok", "🎵"))})
-    _btns.append({"type": 2, "style": 1, "label": "Meus links",
-                  "custom_id": f"ig_post_setlinks_{author_id}",
-                  "emoji": _ig_emoji_api_dict("🔗")})
-    _btns.append({"type": 2, "style": 4,
-                  "custom_id": f"ig_post_delete_{author_id}",
-                  "emoji": _ig_emoji_api_dict(ig_emj.get("deletar", "🗑️"))})
-    return _btns
 
 
 def _replace_ig_action_row(components: list, new_buttons: list) -> bool:
@@ -16312,20 +16300,20 @@ def _build_ig_card_components(
     author_id: int,
     media_ref: str,
     settings: dict,
-    insta_url: str | None = None,
-    tiktok_url: str | None = None,
     like_count: int = 0,
 ) -> list:
     """Monta os componentes V2 completos do card de Instagram (post inicial)."""
     ig_emj = settings.get("ig_emojis", {}) or {}
-    _hdr_emoji  = ig_emj.get("botao_instagram") or "📷"
-    _user_emoji = ig_emj.get("usuario") or _hdr_emoji  # emoji da linha do @usuário (separado)
+    # Emoji do TÍTULO (topo) é separado do emoji do BOTÃO de Instagram, para que
+    # mudar o botão não altere o título. Fallbacks mantêm compatibilidade.
+    _title_emoji = ig_emj.get("titulo") or ig_emj.get("botao_instagram") or "📷"
+    _user_emoji  = ig_emj.get("usuario") or ig_emj.get("botao_instagram") or "📷"
     return [
-        {"type": 10, "content": f"## {_hdr_emoji} Instagram"},
+        {"type": 10, "content": f"## {_title_emoji} Instagram"},
         {"type": 14, "divider": True, "spacing": 1},
         {"type": 10, "content": f"{_user_emoji} <@{author_id}>"},
         {"type": 12, "items": [{"media": {"url": media_ref}}]},
-        {"type": 1, "components": _ig_action_buttons(author_id, settings, insta_url, tiktok_url, like_count)},
+        {"type": 1, "components": _ig_action_buttons(author_id, settings, like_count)},
     ]
 
 
@@ -16367,10 +16355,9 @@ async def _send_ig_card(
     # reais somam por cima desse número; o base é guardado por mensagem.
     _like_base = random.randint(42, 118)
 
-    # Cada usuário define os próprios links no botão "Meus links" do card, então
-    # o post inicial sai sem links (Instagram/TikTok aparecem após o autor definir).
-    _components = _build_ig_card_components(author.id, _media_ref, settings,
-                                            insta_url=None, tiktok_url=None, like_count=_like_base)
+    # Instagram/TikTok são botões que o autor clica para definir/editar o próprio
+    # link. O contador de curtir começa na curtida-base.
+    _components = _build_ig_card_components(author.id, _media_ref, settings, like_count=_like_base)
 
     _payload = {
         "flags": 32768,
@@ -16569,56 +16556,8 @@ class IgPostLinksModal(discord.ui.Modal):
         links[str(self.message_id)] = {"instagram": insta, "tiktok": tiktok}
         save_settings_to_disk()
 
-        like_count = (settings.get("ig_post_like_base", {}).get(str(self.message_id), 0)
-                      + len(settings.get("ig_post_likes", {}).get(str(self.message_id), [])))
-        new_buttons = _ig_action_buttons(self.author_id, settings, insta, tiktok, like_count)
-
-        _headers = {"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"}
-        import aiohttp as _ah_links
-        try:
-            async with _ah_links.ClientSession() as _s:
-                async with _s.get(
-                    f"https://discord.com/api/v10/channels/{self.channel_id}/messages/{self.message_id}",
-                    headers=_headers,
-                ) as _r:
-                    if _r.status != 200:
-                        await interaction.response.send_message(
-                            embed=_notif_embed("<a:alerta:1518271939460857968> Não encontrei o post para atualizar.", _cor),
-                            ephemeral=True,
-                        )
-                        return
-                    _data = await _r.json()
-                _comps = _data.get("components", [])
-                if not _replace_ig_action_row(_comps, new_buttons):
-                    await interaction.response.send_message(
-                        embed=_notif_embed("<a:alerta:1518271939460857968> Não consegui atualizar os botões do post.", _cor),
-                        ephemeral=True,
-                    )
-                    return
-                async with _s.patch(
-                    f"https://discord.com/api/v10/channels/{self.channel_id}/messages/{self.message_id}",
-                    headers=_headers, json={"components": _comps},
-                ) as _r2:
-                    if _r2.status not in (200, 204):
-                        print(f"[ig_links] PATCH {_r2.status}: {await _r2.text()}", flush=True)
-                        await interaction.response.send_message(
-                            embed=_notif_embed("<a:alerta:1518271939460857968> Erro ao atualizar o post.", _cor),
-                            ephemeral=True,
-                        )
-                        return
-        except Exception as _le:
-            print(f"[ig_links] erro: {_le}", flush=True)
-            try:
-                await interaction.response.send_message(
-                    embed=_notif_embed("<a:alerta:1518271939460857968> Erro ao atualizar o post.", _cor),
-                    ephemeral=True,
-                )
-            except Exception:
-                pass
-            return
-
         await interaction.response.send_message(
-            embed=_notif_embed("<a:online:1518271945550856295> Seus links foram atualizados no post!", _cor),
+            embed=_notif_embed("<a:online:1518271945550856295> Seus links foram salvos!", _cor),
             ephemeral=True,
         )
 
@@ -43778,19 +43717,18 @@ async def on_interaction(interaction: discord.Interaction):
             print(f"[ig_like] erro no handler: {_ige}", flush=True)
         return
 
-    # ── Definir meus links (Instagram/TikTok) no card — só o autor ──────────────
-    if cid.startswith("ig_post_setlinks_"):
+    # ── Instagram/TikTok do card: só o autor edita o próprio link ───────────────
+    #    (custom_id antigo ig_post_setlinks_ mantido para cards já postados.)
+    if (cid.startswith("ig_post_iglink_") or cid.startswith("ig_post_ttlink_")
+            or cid.startswith("ig_post_setlinks_")):
         try:
             _author_id = int(cid.split("_")[-1])
         except (ValueError, IndexError):
             _author_id = 0
-        _cor = get_settings(interaction.guild.id).get("embed_color", 0x2B2D31) if interaction.guild else 0x2B2D31
+        # Só o autor interage; para os demais, apenas reconhece o clique (nada acontece).
         if interaction.user.id != _author_id:
             try:
-                await interaction.response.send_message(
-                    embed=_notif_embed("<a:alerta:1518271939460857968> Apenas o autor do post pode definir os links.", _cor),
-                    ephemeral=True,
-                )
+                await interaction.response.defer()
             except Exception:
                 pass
             return
