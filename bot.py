@@ -4549,6 +4549,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("ig_card_tiktok_url", None)  # link do botão TikTok no card
     settings.setdefault("ig_post_likes", {})  # {message_id_str: [user_id, ...]}
     settings.setdefault("ig_post_links", {})  # {message_id_str: {"instagram": url, "tiktok": url}}
+    settings.setdefault("ig_post_like_base", {})  # {message_id_str: int} curtida-base fake por post
     settings.setdefault("verif_enabled", False)
     settings.setdefault("verif_urls", [])
     settings.setdefault("verif_token", None)
@@ -16362,10 +16363,14 @@ async def _send_ig_card(
 
     _media_ref = f"attachment://{_fname}" if _media_bytes is not None else media_url
 
+    # Curtida-base aleatória por post (aparência de engajamento). As curtidas
+    # reais somam por cima desse número; o base é guardado por mensagem.
+    _like_base = random.randint(42, 118)
+
     # Cada usuário define os próprios links no botão "Meus links" do card, então
     # o post inicial sai sem links (Instagram/TikTok aparecem após o autor definir).
     _components = _build_ig_card_components(author.id, _media_ref, settings,
-                                            insta_url=None, tiktok_url=None, like_count=0)
+                                            insta_url=None, tiktok_url=None, like_count=_like_base)
 
     _payload = {
         "flags": 32768,
@@ -16404,9 +16409,14 @@ async def _send_ig_card(
                 print(f"[ig_card] POST ch={_channel_id} {_r.status}: {_body[:400]}", flush=True)
                 return None
             try:
-                return json.loads(_body)
+                _mj = json.loads(_body)
             except Exception:
-                return {}
+                _mj = {}
+            # Guarda a curtida-base desta mensagem para o contador somar por cima.
+            if _mj and _mj.get("id"):
+                settings.setdefault("ig_post_like_base", {})[str(_mj["id"])] = _like_base
+                save_settings_to_disk()
+            return _mj
         except Exception as _pe:
             print(f"[ig_card] POST ch={_channel_id} exceção: {type(_pe).__name__}: {_pe}", flush=True)
             return None
@@ -16485,7 +16495,8 @@ async def _handle_ig_post_like(interaction: discord.Interaction) -> None:
         liked.add(uid)
     likes[key] = list(liked)
     save_settings_to_disk()
-    count = len(liked)
+    _base = settings.get("ig_post_like_base", {}).get(key, 0)
+    count = _base + len(liked)
 
     try:
         await interaction.response.defer()
@@ -16558,7 +16569,8 @@ class IgPostLinksModal(discord.ui.Modal):
         links[str(self.message_id)] = {"instagram": insta, "tiktok": tiktok}
         save_settings_to_disk()
 
-        like_count = len(settings.get("ig_post_likes", {}).get(str(self.message_id), []))
+        like_count = (settings.get("ig_post_like_base", {}).get(str(self.message_id), 0)
+                      + len(settings.get("ig_post_likes", {}).get(str(self.message_id), [])))
         new_buttons = _ig_action_buttons(self.author_id, settings, insta, tiktok, like_count)
 
         _headers = {"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"}
