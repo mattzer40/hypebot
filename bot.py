@@ -43634,8 +43634,12 @@ async def on_interaction(interaction: discord.Interaction):
         _is_auth = isinstance(member, discord.Member) and is_authorized(member, _settings_del)
         if not (member.id == _author_id or _is_adm or _has_allowed_role or _is_auth):
             try:
+                _cor = _settings_del.get("embed_color", 0x2B2D31) if isinstance(_settings_del, dict) else 0x2B2D31
                 await interaction.response.send_message(
-                    "<a:alerta:1518271939460857968> Apenas o autor do post ou quem tem cargo autorizado pode deletar.",
+                    embed=_notif_embed(
+                        "<a:alerta:1518271939460857968> Apenas o autor do post ou quem tem cargo autorizado pode deletar.",
+                        _cor,
+                    ),
                     ephemeral=True,
                 )
             except Exception:
