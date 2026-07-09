@@ -16272,8 +16272,6 @@ async def _send_ig_card(
     import aiohttp as _ah_ig
     from urllib.parse import urlparse as _urlparse
 
-    guild_icon = str(guild.icon.url) if (guild and guild.icon) else None
-    guild_name = guild.name if guild else "Instagram"
     color      = 0xE1306C  # Instagram pink
     ig_emj     = settings.get("ig_emojis", {}) or {}
 
@@ -16312,18 +16310,13 @@ async def _send_ig_card(
                             "custom_id": f"ig_post_delete_{author.id}",
                             "emoji": _ig_emoji_api_dict(ig_emj.get("deletar", "🗑️"))})
 
-    # Cabeçalho: uma Section (type 9) EXIGE accessory. Só usa Section quando há ícone do
-    # server (o accessory). Sem ícone, usa TextDisplay simples — Section sem accessory = 400.
-    if guild_icon:
-        _header = {"type": 9,
-                   "components": [{"type": 10, "content": f"**{guild_name} · Instagram**"}],
-                   "accessory": {"type": 11, "media": {"url": guild_icon}, "description": guild_name}}
-    else:
-        _header = {"type": 10, "content": f"**{guild_name} · Instagram**"}
-
+    # Cabeçalho no estilo "Instagram" (título grande) + linha separadora + linha do @usuário,
+    # sem miniatura no canto. O ícone é o mesmo emoji configurável do botão de Instagram.
+    _hdr_emoji = ig_emj.get("botao_instagram") or "📷"
     _components: list = [
-        _header,
-        {"type": 10, "content": f"<:comunidade_:1518272016971595807> @{author.display_name}"},
+        {"type": 10, "content": f"## {_hdr_emoji} Instagram"},
+        {"type": 14, "divider": True, "spacing": 1},
+        {"type": 10, "content": f"{_hdr_emoji} @{author.display_name}"},
         {"type": 12, "items": [{"media": {"url": _media_ref}}]},
         {"type": 1, "components": _action_buttons},
     ]
