@@ -16320,8 +16320,12 @@ def _build_ig_card_components(
     # mudar o botão não altere o título. Fallbacks mantêm compatibilidade.
     _title_emoji = ig_emj.get("titulo") or ig_emj.get("botao_instagram") or "📷"
     _user_emoji  = ig_emj.get("usuario") or ig_emj.get("botao_instagram") or "📷"
+    # Título configurável: se "titulo_texto" estiver definido (ex.: emojis do
+    # wordmark), usa ele como o título inteiro; senão, "{emoji} Instagram".
+    _titulo_txt = ig_emj.get("titulo_texto")
+    _header = f"## {_titulo_txt}" if _titulo_txt else f"## {_title_emoji} Instagram"
     return [
-        {"type": 10, "content": f"## {_title_emoji} Instagram"},
+        {"type": 10, "content": _header},
         {"type": 14, "divider": True, "spacing": 1},
         {"type": 10, "content": f"{_user_emoji} <@{author_id}>"},
         {"type": 12, "items": [{"media": {"url": media_ref}}]},
