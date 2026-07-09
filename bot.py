@@ -16268,8 +16268,8 @@ def _ig_action_buttons(
     tiktok_url: str | None = None,
     like_count: int = 0,
 ) -> list:
-    """Botões (ActionRow) do card de Instagram: curtir, links (Instagram/TikTok,
-    se configurados no painel) e deletar."""
+    """Botões (ActionRow) do card de Instagram: curtir, links do autor (se
+    definidos), 'Meus links' (só o autor edita) e deletar."""
     ig_emj = settings.get("ig_emojis", {}) or {}
     _btns: list = [
         {"type": 2, "style": 2, "label": str(like_count), "custom_id": "ig_post_like",
@@ -16281,6 +16281,9 @@ def _ig_action_buttons(
     if tiktok_url:
         _btns.append({"type": 2, "style": 5, "url": tiktok_url,
                       "emoji": _ig_emoji_api_dict(ig_emj.get("botao_tiktok", "🎵"))})
+    _btns.append({"type": 2, "style": 1, "label": "Meus links",
+                  "custom_id": f"ig_post_setlinks_{author_id}",
+                  "emoji": _ig_emoji_api_dict("🔗")})
     _btns.append({"type": 2, "style": 4,
                   "custom_id": f"ig_post_delete_{author_id}",
                   "emoji": _ig_emoji_api_dict(ig_emj.get("deletar", "🗑️"))})
@@ -16357,13 +16360,10 @@ async def _send_ig_card(
 
     _media_ref = f"attachment://{_fname}" if _media_bytes is not None else media_url
 
-    # Links de Instagram/TikTok configurados no painel (Entretenimento → Instagram).
-    _components = _build_ig_card_components(
-        author.id, _media_ref, settings,
-        insta_url=settings.get("ig_card_instagram_url"),
-        tiktok_url=settings.get("ig_card_tiktok_url"),
-        like_count=0,
-    )
+    # Cada usuário define os próprios links no botão "Meus links" do card, então
+    # o post inicial sai sem links (Instagram/TikTok aparecem após o autor definir).
+    _components = _build_ig_card_components(author.id, _media_ref, settings,
+                                            insta_url=None, tiktok_url=None, like_count=0)
 
     _payload = {
         "flags": 32768,
