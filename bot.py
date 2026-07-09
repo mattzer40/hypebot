@@ -16272,7 +16272,7 @@ async def _send_ig_card(
     import aiohttp as _ah_ig
     from urllib.parse import urlparse as _urlparse
 
-    color      = 0xE1306C  # Instagram pink
+    color      = settings.get("embed_color", 0xE1306C)  # cor configurada em Aparência
     ig_emj     = settings.get("ig_emojis", {}) or {}
 
     # ── Baixa a mídia para reenviar como anexo real (attachment://). Referenciar a URL
@@ -16316,7 +16316,7 @@ async def _send_ig_card(
     _components: list = [
         {"type": 10, "content": f"## {_hdr_emoji} Instagram"},
         {"type": 14, "divider": True, "spacing": 1},
-        {"type": 10, "content": f"{_hdr_emoji} @{author.display_name}"},
+        {"type": 10, "content": f"{_hdr_emoji} <@{author.id}>"},
         {"type": 12, "items": [{"media": {"url": _media_ref}}]},
         {"type": 1, "components": _action_buttons},
     ]
@@ -16324,6 +16324,7 @@ async def _send_ig_card(
     _payload = {
         "flags": 32768,
         "components": [{"type": 17, "accent_color": color, "components": _components}],
+        "allowed_mentions": {"users": [author.id]},
     }
 
     _h    = {"Authorization": f"Bot {bot.http.token}", "Content-Type": "application/json"}
@@ -16382,7 +16383,8 @@ async def _send_ig_card(
                 if _rid and guild:
                     _role = guild.get_role(_rid)
                     if _role:
-                        _extra = {"content": _role.mention, "allowed_mentions": {"roles": [_rid]}}
+                        _extra = {"content": _role.mention,
+                                  "allowed_mentions": {"roles": [_rid], "users": [author.id]}}
 
                 if _pid:
                     await _post_card(_s, _pid, _extra)
