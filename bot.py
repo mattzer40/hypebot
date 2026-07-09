@@ -43623,14 +43623,19 @@ async def on_interaction(interaction: discord.Interaction):
             _author_id = 0
         member = interaction.user
         guild  = interaction.guild
+        _settings_del  = get_settings(guild.id) if guild else {}
+        _allowed_roles = set(_settings_del.get("ig_verif_allowed_roles", []) or [])
+        _member_roles  = {r.id for r in getattr(member, "roles", [])}
         _is_adm = (
             isinstance(member, discord.Member)
             and (member.guild_permissions.administrator or (guild and guild.owner_id == member.id))
         )
-        if not (_is_adm or member.id == _author_id):
+        _has_allowed_role = bool(_allowed_roles & _member_roles)
+        _is_auth = isinstance(member, discord.Member) and is_authorized(member, _settings_del)
+        if not (member.id == _author_id or _is_adm or _has_allowed_role or _is_auth):
             try:
                 await interaction.response.send_message(
-                    "<a:alerta:1518271939460857968> Apenas o autor ou administradores podem deletar este post.",
+                    "<a:alerta:1518271939460857968> Apenas o autor do post ou quem tem cargo autorizado pode deletar.",
                     ephemeral=True,
                 )
             except Exception:
