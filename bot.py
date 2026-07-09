@@ -16899,10 +16899,23 @@ class IgEmojisView(discord.ui.View):
             t = TRANSLATIONS[settings["language"]]
             name = t[f"ig_emoji_{key}"]
             atual = settings.get("ig_emojis", {}).get(key)
-            _prompt = f"Envie o emoji para **{name}** no chat (ou digite `cancelar`)."
+            _prompt = f"✍️ Envie o emoji para **{name}** no chat (ou digite `cancelar`)."
             if atual:
                 _prompt += f"\nAtual: {atual}"
-            await interaction.response.send_message(embed=_notif_embed(_prompt), ephemeral=True)
+            # Edita o PRÓPRIO painel (mensagem efêmera) para mostrar o aviso. Assim esta
+            # interação passa a ser "dona" da mensagem do painel e conseguimos re-editá-la
+            # depois via edit_original_response — interaction.message.edit() NÃO funciona
+            # em mensagem efêmera (falha silenciosa), por isso o painel não atualizava.
+            await interaction.response.edit_message(embed=_notif_embed(_prompt), view=None)
+
+            async def _restore_panel():
+                _s = get_settings(interaction.guild.id)
+                _embed = build_ig_emojis_embed(_s)
+                _view = IgEmojisView(self.author, standalone=self.standalone)
+                try:
+                    await interaction.edit_original_response(embed=_embed, view=_view)
+                except (discord.NotFound, discord.HTTPException):
+                    pass
 
             def check(m: discord.Message) -> bool:
                 return m.author.id == self.author.id and m.channel.id == interaction.channel.id
@@ -16910,6 +16923,7 @@ class IgEmojisView(discord.ui.View):
             try:
                 msg = await bot.wait_for("message", check=check, timeout=60)
             except asyncio.TimeoutError:
+                await _restore_panel()
                 await interaction.followup.send(
                     embed=_notif_embed("Tempo esgotado. Clique no botão de novo para tentar."),
                     ephemeral=True,
@@ -16923,9 +16937,11 @@ class IgEmojisView(discord.ui.View):
                 pass
 
             if content.lower() in ("cancelar", "cancel"):
+                await _restore_panel()
                 await interaction.followup.send(embed=_notif_embed("Cancelado."), ephemeral=True)
                 return
             if not content:
+                await _restore_panel()
                 await interaction.followup.send(
                     embed=_notif_embed("Nenhum emoji recebido. Tente de novo."), ephemeral=True
                 )
@@ -16934,13 +16950,7 @@ class IgEmojisView(discord.ui.View):
             emj = settings.setdefault("ig_emojis", {})
             emj[key] = content
             save_settings_to_disk()
-
-            embed = build_ig_emojis_embed(settings)
-            new_view = IgEmojisView(self.author, standalone=self.standalone)
-            try:
-                await interaction.message.edit(embed=embed, view=new_view)
-            except (discord.NotFound, discord.HTTPException):
-                pass
+            await _restore_panel()
             await interaction.followup.send(
                 embed=_notif_embed(t["ig_emoji_set"].format(name=name)), ephemeral=True
             )
