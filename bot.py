@@ -1922,6 +1922,7 @@ TRANSLATIONS = {
         "ig_emoji_ver_curtidas": "Ver Curtidas",
         "ig_emoji_ver_comentarios": "Ver Comentários",
         "ig_emoji_botao_ig": "Botão Instagram",
+        "ig_emoji_botao_tiktok": "Botão TikTok",
         "ig_emoji_deletar": "Deletar",
         "ig_emoji_set": "Emoji **{name}** atualizado!",
         "ig_emojis_reset_done": "Emojis resetados aos padrões!",
@@ -3640,6 +3641,7 @@ TRANSLATIONS = {
         "ig_emoji_ver_curtidas": "View Likes",
         "ig_emoji_ver_comentarios": "View Comments",
         "ig_emoji_botao_ig": "Instagram Button",
+        "ig_emoji_botao_tiktok": "TikTok Button",
         "ig_emoji_deletar": "Delete",
         "ig_emoji_set": "Emoji **{name}** updated!",
         "ig_emojis_reset_done": "Emojis reset to defaults!",
@@ -4535,12 +4537,14 @@ def get_settings(guild_id: int) -> dict:
         "ver_curtidas": "❤️",
         "ver_comentarios": "💭",
         "botao_instagram": "📷",
+        "botao_tiktok": "🎵",
         "deletar": "🗑️",
     })
     settings.setdefault("ig_mensagem", None)
     settings.setdefault("ig_canal_mensagem", None)
     settings.setdefault("ig_last_highlight", {})  # {channel_id_str: message_id}
     settings.setdefault("ig_card_instagram_url", None)  # link do botão Instagram no card
+    settings.setdefault("ig_card_tiktok_url", None)  # link do botão TikTok no card
     settings.setdefault("ig_post_likes", {})  # {message_id_str: [user_id, ...]}
     settings.setdefault("verif_enabled", False)
     settings.setdefault("verif_urls", [])
@@ -16298,9 +16302,13 @@ async def _send_ig_card(
     ]
     _insta_url = settings.get("ig_card_instagram_url")
     if _insta_url:
-        _action_buttons.append({"type": 2, "style": 5, "label": "Instagram", "url": _insta_url,
+        _action_buttons.append({"type": 2, "style": 5, "url": _insta_url,
                                 "emoji": _ig_emoji_api_dict(ig_emj.get("botao_instagram", "📷"))})
-    _action_buttons.append({"type": 2, "style": 4, "label": "Deletar",
+    _tiktok_url = settings.get("ig_card_tiktok_url")
+    if _tiktok_url:
+        _action_buttons.append({"type": 2, "style": 5, "url": _tiktok_url,
+                                "emoji": _ig_emoji_api_dict(ig_emj.get("botao_tiktok", "🎵"))})
+    _action_buttons.append({"type": 2, "style": 4,
                             "custom_id": f"ig_post_delete_{author.id}",
                             "emoji": _ig_emoji_api_dict(ig_emj.get("deletar", "🗑️"))})
 
@@ -16790,7 +16798,7 @@ class IgDeleteSelect(discord.ui.Select):
             settings["ig_emojis"] = {
                 "destaque": "🏆", "curtir": "💗", "comentar": "💬",
                 "ver_curtidas": "❤️", "ver_comentarios": "💭",
-                "botao_instagram": "📷", "deletar": "🗑️",
+                "botao_instagram": "📷", "botao_tiktok": "🎵", "deletar": "🗑️",
             }
             await interaction.response.send_message(embed=_notif_embed(t["ig_emojis_reset_done"]), ephemeral=True)
         elif v == "destaque":
@@ -16826,6 +16834,7 @@ def build_ig_emojis_embed(settings: dict) -> discord.Embed:
             f"{_line('ver_curtidas', 'ig_emoji_ver_curtidas')}\n"
             f"{_line('ver_comentarios', 'ig_emoji_ver_comentarios')}\n"
             f"{_line('botao_instagram', 'ig_emoji_botao_ig')}\n"
+            f"{_line('botao_tiktok', 'ig_emoji_botao_tiktok')}\n"
             f"{_line('deletar', 'ig_emoji_deletar')}"
         ),
         inline=False,
@@ -16897,6 +16906,7 @@ class IgEmojisView(discord.ui.View):
             ("curtir", "ig_emoji_curtir", 0),
             ("comentar", "ig_emoji_comentar", 0),
             ("ver_curtidas", "ig_emoji_ver_curtidas", 0),
+            ("botao_tiktok", "ig_emoji_botao_tiktok", 0),
         ]
         row1_items = [
             ("ver_comentarios", "ig_emoji_ver_comentarios", 1),
@@ -16935,7 +16945,7 @@ class IgEmojisView(discord.ui.View):
         settings["ig_emojis"] = {
             "destaque": "🏆", "curtir": "💗", "comentar": "💬",
             "ver_curtidas": "❤️", "ver_comentarios": "💭",
-            "botao_instagram": "📷", "deletar": "🗑️",
+            "botao_instagram": "📷", "botao_tiktok": "🎵", "deletar": "🗑️",
         }
         embed = build_ig_emojis_embed(settings)
         new_view = IgEmojisView(self.author, standalone=self.standalone)
@@ -17062,6 +17072,7 @@ class InstagramView(discord.ui.View):
         ]
         row2 = [
             ("Link do Instagram", discord.ButtonStyle.secondary, self._cfg_card_url),
+            ("Link do TikTok", discord.ButtonStyle.secondary, self._cfg_card_tiktok_url),
         ]
         for label, style, cb in row0:
             btn = discord.ui.Button(label=label, style=style, row=0, emoji=_button_emoji(style))
@@ -17144,7 +17155,7 @@ class InstagramView(discord.ui.View):
         settings["ig_emojis"] = {
             "destaque": "🏆", "curtir": "💗", "comentar": "💬",
             "ver_curtidas": "❤️", "ver_comentarios": "💭",
-            "botao_instagram": "📷", "deletar": "🗑️",
+            "botao_instagram": "📷", "botao_tiktok": "🎵", "deletar": "🗑️",
         }
         settings["ig_mensagem"] = None
         settings["ig_canal_mensagem"] = None
@@ -17165,6 +17176,11 @@ class InstagramView(discord.ui.View):
         modal = IgCardInstagramUrlModal(settings.get("ig_card_instagram_url"))
         await interaction.response.send_modal(modal)
 
+    async def _cfg_card_tiktok_url(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        modal = IgCardTiktokUrlModal(settings.get("ig_card_tiktok_url"))
+        await interaction.response.send_modal(modal)
+
 
 class IgCardInstagramUrlModal(discord.ui.Modal):
     """Define o link (perfil/página) que o botão Instagram do card abre.
@@ -17183,10 +17199,38 @@ class IgCardInstagramUrlModal(discord.ui.Modal):
         settings = get_settings(interaction.guild.id)
         url = self.inp.value.strip()
         settings["ig_card_instagram_url"] = url or None
+        save_settings_to_disk()
         await interaction.response.send_message(
             embed=_notif_embed(
                 "<a:online:1518271945550856295> Link do Instagram atualizado!" if url
                 else "<a:online:1518271945550856295> Link do Instagram removido — o botão não aparecerá mais no card."
+            ),
+            ephemeral=True,
+        )
+
+
+class IgCardTiktokUrlModal(discord.ui.Modal):
+    """Define o link (perfil/página) que o botão TikTok do card abre.
+    Deixar vazio remove o botão do card."""
+    def __init__(self, current: str | None):
+        super().__init__(title="Link do TikTok", timeout=300)
+        self.inp = discord.ui.TextInput(
+            label="URL do TikTok (vazio = sem botão)",
+            placeholder="https://tiktok.com/@seu_perfil",
+            required=False, max_length=200,
+            default=current,
+        )
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        url = self.inp.value.strip()
+        settings["ig_card_tiktok_url"] = url or None
+        save_settings_to_disk()
+        await interaction.response.send_message(
+            embed=_notif_embed(
+                "<a:online:1518271945550856295> Link do TikTok atualizado!" if url
+                else "<a:online:1518271945550856295> Link do TikTok removido — o botão não aparecerá mais no card."
             ),
             ephemeral=True,
         )
