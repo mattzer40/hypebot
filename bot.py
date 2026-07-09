@@ -31084,6 +31084,15 @@ async def historygroles_slash(interaction: discord.Interaction, membro: discord.
     )
 
 
+async def _auto_delete_msg(msg, delay: int) -> None:
+    """Deleta uma mensagem após `delay` segundos, ignorando erros."""
+    try:
+        await asyncio.sleep(delay)
+        await msg.delete()
+    except Exception:
+        pass
+
+
 @bot.tree.command(name="groles", description="Gerencie seus cargos ou de um usuário.")
 @discord.app_commands.describe(membro="Mencione o membro. (padrão: você mesmo)")
 async def groles_slash(interaction: discord.Interaction, membro: discord.Member = None):
@@ -31136,6 +31145,12 @@ async def groles_slash(interaction: discord.Interaction, membro: discord.Member 
         view=view,
         allowed_mentions=discord.AllowedMentions.none(),
     )
+    # Auto-deleta o painel após 5 minutos.
+    try:
+        _gmsg = await interaction.original_response()
+        asyncio.create_task(_auto_delete_msg(_gmsg, 300))
+    except Exception:
+        pass
 
 
 @bot.command(name="groles")
@@ -31164,7 +31179,12 @@ async def groles_cmd(ctx: commands.Context, target: discord.Member = None):
             text=f"Requisitado por: {ctx.author.name}",
             icon_url=ctx.author.display_avatar.url,
         )
-        await ctx.reply(embed=embed)
+        # Prefixo não tem ephemeral: auto-deleta a resposta e o comando do usuário.
+        await ctx.reply(embed=embed, delete_after=10)
+        try:
+            await ctx.message.delete()
+        except Exception:
+            pass
         return
 
     all_role_ids = [
@@ -31183,7 +31203,9 @@ async def groles_cmd(ctx: commands.Context, target: discord.Member = None):
         settings=settings,
         filter_mode="todos",
     )
-    await ctx.send(view=view, allowed_mentions=discord.AllowedMentions.none())
+    _gmsg = await ctx.send(view=view, allowed_mentions=discord.AllowedMentions.none())
+    # Auto-deleta o painel após 5 minutos.
+    asyncio.create_task(_auto_delete_msg(_gmsg, 300))
 
 
 @bot.command(name="castigo")
