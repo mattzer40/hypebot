@@ -3276,6 +3276,33 @@ def api_set_prefix(cid):
     return jsonify({"ok": True})
 
 
+@app.route("/api/customers/<cid>/ig-emoji", methods=["POST"])
+@login_required
+def api_set_ig_emoji(cid):
+    """Define um ou mais emojis do card de Instagram (ig_emojis) para um guild.
+    O bot cliente recarrega o bot_settings.json via watchdog (mtime) em ~8s."""
+    data     = request.get_json(force=True) or {}
+    guild_id = str(data.get("guild_id", "")).strip()
+    emojis   = data.get("emojis") or {}
+    if not guild_id:
+        return jsonify({"ok": False, "error": "guild_id obrigatório"}), 400
+    if not isinstance(emojis, dict) or not emojis:
+        return jsonify({"ok": False, "error": "emojis obrigatório"}), 400
+    settings = load_settings(cid)
+    g = settings.get(guild_id)
+    if not isinstance(g, dict):
+        g = {}
+        settings[guild_id] = g
+    ig = g.get("ig_emojis")
+    if not isinstance(ig, dict):
+        ig = {}
+        g["ig_emojis"] = ig
+    for k, v in emojis.items():
+        ig[str(k)] = str(v)
+    save_settings(cid, settings)
+    return jsonify({"ok": True, "ig_emojis": ig})
+
+
 @app.route("/api/customers/<cid>/log", methods=["GET"])
 @login_required
 def api_log(cid):
