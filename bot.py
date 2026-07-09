@@ -16844,33 +16844,6 @@ def build_ig_emojis_embed(settings: dict) -> discord.Embed:
     return embed
 
 
-class IgEmojiModal(discord.ui.Modal):
-    def __init__(self, parent_view: "IgEmojisView", key: str, t: dict):
-        super().__init__(title=t["ig_emoji_modal_title"].format(name=t[f"ig_emoji_{key}"]), timeout=600)
-        self.parent_view = parent_view
-        self.key = key
-        settings = get_settings(parent_view.author.guild.id)
-        self.inp = discord.ui.TextInput(
-            label=t["ig_emoji_input_label"],
-            placeholder=t["ig_emoji_input_placeholder"],
-            required=True, max_length=100,
-            default=settings.get("ig_emojis", {}).get(key),
-        )
-        self.add_item(self.inp)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        settings = get_settings(interaction.guild.id)
-        t = TRANSLATIONS[settings["language"]]
-        emj = settings.setdefault("ig_emojis", {})
-        emj[self.key] = self.inp.value.strip()
-        embed = build_ig_emojis_embed(settings)
-        new_view = IgEmojisView(self.parent_view.author, standalone=self.parent_view.standalone)
-        await interaction.response.edit_message(embed=embed, view=new_view)
-        await interaction.followup.send(
-            t["ig_emoji_set"].format(name=t[f"ig_emoji_{self.key}"]), ephemeral=True
-        )
-
-
 class IgEmojisView(discord.ui.View):
     def __init__(self, author: discord.Member, standalone: bool = False):
         super().__init__(timeout=300)
@@ -16929,8 +16902,53 @@ class IgEmojisView(discord.ui.View):
         async def cb(interaction: discord.Interaction):
             settings = get_settings(interaction.guild.id)
             t = TRANSLATIONS[settings["language"]]
-            modal = IgEmojiModal(self, key, t)
-            await interaction.response.send_modal(modal)
+            name = t[f"ig_emoji_{key}"]
+            atual = settings.get("ig_emojis", {}).get(key)
+            _prompt = f"Envie o emoji para **{name}** no chat (ou digite `cancelar`)."
+            if atual:
+                _prompt += f"\nAtual: {atual}"
+            await interaction.response.send_message(embed=_notif_embed(_prompt), ephemeral=True)
+
+            def check(m: discord.Message) -> bool:
+                return m.author.id == self.author.id and m.channel.id == interaction.channel.id
+
+            try:
+                msg = await bot.wait_for("message", check=check, timeout=60)
+            except asyncio.TimeoutError:
+                await interaction.followup.send(
+                    embed=_notif_embed("Tempo esgotado. Clique no botão de novo para tentar."),
+                    ephemeral=True,
+                )
+                return
+
+            content = msg.content.strip()
+            try:
+                await msg.delete()
+            except (discord.Forbidden, discord.NotFound):
+                pass
+
+            if content.lower() in ("cancelar", "cancel"):
+                await interaction.followup.send(embed=_notif_embed("Cancelado."), ephemeral=True)
+                return
+            if not content:
+                await interaction.followup.send(
+                    embed=_notif_embed("Nenhum emoji recebido. Tente de novo."), ephemeral=True
+                )
+                return
+
+            emj = settings.setdefault("ig_emojis", {})
+            emj[key] = content
+            save_settings_to_disk()
+
+            embed = build_ig_emojis_embed(settings)
+            new_view = IgEmojisView(self.author, standalone=self.standalone)
+            try:
+                await interaction.message.edit(embed=embed, view=new_view)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+            await interaction.followup.send(
+                embed=_notif_embed(t["ig_emoji_set"].format(name=name)), ephemeral=True
+            )
         return cb
 
     async def _back(self, interaction: discord.Interaction):
