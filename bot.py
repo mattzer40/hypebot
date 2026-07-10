@@ -9133,9 +9133,11 @@ class TicketPainelLeiaView(discord.ui.View):
                 menu_view = discord.ui.View(timeout=None)
                 menu_view.add_item(_pb_btn)
             if has_v2:
-                # Envia como LayoutView V2 com separadores nativos
-                layout = build_panel_v2_layout(v2_data, settings, ticket_panel=panel)
-                await target.send(view=layout)
+                # Envia como LayoutView V2 com separadores nativos. Re-anexa as
+                # imagens (evita links do CDN que expiram → "Imagem não encontrada").
+                _files, _imgmap = await _panel_v2_attachments((v2_data or {}).get("blocks", []))
+                layout = build_panel_v2_layout(v2_data, settings, ticket_panel=panel, image_map=_imgmap)
+                await target.send(view=layout, files=_files)
             else:
                 embed = _draft_to_embed(ep, settings["embed_color"])
                 buttons_view = _draft_view_from_buttons(ep)
@@ -36182,13 +36184,20 @@ def build_panel_v2_embed(panel: dict, settings: dict) -> discord.Embed:
     return embed
 
 
-def _build_v2_panel_items(blocks: list, color: int, _inner_action_row=None) -> list:
+def _build_v2_panel_items(blocks: list, color: int, _inner_action_row=None, image_map=None) -> list:
     """Converte blocos do painel em itens de LayoutView.
 
     Todo o conteúdo fica em UM único Container.
     Separadores ficam DENTRO do Container como linha divisória interna
     (junto com o embed), não como elementos raiz entre containers.
+
+    *image_map*: url do CDN → "attachment://arquivo" — quando fornecido, as
+    imagens são referenciadas pelo anexo (evita o link do CDN que expira).
     """
+    image_map = image_map or {}
+
+    def _img(u: str) -> str:
+        return image_map.get(u, u)
 
     def _seg_to_items(seg: list) -> list:
         """Converte um segmento (entre separadores) em lista de items sem Container."""
@@ -36200,7 +36209,7 @@ def _build_v2_panel_items(blocks: list, color: int, _inner_action_row=None) -> l
                 images = b.get("images") or []
                 if images:
                     items.insert(len(topo_done), discord.ui.MediaGallery(
-                        *[discord.MediaGalleryItem(media=u) for u in images[:10]]
+                        *[discord.MediaGalleryItem(media=_img(u)) for u in images[:10]]
                     ))
                     topo_done.add(i)
         # Resto dos blocos em ordem
@@ -36218,7 +36227,7 @@ def _build_v2_panel_items(blocks: list, color: int, _inner_action_row=None) -> l
                     items.append(discord.ui.Section(td, accessory=discord.ui.Button(
                         label=bl, style=discord.ButtonStyle.link, url=bu)))
                 elif th:
-                    items.append(discord.ui.Section(td, accessory=discord.ui.Thumbnail(th)))
+                    items.append(discord.ui.Section(td, accessory=discord.ui.Thumbnail(_img(th))))
                 else:
                     items.append(td)
             elif btype == "gallery":
@@ -36226,7 +36235,7 @@ def _build_v2_panel_items(blocks: list, color: int, _inner_action_row=None) -> l
                 if images:
                     items.append(discord.ui.Separator(visible=False))
                     items.append(discord.ui.MediaGallery(
-                        *[discord.MediaGalleryItem(media=u) for u in images[:10]]
+                        *[discord.MediaGalleryItem(media=_img(u)) for u in images[:10]]
                     ))
         return items
 
@@ -36264,11 +36273,61 @@ def _build_v2_panel_items(blocks: list, color: int, _inner_action_row=None) -> l
     return [discord.ui.Container(*all_items, accent_colour=color)]
 
 
+def _panel_v2_image_urls(blocks: list) -> list:
+    """URLs http(s) de imagem (galerias + thumbnails) dos blocos, na ordem e sem
+    duplicatas — usada para casar com os anexos re-enviados."""
+    urls: list = []
+    seen: set = set()
+    for b in blocks or []:
+        if b.get("type") == "gallery":
+            for u in (b.get("images") or [])[:10]:
+                if u and u not in seen and (u.startswith("http://") or u.startswith("https://")):
+                    seen.add(u); urls.append(u)
+        elif b.get("type") == "text":
+            th = (b.get("thumbnail") or "").strip()
+            if th and th not in seen and (th.startswith("http://") or th.startswith("https://")):
+                seen.add(th); urls.append(th)
+    return urls
+
+
+async def _panel_v2_attachments(blocks: list) -> tuple[list, dict]:
+    """Baixa as imagens (galerias e thumbnails) dos blocos do painel e devolve
+    (files, url_map) onde url_map mapeia a URL original → 'attachment://arquivo'.
+    Assim o painel é enviado com a imagem anexada, sem depender do link do CDN
+    do Discord que agora expira."""
+    import aiohttp as _ah_pv
+    from urllib.parse import urlparse as _uparse
+    files: list = []
+    url_map: dict = {}
+    _urls = _panel_v2_image_urls(blocks)
+    if not _urls:
+        return files, url_map
+    idx = 0
+    async with _ah_pv.ClientSession() as _s:
+        for u in _urls:
+            try:
+                async with _s.get(u) as _r:
+                    if _r.status != 200:
+                        continue
+                    _data = await _r.read()
+            except Exception:
+                continue
+            _name = (_uparse(u).path.rsplit("/", 1)[-1] or f"img{idx}")
+            if "." not in _name:
+                _name += ".png"
+            _name = f"{idx}_{_name}"[:60]
+            idx += 1
+            files.append(discord.File(io.BytesIO(_data), filename=_name))
+            url_map[u] = f"attachment://{_name}"
+    return files, url_map
+
+
 def build_panel_v2_layout(
     panel: dict,
     settings: dict,
     ticket_panel: dict | None = None,
     _inner_action_row=None,
+    image_map=None,
 ) -> discord.ui.LayoutView:
     """Constrói um LayoutView V2 com componentes nativos.
 
@@ -36317,7 +36376,7 @@ def build_panel_v2_layout(
     # _inner_action_row explícito tem prioridade; caso contrário usa o do ticket
     inner = _inner_action_row or _ticket_select_row
 
-    panel_items = _build_v2_panel_items(blocks, color, _inner_action_row=inner)
+    panel_items = _build_v2_panel_items(blocks, color, _inner_action_row=inner, image_map=image_map)
     if not panel_items:
         layout.add_item(discord.ui.Container(
             discord.ui.TextDisplay("*Painel sem conteúdo.*"),
@@ -36779,9 +36838,10 @@ class PanelV2EnviarChannelSelect(GuildChannelSelect):
         if not self.parent_view.panel.get("blocks"):
             await interaction.response.send_message(embed=_notif_embed(t["panelv2_send_empty"]), ephemeral=True)
             return
-        layout = build_panel_v2_layout(self.parent_view.panel, settings)
+        _files, _imgmap = await _panel_v2_attachments(self.parent_view.panel.get("blocks", []))
+        layout = build_panel_v2_layout(self.parent_view.panel, settings, image_map=_imgmap)
         try:
-            sent_v2 = await ch.send(view=layout)
+            sent_v2 = await ch.send(view=layout, files=_files)
         except (discord.Forbidden, discord.HTTPException) as e:
             await interaction.response.send_message(f"Erro: {e}", ephemeral=True)
             return
@@ -37081,12 +37141,14 @@ class IgVerifPanelV2BuilderView(PanelV2BuilderView):
             style=discord.ButtonStyle.secondary,
             custom_id="ig_verif_check",
         )
+        _files, _imgmap = await _panel_v2_attachments(self.panel.get("blocks", []))
         layout = build_panel_v2_layout(
             self.panel, settings,
             _inner_action_row=discord.ui.ActionRow(verif_btn),
+            image_map=_imgmap,
         )
         try:
-            await ch.send(view=layout)
+            await ch.send(view=layout, files=_files)
         except Exception as e:
             await interaction.response.send_message(f"<a:alerta:1518271939460857968> Erro: {e}", ephemeral=True)
             return
@@ -44086,8 +44148,15 @@ async def on_interaction(interaction: discord.Interaction):
             try:
                 _v2 = panel.get("embed_painel_v2")
                 if _v2 and _v2.get("blocks"):
-                    _reset_layout = build_panel_v2_layout(_v2, settings, ticket_panel=panel)
-                    await interaction.edit_original_response(view=_reset_layout)
+                    # Reaproveita os anexos já presentes na mensagem do painel (não
+                    # re-baixa nem volta a usar o link do CDN que expira).
+                    _existing_atts = list(getattr(interaction.message, "attachments", []) or [])
+                    _reset_map = {
+                        _u: f"attachment://{_att.filename}"
+                        for _u, _att in zip(_panel_v2_image_urls(_v2.get("blocks", [])), _existing_atts)
+                    }
+                    _reset_layout = build_panel_v2_layout(_v2, settings, ticket_panel=panel, image_map=_reset_map)
+                    await interaction.edit_original_response(view=_reset_layout, attachments=_existing_atts)
                 else:
                     _menu_view = _build_ticket_panel_menu_view(panel)
                     if _menu_view is not None:
