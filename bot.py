@@ -26485,28 +26485,32 @@ async def on_ready():
                         print(f"[cleanup] /dev removido de '{guild.name}'", flush=True, file=sys.stderr)
             except Exception as e:
                 print(f"[cleanup] erro ao remover /dev de '{guild.name}': {e}", flush=True, file=sys.stderr)
-        # 1. Copia globais para cada servidor e sincroniza
+        # 1. Sincroniza GLOBALMENTE (habilita o selo "suporta comandos" no perfil).
+        #    Antes, remove os comandos por-servidor (sync do guild com árvore vazia)
+        #    para não duplicar com os globais. Global propaga em ~1h.
         for guild in bot.guilds:
             try:
-                bot.tree.copy_global_to(guild=guild)
-                synced = await bot.tree.sync(guild=guild)
-                print(f"[slash] {guild.name}: {len(synced)} cmds.", flush=True, file=sys.stderr)
+                await bot.tree.sync(guild=guild)  # sem copy_global_to → limpa cmds do guild
             except Exception as e:
-                print(f"[slash] ERRO {guild.name}: {e}", flush=True, file=sys.stderr)
-        # Não limpa o global — necessário para on_guild_join funcionar em servidores novos
+                print(f"[slash] limpar guild '{guild.name}': {e}", flush=True, file=sys.stderr)
+        try:
+            _gsync = await bot.tree.sync()  # comandos globais
+            print(f"[slash] GLOBAL: {len(_gsync)} cmds (propaga em ~1h).", flush=True, file=sys.stderr)
+        except Exception as e:
+            print(f"[slash] ERRO sync global: {e}", flush=True, file=sys.stderr)
         bot._tree_synced = True
 
 
 @bot.event
 async def on_guild_join(guild: discord.Guild):
-    """Sincroniza slash commands quando o bot entra em um servidor novo."""
+    """Comandos são globais agora — servidores novos herdam automaticamente.
+    Só garante que não haja comandos por-servidor duplicando os globais."""
     import sys
     try:
-        bot.tree.copy_global_to(guild=guild)
-        synced = await bot.tree.sync(guild=guild)
-        print(f"[slash] novo servidor '{guild.name}': {len(synced)} cmds sincronizados.", flush=True, file=sys.stderr)
+        await bot.tree.sync(guild=guild)  # árvore vazia p/ este guild → sem duplicatas
+        print(f"[slash] novo servidor '{guild.name}': usa comandos globais.", flush=True, file=sys.stderr)
     except Exception as e:
-        print(f"[slash] ERRO ao sincronizar '{guild.name}': {e}", flush=True, file=sys.stderr)
+        print(f"[slash] ERRO ao limpar guild '{guild.name}': {e}", flush=True, file=sys.stderr)
 
 
 @bot.event
@@ -44281,9 +44285,9 @@ async def prefix_sync(ctx: commands.Context):
     if not ctx.author.guild_permissions.administrator:
         return
     try:
-        bot.tree.copy_global_to(guild=ctx.guild)
-        synced = await bot.tree.sync(guild=ctx.guild)
-        await ctx.reply(f"<a:online:1518271945550856295> {len(synced)} comandos sincronizados.", delete_after=10)
+        await bot.tree.sync(guild=ctx.guild)   # limpa comandos por-servidor (usa globais)
+        synced = await bot.tree.sync()          # sincroniza globalmente (propaga em ~1h)
+        await ctx.reply(f"<a:online:1518271945550856295> {len(synced)} comandos globais sincronizados (propaga em ~1h).", delete_after=10)
     except Exception as _e:
         await ctx.reply(f"<a:alerta:1518271939460857968> Erro no sync: {_e}", delete_after=10)
     try:
