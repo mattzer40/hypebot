@@ -3995,6 +3995,18 @@ async def _update_streaming_prefix(guild_id: int) -> None:
     await _set_streaming_prefix(prefix)
 
 
+def _is_recurso_guild(gid: int) -> bool:
+    """True se `gid` for o servidor de recurso (proxy) de algum cliente.
+    Guilds de recurso são isentos da saída automática de servidores não autorizados."""
+    try:
+        for _s in bot_settings.values():
+            if _s.get("proxy_recurso_guild") == gid:
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def save_settings_to_disk() -> None:
     global _settings_last_mtime
     try:
@@ -4249,7 +4261,10 @@ async def _settings_watchdog_loop() -> None:
                 _guilds_after  = set(bot_settings.keys())
                 print("[settings] recarga automática — arquivo modificado externamente", flush=True)
                 # Sai dos servidores que foram removidos das settings pelo dashboard
+                # (exceto servidores de recurso/proxy registrados por algum cliente)
                 for _removed_gid in (_guilds_before - _guilds_after):
+                    if _is_recurso_guild(_removed_gid):
+                        continue
                     _g = bot.get_guild(_removed_gid)
                     if _g:
                         try:
@@ -20943,8 +20958,8 @@ def build_proxy_config_embed(author: discord.Member, settings: dict) -> discord.
             "Configure o **servidor de recurso (proxy)** — onde os usuários banidos "
             "abrem o ticket de desbanimento.\n\n"
             "**Passo a passo:**\n"
-            "`1.` Clique em **Adicionar Bot** e adicione o bot ao servidor de recurso.\n"
-            "`2.` Clique em **Vincular Servidor** e informe o ID desse servidor (trava após vincular).\n"
+            "`1.` Clique em **Vincular Servidor** e informe o **ID** do servidor de recurso (trava após vincular).\n"
+            "`2.` Clique em **Adicionar Bot** e adicione o bot a esse servidor — ele vai **permanecer** lá.\n"
             "`3.` Clique em **Configurar Canal** — o painel de unban é postado lá automaticamente."
         ),
     )
@@ -21016,27 +21031,29 @@ class _ProxyVincularModal(discord.ui.Modal, title="Vincular Servidor de Recurso"
                 ephemeral=True,
             )
             return
-        g = bot.get_guild(gid)
-        if g is None:
-            await interaction.response.send_message(
-                embed=_notif_embed("<a:alerta:1518271939460857968> O bot não está nesse servidor. Clique em **Adicionar Bot** primeiro."),
-                ephemeral=True,
-            )
-            return
-
+        # Pré-registra o servidor de recurso ANTES de o bot entrar — isso libera o
+        # bot a permanecer nele (isento da saída automática de guilds não autorizadas).
         settings["proxy_recurso_guild"] = gid
-        # Configura o sistema de unban do recurso para apontar de volta a este servidor
-        recurso_settings = get_settings(gid)
-        recurso_settings["unban_main_guild"] = interaction.guild.id
-        recurso_settings["unban_panel_enabled"] = True
         save_settings_to_disk()
+
+        g = bot.get_guild(gid)
+        if g is not None:
+            # Bot já está no servidor — configura o unban de volta e confirma
+            recurso_settings = get_settings(gid)
+            recurso_settings["unban_main_guild"] = interaction.guild.id
+            recurso_settings["unban_panel_enabled"] = True
+            save_settings_to_disk()
+            _msg = f"<a:online:1518271945550856295> Servidor de recurso vinculado: `{g.name}`. Agora clique em **Configurar Canal**."
+        else:
+            _msg = (
+                f"<a:online:1518271945550856295> Servidor registrado (ID `{gid}`). "
+                "Agora clique em **Adicionar Bot** e adicione o bot a esse servidor — "
+                "ele vai **permanecer** lá. Depois use **Configurar Canal**."
+            )
 
         embed = build_proxy_config_embed(self._pv.author, settings)
         await interaction.response.edit_message(embed=embed, view=ProxyView(self._pv.author))
-        await interaction.followup.send(
-            embed=_notif_embed(f"<a:online:1518271945550856295> Servidor de recurso vinculado: `{g.name}`. Agora configure o canal."),
-            ephemeral=True,
-        )
+        await interaction.followup.send(embed=_notif_embed(_msg), ephemeral=True)
 
 
 class _ProxyCanalModal(discord.ui.Modal, title="Configurar Canal do Painel"):
@@ -21114,72 +21131,6 @@ class _ProxyCanalModal(discord.ui.Modal, title="Configurar Canal do Painel"):
         )
 
 
-class _ProxyGuildSelect(discord.ui.Select):
-    """Dropdown com os servidores onde o bot está (para escolher o recurso)."""
-    def __init__(self, author: discord.Member, guilds: list):
-        options = [
-            discord.SelectOption(label=g.name[:100], value=str(g.id), description=f"ID: {g.id}")
-            for g in guilds[:25]
-        ]
-        super().__init__(placeholder="Escolha o servidor de recurso", min_values=1, max_values=1, options=options)
-        self.author = author
-
-    async def callback(self, interaction: discord.Interaction):
-        settings = get_settings(interaction.guild.id)
-        if settings.get("proxy_recurso_guild"):
-            await interaction.response.send_message(
-                embed=_notif_embed("<a:alerta:1518271939460857968> Já existe um servidor vinculado. Use **Desvincular** primeiro."),
-                ephemeral=True,
-            )
-            return
-        gid = int(self.values[0])
-        g = bot.get_guild(gid)
-        if g is None:
-            await interaction.response.send_message(
-                embed=_notif_embed("<a:alerta:1518271939460857968> O bot saiu desse servidor. Clique em **Adicionar Bot** novamente."),
-                ephemeral=True,
-            )
-            return
-        settings["proxy_recurso_guild"] = gid
-        recurso_settings = get_settings(gid)
-        recurso_settings["unban_main_guild"] = interaction.guild.id
-        recurso_settings["unban_panel_enabled"] = True
-        save_settings_to_disk()
-        embed = build_proxy_config_embed(self.author, settings)
-        await interaction.response.edit_message(embed=embed, view=ProxyView(self.author))
-        await interaction.followup.send(
-            embed=_notif_embed(f"<a:online:1518271945550856295> Servidor de recurso vinculado: `{g.name}`. Agora configure o canal."),
-            ephemeral=True,
-        )
-
-
-class _ProxyGuildSelectView(discord.ui.View):
-    def __init__(self, author: discord.Member, guilds: list):
-        super().__init__(timeout=300)
-        self.author = author
-        self.add_item(_ProxyGuildSelect(author, guilds))
-        btn = discord.ui.Button(
-            label="Voltar", style=discord.ButtonStyle.primary,
-            emoji=_button_emoji(discord.ButtonStyle.primary),
-        )
-        btn.callback = self._back
-        self.add_item(btn)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author.id:
-            lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
-            await interaction.response.send_message(TRANSLATIONS[lang]["only_author"], ephemeral=True)
-            return False
-        return True
-
-    async def _back(self, interaction: discord.Interaction):
-        settings = get_settings(interaction.guild.id)
-        await interaction.response.edit_message(
-            embed=build_proxy_config_embed(self.author, settings),
-            view=ProxyView(self.author),
-        )
-
-
 class ProxyView(discord.ui.View):
     def __init__(self, author: discord.Member):
         super().__init__(timeout=None)
@@ -21250,25 +21201,7 @@ class ProxyView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=LimiteBanView(self.author))
 
     async def _vincular(self, interaction: discord.Interaction):
-        settings = get_settings(interaction.guild.id)
-        if settings.get("proxy_recurso_guild"):
-            await interaction.response.send_message(
-                embed=_notif_embed("<a:alerta:1518271939460857968> Já existe um servidor vinculado. Use **Desvincular** primeiro."),
-                ephemeral=True,
-            )
-            return
-        current = interaction.guild.id
-        others = [g for g in bot.guilds if g.id != current and g.id != _HYPE_GUILD_ID]
-        if not others:
-            await interaction.response.send_message(
-                embed=_notif_embed(
-                    "<a:alerta:1518271939460857968> O bot não está em nenhum outro servidor. "
-                    "Clique em **Adicionar Bot** e adicione-o ao servidor de recurso primeiro."
-                ),
-                ephemeral=True,
-            )
-            return
-        await interaction.response.edit_message(view=_ProxyGuildSelectView(self.author, others))
+        await interaction.response.send_modal(_ProxyVincularModal(self))
 
     async def _configurar_canal(self, interaction: discord.Interaction):
         await interaction.response.send_modal(_ProxyCanalModal(self))
@@ -45348,7 +45281,8 @@ async def on_guild_join(guild: discord.Guild):
         pass
 
     # ── Restrição: se BOT_GUILD_ID estiver definido, sair de qualquer outro servidor ──
-    if _BOT_GUILD_ID and guild.id != _BOT_GUILD_ID:
+    # Exceção: servidor de recurso (proxy) registrado por um cliente — o bot permanece.
+    if _BOT_GUILD_ID and guild.id != _BOT_GUILD_ID and not _is_recurso_guild(guild.id):
         try:
             await guild.leave()
         except Exception:
