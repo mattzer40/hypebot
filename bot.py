@@ -42794,7 +42794,7 @@ class UnbanTicketView(discord.ui.View):
         )
         if not is_staff:
             await interaction.response.send_message(
-                embed=_notif_embed("<a:redalert:1518272086018097352> Você não pode fazer isso 😔"),
+                embed=_notif_embed("<a:redalert:1518272086018097352> Você não pode fazer isso <:disslike:1518272066506330232>"),
                 ephemeral=True,
             )
             return
