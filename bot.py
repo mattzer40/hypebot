@@ -5199,7 +5199,7 @@ def build_main_embed(author: discord.Member, lang: str) -> discord.Embed:
     color = get_settings(guild_id)["embed_color"]
     embed = discord.Embed(color=color)
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["central_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -5236,7 +5236,7 @@ def build_appearance_embed(author: discord.Member, settings: dict) -> discord.Em
     t = TRANSLATIONS[lang]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=_apply_name(t["panel_title"], settings), icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -6172,7 +6172,7 @@ def build_servidor_embed(author: discord.Member, settings: dict) -> discord.Embe
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["servidor_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -6420,7 +6420,7 @@ class ServidorView(discord.ui.View):
 def build_tickets_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["tickets_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -6556,7 +6556,7 @@ def build_ticket_config_embed(author: discord.Member, settings: dict) -> discord
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -7052,7 +7052,7 @@ def build_ticket_ia_embed(author: discord.Member, settings: dict) -> discord.Emb
         color=settings["embed_color"],
         description=t["ticket_ia_panel_desc"],
     )
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["ticket_ia_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -7155,7 +7155,7 @@ def build_ticket_ia_config_embed(author: discord.Member, settings: dict, panel_i
         color=settings["embed_color"],
         description=t["ticket_ia_config_desc"],
     )
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["ticket_ia_config_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -7313,7 +7313,7 @@ def build_ticket_aval_embed(author: discord.Member, settings: dict) -> discord.E
         color=settings["embed_color"],
         description=t["ticket_aval_panel_desc"],
     )
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["ticket_aval_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -7410,7 +7410,7 @@ def build_ticket_aval_config_embed(
 ) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["ticket_aval_config_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -7722,7 +7722,7 @@ def build_ticket_manager_embed(author: discord.Member, settings: dict) -> discor
     """Main Gerenciar Tickets panel — overview before selecting a specific ticket."""
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["ticket_manager_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -7837,7 +7837,7 @@ def build_ticket_per_manager_embed(
 ) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["ticket_manager_per_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -7986,7 +7986,7 @@ def build_ticket_horarios_config_embed(author: discord.Member, settings: dict, p
         description=t["ticket_horarios_config_desc"],
         color=settings["embed_color"],
     )
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     hcfg = panel.get("horarios_config") or {}
     # Backward compat: if horarios is a plain string "09:00|18:00"
     if not hcfg and isinstance(panel.get("horarios"), str) and panel["horarios"]:
@@ -9015,7 +9015,7 @@ def build_ticket_painel_leia_embed(author: discord.Member, settings: dict) -> di
             f"{t['ticket_painel_v2_note']}"
         ),
     )
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_thumbnail(url=_avatar_url(author))
     embed.set_footer(text=_footer_name(author.guild, settings), icon_url=icon_url)
     return embed
@@ -9409,7 +9409,7 @@ class TicketPerManagerView(discord.ui.View):
 def build_comunidade_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["comunidade_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -9516,7 +9516,7 @@ class ComunidadeView(discord.ui.View):
 def build_verificacao_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["verif_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -9979,7 +9979,7 @@ class VerificacaoView(discord.ui.View):
 # -----------------------------------------------------------------------------
 
 def build_ig_verif_admin_embed(author: discord.Member, settings: dict) -> discord.Embed:
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     guild    = author.guild
 
     ch_id    = settings.get("ig_verif_channel")
@@ -11370,7 +11370,7 @@ def _format_welcome_text(template: str, member: discord.Member) -> str:
 def build_welcome_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["welcome_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -11758,7 +11758,7 @@ class WelcomeView(discord.ui.View):
 def build_vendas_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["vendas_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -12083,7 +12083,7 @@ class VendasView(discord.ui.View):
 def build_mencao_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["mencao_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -12263,7 +12263,7 @@ class MencaoView(discord.ui.View):
 def build_gifs_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["gifs_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -12375,7 +12375,7 @@ class GifsMenuSelect(discord.ui.Select):
 # ── Conversor/Extrator/Editor ─────────────────────────────────────────────────
 
 def build_gifs_conversor_embed(author: discord.Member, settings: dict) -> discord.Embed:
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name="Central de Gifs - NATA®", icon_url=icon_url)
     _thumb = settings.get("gifs_conversor_banner") or icon_url
@@ -12444,7 +12444,7 @@ async def _gifs_pb_criar_canal(interaction: discord.Interaction) -> None:
     settings = get_settings(interaction.guild.id)
     cor      = settings.get("embed_color", 0x5865F2)
     bot_name = bot.user.display_name if bot.user else "HypeBot"
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
 
     if remaining > 0:
         emb = discord.Embed(
@@ -12747,7 +12747,7 @@ async def _gifs_criar_canal(interaction: discord.Interaction, service: str) -> N
     settings = get_settings(interaction.guild.id)
     cor      = settings.get("embed_color", 0x5865F2)
     bot_name = bot.user.display_name if bot.user else "HypeBot"
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
 
     if remaining > 0:
         emb = discord.Embed(
@@ -13494,7 +13494,7 @@ class _GifsConversorEmbedModal(discord.ui.Modal):
 # ── Decorações ────────────────────────────────────────────────────────────────
 
 def build_gifs_decoracoes_embed(author: discord.Member, settings: dict) -> discord.Embed:
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name="Central de Decorações - NATA®", icon_url=icon_url)
     if icon_url:
@@ -14931,7 +14931,7 @@ _AP_CATS = [
 
 
 def build_gifs_autopostador_embed(author: discord.Member, settings: dict) -> discord.Embed:
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     enabled  = settings.get("gifs_autopostador_enabled", False)
     interval = settings.get("gifs_autopostador_interval", 30)
     guild    = author.guild
@@ -15216,7 +15216,7 @@ class GifsAutoPostadorView(discord.ui.View):
 # ── Gerenciar Postadores ──────────────────────────────────────────────────────
 
 def build_gifs_postadores_embed(author: discord.Member, settings: dict) -> discord.Embed:
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     enabled  = settings.get("gifs_postadores_enabled", False)
     status   = (
         "<a:online:1518271945550856295> `(Ativado)`"
@@ -15250,7 +15250,7 @@ def build_gifs_postadores_embed(author: discord.Member, settings: dict) -> disco
 # ── Configurar Sistema — embed principal ──────────────────────────────────────
 
 def _build_config_sistema_embed(author: discord.Member, settings: dict) -> discord.Embed:
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     guild    = author.guild
 
     log_id = settings.get("gifs_postadores_log_channel")
@@ -15401,7 +15401,7 @@ class _LogAddSelect(GuildChannelSelect):
 
 
 def _postadores_select_embed(author, settings, title, description) -> discord.Embed:
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed = discord.Embed(description=description, color=settings["embed_color"])
     embed.set_author(name=title, icon_url=icon_url)
     embed.set_footer(
@@ -15574,7 +15574,7 @@ class _PostadoresRoleSelect(discord.ui.RoleSelect):
 
 
 def _build_gerenciar_user_embed(author: discord.Member, settings: dict) -> discord.Embed:
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name="Gerenciar Postadores — NATA®", icon_url=icon_url)
     if icon_url:
@@ -15930,7 +15930,7 @@ class GifsView(discord.ui.View):
 def build_entretenimento_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["entretenimento_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -16040,7 +16040,7 @@ class EntretenimentoView(discord.ui.View):
 def build_calendario_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["cal_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -16686,7 +16686,7 @@ async def _process_ig_post(message: discord.Message, settings: dict) -> None:
 def build_instagram_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["ig_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -17456,7 +17456,7 @@ class IgCardTiktokUrlModal(discord.ui.Modal):
 
 def build_tellonym_embed(author: discord.Member, settings: dict) -> discord.Embed:
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     guild = author.guild if hasattr(author, "guild") else None
 
     embed.set_author(name=f"Painel Tellonym — {_footer_name(guild, settings)}", icon_url=icon_url)
@@ -17509,7 +17509,7 @@ def build_tellonym_embed(author: discord.Member, settings: dict) -> discord.Embe
 
 def build_tellonym_blocked_embed(author: discord.Member, settings: dict) -> discord.Embed:
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     guild = author.guild if hasattr(author, "guild") else None
     embed.set_author(name="Painel de Usuários Bloqueados", icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
@@ -17682,7 +17682,7 @@ class TellonymFilterView(discord.ui.View):
 
 def _build_tellonym_setup_embed(author: discord.Member, settings: dict) -> discord.Embed:
     guild = author.guild if hasattr(author, "guild") else None
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
 
     def _ch(cid):
         if not cid:
@@ -18124,7 +18124,7 @@ class TellonymView(discord.ui.View):
 def build_historico_cargos_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["historico_cargos_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
     embed.description = t["historico_cargos_description"]
@@ -18294,7 +18294,7 @@ def build_security_embed(author: discord.Member, settings: dict) -> discord.Embe
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=_apply_name(t["security_panel_title"], settings), icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -18518,7 +18518,7 @@ def build_advertencia_embed(author: discord.Member, settings: dict) -> discord.E
         title=t["advertencia_panel_title"],
         color=settings["embed_color"],
     )
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_thumbnail(url=_avatar_url(author))
 
     roles = settings.get("warning_roles", [])
@@ -18577,7 +18577,7 @@ def build_antban_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=_apply_name(t["antban_panel_title"], settings), icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -18959,7 +18959,7 @@ def build_antbot_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=_apply_name(t["antbot_panel_title"], settings), icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -19247,7 +19247,7 @@ def build_protecao_cargos_embed(author: discord.Member, settings: dict) -> disco
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["protecao_cargos_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -19316,7 +19316,7 @@ def build_editando_cargos_embed(author: discord.Member, settings: dict) -> disco
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["editando_cargos_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -20115,7 +20115,7 @@ class ProtecaoCargosView(discord.ui.View):
 def build_proteger_cargo_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["proteger_cargo_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -20311,7 +20311,7 @@ def build_limite_ban_embed(author: discord.Member, settings: dict) -> discord.Em
         description=t["limite_ban_description"],
     )
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["limite_ban_title"], icon_url=icon_url)
 
     if settings["limite_ban_enabled"]:
@@ -20634,7 +20634,7 @@ class LimiteBanView(discord.ui.View):
 
 def build_unban_config_embed(author: discord.Member, settings: dict) -> discord.Embed:
     guild = author.guild
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed = discord.Embed(
         color=settings.get("embed_color", 0xE53935),
         description=(
@@ -20951,7 +20951,7 @@ def _bot_invite_url() -> str:
 
 
 def build_proxy_config_embed(author: discord.Member, settings: dict) -> discord.Embed:
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed = discord.Embed(
         color=settings.get("embed_color", 0xE53935),
         description=(
@@ -21227,7 +21227,7 @@ def build_protecao_url_embed(author: discord.Member, settings: dict) -> discord.
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["protecao_url_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -21512,7 +21512,7 @@ def build_perm_manager_embed(
         description=t["perm_manager_description"],
     )
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["perm_manager_title"], icon_url=icon_url)
 
     embed.add_field(
@@ -21812,7 +21812,7 @@ def build_castigo_embed(author: discord.Member, settings: dict) -> discord.Embed
         title=t["castigo_panel_title"],
         color=settings["embed_color"],
     )
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
@@ -22213,7 +22213,7 @@ def build_limpeza_mensagem_embed(author: discord.Member, settings: dict) -> disc
 
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name="Limpar Mensagem - NATA®", icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -22634,7 +22634,7 @@ def build_cmd_block_embed(author: discord.Member, settings: dict) -> discord.Emb
         ),
     )
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_thumbnail(url=_avatar_url(author))
     embed.set_footer(text=_footer_name(author.guild, settings), icon_url=icon_url)
     return embed
@@ -23020,7 +23020,7 @@ def build_protecao_geral_embed(
     tab: str = "geral",
     sub: str | None = None,
 ) -> discord.Embed:
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed    = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
     embed.set_author(
         name=f"Anti-Raid · Proteção Geral",
@@ -24362,7 +24362,7 @@ def build_blacklist_embed(author: discord.Member, settings: dict) -> discord.Emb
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["blacklist_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -24643,7 +24643,7 @@ def build_backup_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["backup_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -24895,7 +24895,7 @@ def build_warns_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=_apply_name(t["warns_panel_title"], settings), icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -25108,7 +25108,7 @@ def build_antspam_embed(author: discord.Member, settings: dict) -> discord.Embed
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=_apply_name(t["antspam_panel_title"], settings), icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -25465,7 +25465,7 @@ def build_antlink_embed(author: discord.Member, settings: dict) -> discord.Embed
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=_apply_name(t["antlink_panel_title"], settings), icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -25751,7 +25751,7 @@ def build_antfake_embed(author: discord.Member, settings: dict) -> discord.Embed
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=_apply_name(t["antfake_panel_title"], settings), icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -32087,7 +32087,7 @@ async def perm(ctx: commands.Context):
 def build_auto_cargo_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["auto_cargo_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -32275,7 +32275,7 @@ class AutoCargoView(discord.ui.View):
 def build_auto_reacoes_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["auto_reacoes_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -32545,7 +32545,7 @@ class AutoReacoesView(discord.ui.View):
 def build_reacoes_user_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["reacoes_user_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -32873,7 +32873,7 @@ def _format_time_seconds(secs: int) -> str:
 def build_auto_msg_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["auto_msg_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -32904,7 +32904,7 @@ def build_auto_msg_embed(author: discord.Member, settings: dict) -> discord.Embe
 def build_auto_msg_add_embed(author: discord.Member, settings: dict, draft: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["auto_msg_add_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -33233,7 +33233,7 @@ class AutoMsgView(discord.ui.View):
 def build_auto_resp_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["auto_resp_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -33382,7 +33382,7 @@ def _build_auto_resp_list_embed(author: discord.Member, settings: dict, page: in
     per_page = 5
     total_pages = max(1, (len(msgs) + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
 
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name=t["auto_resp_list_title"], icon_url=icon_url)
@@ -33588,7 +33588,7 @@ class AutoRespView(discord.ui.View):
 def build_limite_call_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["call_limit_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -33713,7 +33713,7 @@ class LimiteCallView(discord.ui.View):
 def build_dono_call_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["dono_call_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -35458,7 +35458,7 @@ async def _protect_call_owner(
 def build_call_temp_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["call_temp_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -35822,7 +35822,7 @@ async def _update_call_temp_panel(ch: discord.VoiceChannel, new_owner: discord.M
 def build_bate_ponto_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["bp_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -36004,7 +36004,7 @@ class BatePontoCargosAcessoSelect(discord.ui.RoleSelect):
 def _build_bp_cargos_ponto_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     role_ids = settings.get("bate_ponto_cargos", [])
     if role_ids and author.guild:
         lines = []
@@ -36272,7 +36272,7 @@ class BatePontoView(discord.ui.View):
 def build_desmute_embed(author: discord.Member, settings: dict) -> discord.Embed:
     t = TRANSLATIONS[settings["language"]]
     embed = discord.Embed(color=settings["embed_color"])
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["desmute_panel_title"], icon_url=icon_url)
     embed.set_thumbnail(url=_avatar_url(author))
 
@@ -36538,7 +36538,7 @@ def build_contador_call_embed(author: discord.Member, settings: dict) -> discord
     t = TRANSLATIONS[settings["language"]]
     guild = author.guild
     color = settings.get("embed_color", 0x2B2D31)
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
 
     enabled = settings.get("contador_call_enabled", False)
     status_value = ("<a:online:1518271945550856295> Ativado" if enabled
@@ -40246,7 +40246,7 @@ async def call_limit_slash(interaction: discord.Interaction, numero: int):
     settings = get_settings(interaction.guild.id)
     t = TRANSLATIONS[settings["language"]]
     color = settings.get("embed_color", 0x2B2D31)
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
 
     if not isinstance(interaction.user, discord.Member) or not _has_call_limit_perm(interaction.user, settings):
         emb = _call_limit_embed(t["call_limit_no_perm"], 0xE53935, interaction.user, icon_url)
@@ -41027,7 +41027,7 @@ async def iatest_cmd(ctx: commands.Context, *, message: str = ""):
         ctx.author if isinstance(ctx.author, discord.Member) else None,
     )
 
-    icon_url = bot.user.display_avatar.url if bot.user else None
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     waiting_embed = discord.Embed(
         color=settings["embed_color"],
         description=f"<:bot_v3:1506343470242074785> Consultando a IA (`{model}`)...",
