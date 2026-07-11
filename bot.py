@@ -487,9 +487,9 @@ async def _global_guild_check(ctx: commands.Context) -> bool:
             _cmd_name = ctx.command.name if ctx.command is not None else ""
             if _cmd_name in ("perm", "migrar_emojis", "exportar_config", "clonar_config", "migrar_canais"):
                 return True  # sempre liberado para o dono do servidor
-            # No servidor de recurso (proxy): libera addemoji, embed e o menu
+            # No servidor de recurso (proxy): libera addemoji, embed, menu e roxo
             # (o menu dá acesso a mudar o prefixo e configurar o recurso)
-            if _cmd_name in ("addemoji", "addemote", "embed", "menu") and _is_recurso_guild(ctx.guild.id):
+            if _cmd_name in ("addemoji", "addemote", "embed", "menu", "roxo", "recolorir") and _is_recurso_guild(ctx.guild.id):
                 return True
             return False
     return True
@@ -31818,6 +31818,78 @@ class HistoryGrolesView(discord.ui.LayoutView):
     async def _open_search(self, interaction: discord.Interaction):
         modal = FiltrarCargoModal(self)
         await interaction.response.send_modal(modal)
+
+
+def _colorize_purple(img_bytes: bytes) -> bytes:
+    """Tinge uma imagem de roxo preservando luminância (detalhes) e transparência."""
+    from PIL import Image, ImageOps
+    im = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+    r, g, b, a = im.split()
+    gray = Image.merge("RGB", (r, g, b)).convert("L")
+    colored = ImageOps.colorize(
+        gray,
+        black=(43, 15, 92),      # sombras → roxo escuro
+        mid=(124, 58, 237),      # meios-tons → roxo
+        white=(216, 191, 255),   # luzes → roxo claro
+    ).convert("RGBA")
+    colored.putalpha(a)
+    out = io.BytesIO()
+    colored.save(out, format="PNG")
+    return out.getvalue()
+
+
+@bot.command(name="roxo", aliases=["recolorir"])
+async def roxo_cmd(ctx: commands.Context, horas: float = 6.0):
+    """Recolore para roxo os emojis estáticos criados nas últimas <horas> horas."""
+    if ctx.guild is None:
+        return
+    settings = get_settings(ctx.guild.id)
+
+    _is_owner_admin = bool(
+        (ctx.guild and ctx.author.id == ctx.guild.owner_id)
+        or getattr(ctx.author.guild_permissions, "administrator", False)
+    )
+    if not (_is_owner_admin or _has_perm_category(ctx.author, "adicionar_remover_emojis", settings)):
+        await ctx.reply(
+            f"{ctx.author.mention}, você não tem permissão para isso.",
+            allowed_mentions=discord.AllowedMentions(users=False),
+            delete_after=10,
+        )
+        return
+
+    from datetime import timezone
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=horas)
+    targets = [e for e in ctx.guild.emojis if not e.animated and e.created_at >= cutoff]
+    if not targets:
+        await ctx.reply(
+            f"Nenhum emoji estático criado nas últimas `{horas:g}h`. "
+            f"Use `{settings.get('prefix', 'n!')}roxo 24` para pegar as últimas 24h.",
+            delete_after=15,
+        )
+        return
+
+    status = await ctx.reply(f"<a:load:1518322852028354600> Recolorindo `{len(targets)}` emoji(s) para roxo...")
+    done, failed = 0, 0
+    for e in targets:
+        try:
+            raw       = await e.read()
+            recolored = _colorize_purple(raw)
+            _name     = e.name
+            await e.delete(reason=f"Recolorir roxo — {ctx.author}")
+            await ctx.guild.create_custom_emoji(name=_name, image=recolored, reason=f"Recolorir roxo — {ctx.author}")
+            done += 1
+        except Exception as _ex:
+            failed += 1
+            print(f"[roxo] falha em '{e.name}': {type(_ex).__name__}: {_ex}", flush=True)
+        await asyncio.sleep(2.0)  # respeita o rate limit de emojis
+
+    _msg = f"<a:online:1518271945550856295> **{done}** emoji(s) recolorido(s) para roxo"
+    if failed:
+        _msg += f" · <a:alerta:1518271939460857968> **{failed}** falha(s)"
+    try:
+        await status.edit(content=_msg)
+    except Exception:
+        await ctx.reply(_msg)
 
 
 @bot.command(name="historygroles")
