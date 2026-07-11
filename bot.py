@@ -20549,6 +20549,12 @@ class LimiteBanView(discord.ui.View):
 
     async def _open_unban_config(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
+        # Se a proxy está vinculada, o "Painel de Unban" redireciona pro painel Proxy
+        # (evita a confusão de configurar a categoria no servidor errado).
+        if settings.get("proxy_recurso_guild"):
+            embed = build_proxy_config_embed(self.author, settings)
+            await interaction.response.edit_message(embed=embed, view=ProxyView(self.author))
+            return
         embed = build_unban_config_embed(self.author, settings)
         view = UnbanConfigView(self.author)
         await interaction.response.edit_message(embed=embed, view=view)
