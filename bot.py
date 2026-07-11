@@ -42911,29 +42911,23 @@ def _unban_duration_str(rec: dict) -> str:
 
 
 def build_unban_panel_embed(guild: discord.Guild, settings: dict) -> discord.Embed:
-    icon_url = guild.icon.url if guild and guild.icon else (bot.user.display_avatar.url if bot.user else None)
-    emb = discord.Embed(
-        color=settings.get("embed_color", UNBAN_ACCENT),
-        description=(
-            "Foi banido do nosso servidor e quer solicitar o revogamento do banimento?\n"
-            "Abra um ticket abaixo para que nossa equipe possa analisar o seu caso com atenção."
-        ),
-    )
-    emb.set_author(name=f"Unban - {guild.name}" if guild else "Unban", icon_url=icon_url)
+    icon_url = guild.icon.url if guild and guild.icon else None
+    # Emojis do próprio servidor de recurso (busca por nome, fallback pros padrão)
+    _e_title  = str(_guild_emoji(guild, "cadeadohit", "martelo", "ban", fallback="🔨"))
+    _e_ticket = str(_guild_emoji(guild, "hitticket", fallback="🎟️"))
+    _e_id     = str(_guild_emoji(guild, "hitid", fallback="🆔"))
+    _nome = guild.name if guild else "Servidor"
+    emb = discord.Embed(color=settings.get("embed_color", UNBAN_ACCENT))
     if icon_url:
         emb.set_thumbnail(url=icon_url)
-    # Emojis do próprio servidor de recurso (busca por nome, fallback pros padrão)
-    _e_ticket = str(_guild_emoji(guild, "hitticket", fallback="<:tickets:1518271952526250155>"))
-    _e_id     = str(_guild_emoji(guild, "hitid", fallback="<:urls:1518272078921339011>"))
-    emb.add_field(
-        name=f"{_e_ticket}  Abrir ticket",
-        value="Se o banimento ocorreu **nesta conta**, basta abrir o ticket normalmente por aqui.",
-        inline=False,
-    )
-    emb.add_field(
-        name=f"{_e_id}  Procurar banimento por ID",
-        value="Caso o banimento tenha sido feito em **outra conta**, utilize o ID de banimento para enviar sua solicitação.",
-        inline=False,
+    emb.description = (
+        f"## {_e_title} Unban - {_nome}\n"
+        "Foi banido do nosso servidor e quer solicitar o revogamento do banimento?\n"
+        "Abra um ticket abaixo para que nossa equipe possa analisar o seu caso com atenção.\n\n"
+        f"## {_e_ticket} Abrir ticket\n"
+        "Se o banimento ocorreu **nesta conta**, basta abrir o ticket normalmente por aqui.\n\n"
+        f"## {_e_id} Procurar banimento por ID\n"
+        "Caso o banimento tenha sido feito em **outra conta**, utilize o ID de banimento para enviar sua solicitação."
     )
     return emb
 
@@ -42983,7 +42977,6 @@ class UnbanPanelView(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.button(label="Abrir Ticket", style=discord.ButtonStyle.secondary,
-                       emoji=discord.PartialEmoji.from_str("<:tickets:1518271952526250155>"),
                        custom_id="unban_open_ticket_v1")
     async def abrir_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         settings = get_settings(interaction.guild.id)
@@ -42999,7 +42992,6 @@ class UnbanPanelView(discord.ui.View):
         await _unban_open_ticket(interaction, rec, target_gid)
 
     @discord.ui.button(label="Procurar pelo ID", style=discord.ButtonStyle.secondary,
-                       emoji=discord.PartialEmoji.from_str("<:urls:1518272078921339011>"),
                        custom_id="unban_search_id_v1")
     async def procurar_id(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(UnbanSearchModal())
