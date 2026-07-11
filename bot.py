@@ -42798,13 +42798,16 @@ def build_unban_panel_embed(guild: discord.Guild, settings: dict) -> discord.Emb
     emb.set_author(name=f"Unban - {guild.name}" if guild else "Unban", icon_url=icon_url)
     if icon_url:
         emb.set_thumbnail(url=icon_url)
+    # Emojis do próprio servidor de recurso (busca por nome, fallback pros padrão)
+    _e_ticket = str(_guild_emoji(guild, "hitticket", fallback="<:tickets:1518271952526250155>"))
+    _e_id     = str(_guild_emoji(guild, "hitid", fallback="<:urls:1518272078921339011>"))
     emb.add_field(
-        name="<:tickets:1518271952526250155>  Abrir ticket",
+        name=f"{_e_ticket}  Abrir ticket",
         value="Se o banimento ocorreu **nesta conta**, basta abrir o ticket normalmente por aqui.",
         inline=False,
     )
     emb.add_field(
-        name="<:urls:1518272078921339011>  Procurar banimento por ID",
+        name=f"{_e_id}  Procurar banimento por ID",
         value="Caso o banimento tenha sido feito em **outra conta**, utilize o ID de banimento para enviar sua solicitação.",
         inline=False,
     )
@@ -42823,18 +42826,24 @@ def build_unban_ticket_embed(guild: discord.Guild, opener: discord.abc.User, rec
     emb.set_author(name=f"Unban - {guild.name}" if guild else "Unban", icon_url=icon_url)
     if icon_url:
         emb.set_thumbnail(url=icon_url)
+    # Emojis do próprio servidor de recurso (busca por nome, fallback pros padrão)
+    _e_ticket = str(_guild_emoji(guild, "hitticket", fallback="📋"))
+    _e_id     = str(_guild_emoji(guild, "hitid", fallback="🆔"))
+    _e_autor  = str(_guild_emoji(guild, "confighit", fallback="👤"))
+    _e_motivo = str(_guild_emoji(guild, "regrashit", fallback="📝"))
+    _e_dur    = str(_guild_emoji(guild, "relogio", fallback="⏱️"))
     emb.add_field(
-        name="Detalhes do banimento",
+        name=f"{_e_ticket}  Detalhes do banimento",
         value=(
-            f"**ID de banimento:** `{rec.get('id', '?')}`\n"
-            f"**Autor:** <@{rec.get('banned_by_id', 0)}> `{rec.get('banned_by_name', '?')}`\n"
-            f"**Motivo do banimento:** `{rec.get('reason', 'Não informado')}`\n"
-            f"**Duração:** `{_unban_duration_str(rec)}`"
+            f"{_e_id} **ID de banimento:** `{rec.get('id', '?')}`\n"
+            f"{_e_autor} **Autor:** <@{rec.get('banned_by_id', 0)}> `{rec.get('banned_by_name', '?')}`\n"
+            f"{_e_motivo} **Motivo do banimento:** `{rec.get('reason', 'Não informado')}`\n"
+            f"{_e_dur} **Duração:** `{_unban_duration_str(rec)}`"
         ),
         inline=False,
     )
     emb.add_field(
-        name="Informações do usuário banido",
+        name=f"{_e_id}  Informações do usuário banido",
         value=(
             f"<@{rec.get('user_id', 0)}> `{rec.get('user_name', '?')}`\n"
             f"`{records_count}` banimento(s) em registro."
