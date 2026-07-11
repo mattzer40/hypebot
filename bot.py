@@ -21227,6 +21227,76 @@ class _ProxyRecursoIdModal(discord.ui.Modal):
         )
 
 
+class _ProxyRecursoSelect(discord.ui.Select):
+    """Dropdown com categorias/cargos DO servidor de recurso (o bot lê de lá)."""
+    def __init__(self, author: discord.Member, mode: str, recurso_guild: discord.Guild):
+        self.author = author
+        self.mode = mode  # "categoria" ou "cargo"
+        if mode == "categoria":
+            items = recurso_guild.categories
+            placeholder = "Escolha a categoria (do recurso)"
+            opts = [discord.SelectOption(label=c.name[:100], value=str(c.id)) for c in items[:25]]
+        else:
+            items = [r for r in recurso_guild.roles if not r.is_default() and not r.managed]
+            items.sort(key=lambda r: r.position, reverse=True)
+            placeholder = "Escolha o cargo da staff (do recurso)"
+            opts = [discord.SelectOption(label=r.name[:100], value=str(r.id)) for r in items[:25]]
+        if not opts:
+            opts = [discord.SelectOption(label="(nenhum encontrado)", value="0")]
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=opts)
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        recurso_gid = settings.get("proxy_recurso_guild")
+        if self.values[0] == "0" or not recurso_gid:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Nada válido para selecionar."),
+                ephemeral=True,
+            )
+            return
+        field = "unban_ticket_category" if self.mode == "categoria" else "unban_staff_role"
+        rs = get_settings(recurso_gid)
+        rs["unban_main_guild"] = interaction.guild.id
+        rs[field] = int(self.values[0])
+        save_settings_to_disk()
+        await interaction.response.edit_message(
+            embed=build_proxy_config_embed(self.author, settings),
+            view=ProxyView(self.author),
+        )
+        _label = "Categoria" if self.mode == "categoria" else "Cargo da staff"
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> {_label} do recurso atualizado."),
+            ephemeral=True,
+        )
+
+
+class _ProxyRecursoPickerView(discord.ui.View):
+    def __init__(self, author: discord.Member, mode: str, recurso_guild: discord.Guild):
+        super().__init__(timeout=300)
+        self.author = author
+        self.add_item(_ProxyRecursoSelect(author, mode, recurso_guild))
+        btn = discord.ui.Button(
+            label="Voltar", style=discord.ButtonStyle.primary,
+            emoji=_button_emoji(discord.ButtonStyle.primary),
+        )
+        btn.callback = self._back
+        self.add_item(btn)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
+            await interaction.response.send_message(TRANSLATIONS[lang]["only_author"], ephemeral=True)
+            return False
+        return True
+
+    async def _back(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=build_proxy_config_embed(self.author, settings),
+            view=ProxyView(self.author),
+        )
+
+
 class ProxyView(discord.ui.View):
     def __init__(self, author: discord.Member):
         super().__init__(timeout=None)
@@ -21325,16 +21395,22 @@ class ProxyView(discord.ui.View):
         await interaction.response.send_modal(_ProxyCanalModal(self))
 
     async def _set_recurso_category(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(_ProxyRecursoIdModal(
-            self, "unban_ticket_category", "Categoria dos Tickets (recurso)",
-            "ID da categoria (no servidor de recurso)",
-        ))
+        await self._open_recurso_picker(interaction, "categoria")
 
     async def _set_recurso_role(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(_ProxyRecursoIdModal(
-            self, "unban_staff_role", "Cargo da Staff (recurso)",
-            "ID do cargo (no servidor de recurso)",
-        ))
+        await self._open_recurso_picker(interaction, "cargo")
+
+    async def _open_recurso_picker(self, interaction: discord.Interaction, mode: str):
+        settings = get_settings(interaction.guild.id)
+        recurso_gid = settings.get("proxy_recurso_guild")
+        g = bot.get_guild(recurso_gid) if recurso_gid else None
+        if g is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule o servidor de recurso e adicione o bot primeiro."),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.edit_message(view=_ProxyRecursoPickerView(self.author, mode, g))
 
     async def _desvincular(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
