@@ -31322,7 +31322,11 @@ async def addemoji_cmd(ctx: commands.Context, *, args: str = ""):
         return
     settings = get_settings(ctx.guild.id)
 
-    if not _has_perm_category(ctx.author, "adicionar_remover_emojis", settings):
+    _is_owner_admin = bool(
+        (ctx.guild and ctx.author.id == ctx.guild.owner_id)
+        or getattr(ctx.author.guild_permissions, "administrator", False)
+    )
+    if not (_is_owner_admin or _has_perm_category(ctx.author, "adicionar_remover_emojis", settings)):
         await ctx.reply(
             f"{ctx.author.mention}, você não tem permissão para adicionar emojis com o bot.",
             allowed_mentions=discord.AllowedMentions(users=False),
