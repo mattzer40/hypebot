@@ -20989,12 +20989,29 @@ def build_proxy_config_embed(author: discord.Member, settings: dict) -> discord.
     else:
         canal_str = "`Não configurado`"
 
+    # Categoria e cargo da staff (configurados NO servidor de recurso)
+    cat_str = "`Não definido`"
+    role_str = "`Não definido`"
+    if recurso_gid:
+        _rs = get_settings(recurso_gid)
+        _g2 = bot.get_guild(recurso_gid)
+        _cat_id = _rs.get("unban_ticket_category")
+        if _cat_id:
+            _cat = _g2.get_channel(_cat_id) if _g2 else None
+            cat_str = f"`{_cat.name}`" if _cat else f"`{_cat_id}`"
+        _role_id = _rs.get("unban_staff_role")
+        if _role_id:
+            _role = _g2.get_role(_role_id) if _g2 else None
+            role_str = f"`{_role.name}`" if _role else f"`{_role_id}`"
+
     embed.add_field(
         name="<:ferramentas_:1518271998613131274>  Configuração da Proxy",
         value=(
             f"┃ **Status do bot:** {bot_str}\n"
             f"┃ **Servidor de recurso:** {servidor_str}\n"
-            f"┃ **Canal do painel:** {canal_str}"
+            f"┃ **Canal do painel:** {canal_str}\n"
+            f"┃ **Categoria dos tickets:** {cat_str}\n"
+            f"┃ **Cargo da staff:** {role_str}"
         ),
         inline=False,
     )
@@ -21131,6 +21148,80 @@ class _ProxyCanalModal(discord.ui.Modal, title="Configurar Canal do Painel"):
         )
 
 
+class _ProxyRecursoIdModal(discord.ui.Modal):
+    """Configura categoria/cargo dos tickets NO servidor de recurso (por ID)."""
+    def __init__(self, parent_view: "ProxyView", field: str, title: str, label: str):
+        super().__init__(title=title, timeout=600)
+        self._pv = parent_view
+        self._field = field  # "unban_ticket_category" ou "unban_staff_role"
+        self.id_input = discord.ui.TextInput(
+            label=label,
+            placeholder="Cole o ID (vazio = remover)",
+            required=False,
+            max_length=25,
+        )
+        self.add_item(self.id_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        recurso_gid = settings.get("proxy_recurso_guild")
+        if not recurso_gid:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule um servidor de recurso primeiro."),
+                ephemeral=True,
+            )
+            return
+        g = bot.get_guild(recurso_gid)
+        if g is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> O bot não está no servidor de recurso. Clique em **Adicionar Bot** primeiro."),
+                ephemeral=True,
+            )
+            return
+
+        recurso_settings = get_settings(recurso_gid)
+        recurso_settings["unban_main_guild"] = interaction.guild.id
+        raw = self.id_input.value.strip()
+
+        if not raw:
+            recurso_settings[self._field] = None
+        else:
+            try:
+                _id = int(raw.strip("<#@&!> "))
+            except ValueError:
+                await interaction.response.send_message(
+                    embed=_notif_embed("<a:alerta:1518271939460857968> ID inválido. Informe apenas números."),
+                    ephemeral=True,
+                )
+                return
+            if self._field == "unban_ticket_category":
+                ch = g.get_channel(_id)
+                if not isinstance(ch, discord.CategoryChannel):
+                    await interaction.response.send_message(
+                        embed=_notif_embed(f"<a:alerta:1518271939460857968> Categoria não encontrada em `{g.name}`. Use o ID de uma categoria **desse** servidor."),
+                        ephemeral=True,
+                    )
+                    return
+            else:  # unban_staff_role
+                role = g.get_role(_id)
+                if role is None:
+                    await interaction.response.send_message(
+                        embed=_notif_embed(f"<a:alerta:1518271939460857968> Cargo não encontrado em `{g.name}`. Use o ID de um cargo **desse** servidor."),
+                        ephemeral=True,
+                    )
+                    return
+            recurso_settings[self._field] = _id
+
+        save_settings_to_disk()
+        embed = build_proxy_config_embed(self._pv.author, settings)
+        await interaction.response.edit_message(embed=embed, view=ProxyView(self._pv.author))
+        _label = "Categoria" if self._field == "unban_ticket_category" else "Cargo da staff"
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> {_label} do recurso atualizado."),
+            ephemeral=True,
+        )
+
+
 class ProxyView(discord.ui.View):
     def __init__(self, author: discord.Member):
         super().__init__(timeout=None)
@@ -21195,6 +21286,28 @@ class ProxyView(discord.ui.View):
         btn_desvincular.callback = self._desvincular
         self.add_item(btn_desvincular)
 
+        # Categoria e Cargo da staff DO SERVIDOR DE RECURSO (por ID, pois o menu
+        # de seleção não alcança canais/cargos de outro servidor)
+        btn_cat = discord.ui.Button(
+            label="Categoria",
+            style=discord.ButtonStyle.secondary,
+            emoji=discord.PartialEmoji.from_str("<:tickets:1518271952526250155>"),
+            row=2,
+            disabled=not linked,
+        )
+        btn_cat.callback = self._set_recurso_category
+        self.add_item(btn_cat)
+
+        btn_role = discord.ui.Button(
+            label="Cargo da Staff",
+            style=discord.ButtonStyle.secondary,
+            emoji=discord.PartialEmoji.from_str("<:seguranca:1518271987393232936>"),
+            row=2,
+            disabled=not linked,
+        )
+        btn_role.callback = self._set_recurso_role
+        self.add_item(btn_role)
+
     async def _back(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         embed = build_limite_ban_embed(self.author, settings)
@@ -21205,6 +21318,18 @@ class ProxyView(discord.ui.View):
 
     async def _configurar_canal(self, interaction: discord.Interaction):
         await interaction.response.send_modal(_ProxyCanalModal(self))
+
+    async def _set_recurso_category(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(_ProxyRecursoIdModal(
+            self, "unban_ticket_category", "Categoria dos Tickets (recurso)",
+            "ID da categoria (no servidor de recurso)",
+        ))
+
+    async def _set_recurso_role(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(_ProxyRecursoIdModal(
+            self, "unban_staff_role", "Cargo da Staff (recurso)",
+            "ID do cargo (no servidor de recurso)",
+        ))
 
     async def _desvincular(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
