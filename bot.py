@@ -4456,6 +4456,14 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("limite_ban_reset_days", None)
     settings.setdefault("limite_ban_last_reset", None)
     settings.setdefault("limite_ban_counts", {})
+    # ── Painel de Unban (recurso de banimento) ──────────────────────────────
+    settings.setdefault("unban_panel_enabled", False)
+    settings.setdefault("unban_ticket_category", None)  # categoria onde os tickets são criados
+    settings.setdefault("unban_staff_role", None)       # cargo da staff (acesso + desbanir)
+    settings.setdefault("unban_main_guild", None)       # ID do servidor principal (None = servidor atual)
+    settings.setdefault("unban_tickets", {})            # {channel_id: {ban_id, user_id, target_gid, opener_id}}
+    settings.setdefault("proxy_recurso_guild", None)    # servidor de recurso vinculado (trava após 1)
+    settings.setdefault("proxy_recurso_channel", None)  # canal (no recurso) onde o painel é postado
     settings.setdefault("protecao_cargos_enabled", False)
     settings.setdefault("protecao_cargos_grupos", [])
     settings.setdefault("protecao_cargos_whitelist", [])
@@ -5186,7 +5194,7 @@ def build_appearance_embed(author: discord.Member, settings: dict) -> discord.Em
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     # Resolve bot's current display name (nickname > global username)
     bot_display_name = None
@@ -5949,7 +5957,7 @@ class AppearanceView(discord.ui.View):
         ask = discord.Embed(color=color)
         ask.set_author(name="Banner do Painel — NATA®", icon_url=icon_url)
         if icon_url:
-            ask.set_thumbnail(url=icon_url)
+            ask.set_thumbnail(url=author.display_avatar.url)
         ask.add_field(
             name="<:aparncia_:1518271975317962895>  Como configurar:",
             value=(
@@ -6122,7 +6130,7 @@ def build_servidor_embed(author: discord.Member, settings: dict) -> discord.Embe
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["servidor_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(
         name=t["administrator"],
@@ -6370,7 +6378,7 @@ def build_tickets_embed(author: discord.Member, settings: dict) -> discord.Embed
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["tickets_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(name=t["administrator"], value=author.mention, inline=True)
     embed.add_field(name=t["expires_in"], value=_fmt_expira(settings["language"]), inline=True)
@@ -6506,7 +6514,7 @@ def build_ticket_config_embed(author: discord.Member, settings: dict) -> discord
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     log_channel_id = settings.get("ticket_log_channel")
     if log_channel_id and author.guild:
@@ -6934,7 +6942,7 @@ class TicketConfigView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_select_log_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=icon_url)
+        embed.set_thumbnail(url=author.display_avatar.url)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _define_marcacao(self, interaction: discord.Interaction):
@@ -7002,7 +7010,7 @@ def build_ticket_ia_embed(author: discord.Member, settings: dict) -> discord.Emb
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_ia_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(
         name=f"<:entretenimento_:1518271992191779038>  {t['ticket_config_info_section']}",
@@ -7105,7 +7113,7 @@ def build_ticket_ia_config_embed(author: discord.Member, settings: dict, panel_i
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_ia_config_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     panel = next((p for p in _get_ticket_panels(settings) if str(p.get("id")) == panel_id), None)
     channel_value = f"`{t['ticket_unknown_channel']}`"
@@ -7263,7 +7271,7 @@ def build_ticket_aval_embed(author: discord.Member, settings: dict) -> discord.E
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_aval_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(
         name=f"<:comunidade_:1518272016971595807>  {t['ticket_aval_how']}",
@@ -7360,7 +7368,7 @@ def build_ticket_aval_config_embed(
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_aval_config_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     panel = next((p for p in _get_ticket_panels(settings) if str(p.get("id")) == panel_id), None)
     ticket_channel = f"`{t['ticket_unknown_channel']}`"
@@ -7672,7 +7680,7 @@ def build_ticket_manager_embed(author: discord.Member, settings: dict) -> discor
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_manager_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     na = f"`{t['ticket_na']}`"
     embed.add_field(
@@ -7787,7 +7795,7 @@ def build_ticket_per_manager_embed(
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_manager_per_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     panel = _find_panel(settings, panel_id) or {}
     na = f"`{t['ticket_na']}`"
@@ -7957,7 +7965,7 @@ def build_ticket_horarios_config_embed(author: discord.Member, settings: dict, p
         value=t["ticket_horarios_como_config_text"],
         inline=False,
     )
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
     embed.set_footer(text=f"NATA® ® • Hoje às {datetime.now().strftime('%H:%M')}", icon_url=icon_url)
     return embed
 
@@ -8964,7 +8972,7 @@ def build_ticket_painel_leia_embed(author: discord.Member, settings: dict) -> di
         ),
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
     embed.set_footer(text=_footer_name(author.guild, settings), icon_url=icon_url)
     return embed
 
@@ -9244,7 +9252,7 @@ class TicketPerManagerView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_setar_categoria_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=icon_url)
+        embed.set_thumbnail(url=author.display_avatar.url)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _cargos_resp(self, interaction: discord.Interaction):
@@ -9256,7 +9264,7 @@ class TicketPerManagerView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_cargos_resp_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=icon_url)
+        embed.set_thumbnail(url=author.display_avatar.url)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _toggle_topico(self, interaction: discord.Interaction):
@@ -9324,7 +9332,7 @@ class TicketPerManagerView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_select_log_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=icon_url)
+        embed.set_thumbnail(url=author.display_avatar.url)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _editar_embed(self, interaction: discord.Interaction):
@@ -9359,7 +9367,7 @@ def build_comunidade_embed(author: discord.Member, settings: dict) -> discord.Em
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["comunidade_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(name=t["administrator"], value=author.mention, inline=True)
     embed.add_field(name=t["expires_in"], value=_fmt_expira(settings["language"]), inline=True)
@@ -9466,7 +9474,7 @@ def build_verificacao_embed(author: discord.Member, settings: dict) -> discord.E
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["verif_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     enabled = settings.get("verif_enabled", False)
     status_value = (
@@ -9944,7 +9952,7 @@ def build_ig_verif_admin_embed(author: discord.Member, settings: dict) -> discor
 
     embed = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
     embed.set_author(name="Painel de Verificação - NATA®", icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
     embed.add_field(
         name="<:entretenimento_:1518271992191779038>  Informações",
         value=(
@@ -11320,7 +11328,7 @@ def build_welcome_embed(author: discord.Member, settings: dict) -> discord.Embed
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["welcome_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(
         name=f"<:entretenimento_:1518271992191779038>  {t['ticket_config_info_section']}",
@@ -11708,7 +11716,7 @@ def build_vendas_embed(author: discord.Member, settings: dict) -> discord.Embed:
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["vendas_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     vips = settings.get("vendas_vips", [])
     cargos = settings.get("vendas_cargos", [])
@@ -12033,7 +12041,7 @@ def build_mencao_embed(author: discord.Member, settings: dict) -> discord.Embed:
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["mencao_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     enabled = settings.get("mencao_enabled", False)
     status_value = (
@@ -12213,7 +12221,7 @@ def build_gifs_embed(author: discord.Member, settings: dict) -> discord.Embed:
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["gifs_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(name=t["administrator"], value=author.mention, inline=True)
     embed.add_field(name=t["expires_in"], value=_fmt_expira(settings["language"]), inline=True)
@@ -13312,7 +13320,7 @@ class GifsConversorView(discord.ui.View):
             color=cor,
         )
         emb.set_author(name=f"Central de Gifs — {bot_name}", icon_url=icon_url)
-        emb.set_thumbnail(url=icon_url)
+        emb.set_thumbnail(url=author.display_avatar.url)
         if banner:
             emb.set_image(url=banner)
 
@@ -13446,7 +13454,7 @@ def build_gifs_decoracoes_embed(author: discord.Member, settings: dict) -> disco
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name="Central de Decorações - NATA®", icon_url=icon_url)
     if icon_url:
-        embed.set_thumbnail(url=icon_url)
+        embed.set_thumbnail(url=author.display_avatar.url)
 
     ch_id = settings.get("gifs_decoracoes_log_channel")
     if ch_id and author.guild:
@@ -15177,7 +15185,7 @@ def build_gifs_postadores_embed(author: discord.Member, settings: dict) -> disco
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name="Central de GIFs - NATA®", icon_url=icon_url)
     if icon_url:
-        embed.set_thumbnail(url=icon_url)
+        embed.set_thumbnail(url=author.display_avatar.url)
     embed.add_field(
         name="<a:alerta:1518271939460857968>  Informações",
         value=(
@@ -15213,7 +15221,7 @@ def _build_config_sistema_embed(author: discord.Member, settings: dict) -> disco
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name="Painel de Configuração — Postadores", icon_url=icon_url)
     if icon_url:
-        embed.set_thumbnail(url=icon_url)
+        embed.set_thumbnail(url=author.display_avatar.url)
     embed.add_field(
         name="<a:alerta:1518271939460857968>  Informações",
         value=(
@@ -15526,7 +15534,7 @@ def _build_gerenciar_user_embed(author: discord.Member, settings: dict) -> disco
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name="Gerenciar Postadores — NATA®", icon_url=icon_url)
     if icon_url:
-        embed.set_thumbnail(url=icon_url)
+        embed.set_thumbnail(url=author.display_avatar.url)
     embed.add_field(
         name="<:comunidade_:1518272016971595807>  Selecionar Postador(a)",
         value="Selecione um postador(a) para gerenciar:",
@@ -15880,7 +15888,7 @@ def build_entretenimento_embed(author: discord.Member, settings: dict) -> discor
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["entretenimento_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(name=t["administrator"], value=author.mention, inline=True)
     embed.add_field(name=t["expires_in"], value=_fmt_expira(settings["language"]), inline=True)
@@ -15990,7 +15998,7 @@ def build_calendario_embed(author: discord.Member, settings: dict) -> discord.Em
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["cal_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     enabled = settings.get("calendar_enabled", False)
     status_value = (
@@ -16636,7 +16644,7 @@ def build_instagram_embed(author: discord.Member, settings: dict) -> discord.Emb
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ig_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     enabled = settings.get("ig_enabled", False)
     status_value = (
@@ -17408,7 +17416,7 @@ def build_tellonym_embed(author: discord.Member, settings: dict) -> discord.Embe
     guild = author.guild if hasattr(author, "guild") else None
 
     embed.set_author(name=f"Painel Tellonym — {_footer_name(guild, settings)}", icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     def _ch(cid):
         if not cid:
@@ -17460,7 +17468,7 @@ def build_tellonym_blocked_embed(author: discord.Member, settings: dict) -> disc
     icon_url = bot.user.display_avatar.url if bot.user else None
     guild = author.guild if hasattr(author, "guild") else None
     embed.set_author(name="Painel de Usuários Bloqueados", icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     blocked = settings.get("tellonym_blocked_users", [])
     if blocked:
@@ -18244,7 +18252,7 @@ def build_security_embed(author: discord.Member, settings: dict) -> discord.Embe
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["security_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(
         name=t["administrator"],
@@ -18467,7 +18475,7 @@ def build_advertencia_embed(author: discord.Member, settings: dict) -> discord.E
         color=settings["embed_color"],
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     roles = settings.get("warning_roles", [])
     role_slots = []
@@ -18527,7 +18535,7 @@ def build_antban_embed(author: discord.Member, settings: dict) -> discord.Embed:
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["antban_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(
         name=f"<:tickets:1518271952526250155>  {t['administrator_label']}",
@@ -18909,7 +18917,7 @@ def build_antbot_embed(author: discord.Member, settings: dict) -> discord.Embed:
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["antbot_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     if settings["antbot_enabled"]:
         status_value = "<a:online:1518271945550856295> `(Ativado)`"
@@ -19197,7 +19205,7 @@ def build_protecao_cargos_embed(author: discord.Member, settings: dict) -> disco
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["protecao_cargos_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     if settings["protecao_cargos_enabled"]:
         status_value = "<a:online:1518271945550856295> `(Ativado)`"
@@ -19266,7 +19274,7 @@ def build_editando_cargos_embed(author: discord.Member, settings: dict) -> disco
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["editando_cargos_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     grupos_cargos = settings.get("protecao_grupos_cargos", {})
     grupos_usuarios = settings.get("protecao_grupos_usuarios", {})
@@ -20065,7 +20073,7 @@ def build_proteger_cargo_embed(author: discord.Member, settings: dict) -> discor
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["proteger_cargo_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     blocked = settings.get("protecao_cargo_bloqueado", {})
     if not blocked:
@@ -20470,6 +20478,38 @@ class LimiteBanView(discord.ui.View):
         btn_proxy.callback = self._set_proxy_link
         self.add_item(btn_proxy)
 
+        # Botão extra: painel de unban (recurso de banimento)
+        btn_unban = discord.ui.Button(
+            label="Painel de Unban",
+            style=discord.ButtonStyle.secondary,
+            emoji=discord.PartialEmoji.from_str("<:seguranca:1518271987393232936>"),
+            row=1,
+        )
+        btn_unban.callback = self._open_unban_config
+        self.add_item(btn_unban)
+
+        # Botão extra: Proxy (servidor de recurso — add bot, vincular, canal)
+        btn_proxy_sys = discord.ui.Button(
+            label="Proxy",
+            style=discord.ButtonStyle.secondary,
+            emoji=discord.PartialEmoji.from_str("<:ferramentas_:1518271998613131274>"),
+            row=1,
+        )
+        btn_proxy_sys.callback = self._open_proxy_config
+        self.add_item(btn_proxy_sys)
+
+    async def _open_unban_config(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_unban_config_embed(self.author, settings)
+        view = UnbanConfigView(self.author)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    async def _open_proxy_config(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_proxy_config_embed(self.author, settings)
+        view = ProxyView(self.author)
+        await interaction.response.edit_message(embed=embed, view=view)
+
     async def _back(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         embed = build_security_embed(self.author, settings)
@@ -20545,6 +20585,533 @@ class LimiteBanView(discord.ui.View):
 
 
 # -----------------------------------------------------------------------------
+# Painel de Unban (configuração — sub-painel de Limite de Banimentos)
+# -----------------------------------------------------------------------------
+
+def build_unban_config_embed(author: discord.Member, settings: dict) -> discord.Embed:
+    guild = author.guild
+    icon_url = bot.user.display_avatar.url if bot.user else None
+    embed = discord.Embed(
+        color=settings.get("embed_color", 0xE53935),
+        description=(
+            "Sistema de **recurso de banimento**. Os usuários abrem um ticket para "
+            "solicitar o desbanimento, informando o ID recebido na DM do ban.\n"
+            "Configure abaixo e envie o painel no canal desejado."
+        ),
+    )
+    embed.set_author(name="Painel de Unban", icon_url=icon_url)
+    if icon_url:
+        embed.set_thumbnail(url=author.display_avatar.url)
+
+    if settings.get("unban_panel_enabled"):
+        status_str = "<a:online:1518271945550856295> `(Ativado)`"
+    else:
+        status_str = "<a:alerta:1518271939460857968> `(Desativado)`"
+
+    cat_id = settings.get("unban_ticket_category")
+    cat = guild.get_channel(cat_id) if (cat_id and guild) else None
+    cat_str = cat.name if cat else "`Não definido`"
+
+    role_id = settings.get("unban_staff_role")
+    role = guild.get_role(role_id) if (role_id and guild) else None
+    role_str = role.mention if role else "`Não definido`"
+
+    main_gid = settings.get("unban_main_guild")
+    if main_gid:
+        mg = bot.get_guild(main_gid)
+        main_str = f"`{mg.name}` (`{main_gid}`)" if mg else f"`{main_gid}` (bot não está nele)"
+    else:
+        main_str = "`Servidor atual`"
+
+    embed.add_field(
+        name="<:seguranca:1518271987393232936>  Configuração",
+        value=(
+            f"┃ **Status:** {status_str}\n"
+            f"┃ **Categoria dos tickets:** {cat_str}\n"
+            f"┃ **Cargo da staff:** {role_str}\n"
+            f"┃ **Servidor principal:** {main_str}"
+        ),
+        inline=False,
+    )
+    embed.set_footer(text=f"Solicitado por {author.name}", icon_url=icon_url)
+    embed.timestamp = datetime.now()
+    return embed
+
+
+class _UnbanIdModal(discord.ui.Modal):
+    """Modal genérico para configurar categoria / cargo / servidor principal."""
+    def __init__(self, parent_view: "UnbanConfigView", field: str, title: str, label: str, placeholder: str, allow_empty: bool = False):
+        super().__init__(title=title, timeout=600)
+        self._pv = parent_view
+        self._field = field
+        self._allow_empty = allow_empty
+        self.value_input = discord.ui.TextInput(
+            label=label,
+            placeholder=placeholder,
+            required=not allow_empty,
+            max_length=25,
+        )
+        self.add_item(self.value_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        raw = self.value_input.value.strip()
+
+        if not raw:
+            settings[self._field] = None
+        else:
+            try:
+                _id = int(raw.strip("<#@&!>"))
+            except ValueError:
+                await interaction.response.send_message(
+                    embed=_notif_embed("<a:alerta:1518271939460857968> ID inválido. Informe apenas números."),
+                    ephemeral=True,
+                )
+                return
+
+            if self._field == "unban_ticket_category":
+                ch = interaction.guild.get_channel(_id)
+                if not isinstance(ch, discord.CategoryChannel):
+                    await interaction.response.send_message(
+                        embed=_notif_embed("<a:alerta:1518271939460857968> Categoria não encontrada. Verifique o ID."),
+                        ephemeral=True,
+                    )
+                    return
+                settings[self._field] = _id
+            elif self._field == "unban_staff_role":
+                role = interaction.guild.get_role(_id)
+                if role is None:
+                    await interaction.response.send_message(
+                        embed=_notif_embed("<a:alerta:1518271939460857968> Cargo não encontrado. Verifique o ID."),
+                        ephemeral=True,
+                    )
+                    return
+                settings[self._field] = _id
+            elif self._field == "unban_main_guild":
+                mg = bot.get_guild(_id)
+                if mg is None:
+                    await interaction.response.send_message(
+                        embed=_notif_embed("<a:alerta:1518271939460857968> O bot não está nesse servidor. Adicione-o primeiro."),
+                        ephemeral=True,
+                    )
+                    return
+                settings[self._field] = _id
+
+        save_settings_to_disk()
+        embed = build_unban_config_embed(self._pv.author, settings)
+        await interaction.response.edit_message(embed=embed, view=UnbanConfigView(self._pv.author))
+
+
+class UnbanConfigView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=None)
+        self.author = author
+        self._build_buttons()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            guild_id = interaction.guild.id if interaction.guild else 0
+            lang = get_settings(guild_id)["language"]
+            await interaction.response.send_message(
+                TRANSLATIONS[lang]["only_author"], ephemeral=True
+            )
+            return False
+        return True
+
+    def _build_buttons(self):
+        settings = get_settings(self.author.guild.id if self.author.guild else 0)
+        self.clear_items()
+
+        enabled = settings.get("unban_panel_enabled")
+        activate_label = "Desativar" if enabled else "Ativar"
+        activate_style = discord.ButtonStyle.danger if enabled else discord.ButtonStyle.success
+
+        btn_back = discord.ui.Button(label="Voltar", style=discord.ButtonStyle.primary, emoji=_button_emoji(discord.ButtonStyle.primary), row=0)
+        btn_back.callback = self._back
+        self.add_item(btn_back)
+
+        btn_toggle = discord.ui.Button(label=activate_label, style=activate_style, emoji=_button_emoji(activate_style), row=0)
+        btn_toggle.callback = self._toggle
+        self.add_item(btn_toggle)
+
+        btn_cat = discord.ui.Button(label="Categoria", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str("<:tickets:1518271952526250155>"), row=0)
+        btn_cat.callback = self._set_category
+        self.add_item(btn_cat)
+
+        btn_role = discord.ui.Button(label="Cargo da Staff", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str("<:seguranca:1518271987393232936>"), row=0)
+        btn_role.callback = self._set_role
+        self.add_item(btn_role)
+
+        btn_main = discord.ui.Button(label="Servidor Principal", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str(EMOJI_HOUSE), row=1)
+        btn_main.callback = self._set_main
+        self.add_item(btn_main)
+
+        btn_send = discord.ui.Button(label="Enviar Painel", style=discord.ButtonStyle.success, emoji=discord.PartialEmoji.from_str(EMOJI_ENVELOPE), row=1)
+        btn_send.callback = self._send_panel
+        self.add_item(btn_send)
+
+    async def _back(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_limite_ban_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=LimiteBanView(self.author))
+
+    async def _toggle(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["unban_panel_enabled"] = not settings.get("unban_panel_enabled")
+        save_settings_to_disk()
+        embed = build_unban_config_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=UnbanConfigView(self.author))
+
+    async def _set_category(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(_UnbanIdModal(
+            self, "unban_ticket_category", "Categoria dos Tickets",
+            "ID da categoria", "Ex: 123456789012345678", allow_empty=True,
+        ))
+
+    async def _set_role(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(_UnbanIdModal(
+            self, "unban_staff_role", "Cargo da Staff",
+            "ID do cargo", "Ex: 123456789012345678", allow_empty=True,
+        ))
+
+    async def _set_main(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(_UnbanIdModal(
+            self, "unban_main_guild", "Servidor Principal",
+            "ID do servidor (vazio = servidor atual)", "Ex: 835695342291779645", allow_empty=True,
+        ))
+
+    async def _send_panel(self, interaction: discord.Interaction):
+        class _SendPanelModal(discord.ui.Modal, title="Enviar Painel de Unban"):
+            channel_id = discord.ui.TextInput(
+                label="ID do canal (vazio = canal atual)",
+                placeholder="Ex: 123456789012345678",
+                required=False,
+                max_length=25,
+            )
+            def __init__(inner_self, parent_view):
+                super().__init__()
+                inner_self._pv = parent_view
+
+            async def on_submit(inner_self, inter: discord.Interaction):
+                settings = get_settings(inter.guild.id)
+                raw = inner_self.channel_id.value.strip()
+                if raw:
+                    try:
+                        ch = inter.guild.get_channel(int(raw.strip("<#>")))
+                    except ValueError:
+                        ch = None
+                else:
+                    ch = inter.channel
+                if not isinstance(ch, discord.TextChannel):
+                    await inter.response.send_message(
+                        embed=_notif_embed("<a:alerta:1518271939460857968> Canal de texto não encontrado. Verifique o ID."),
+                        ephemeral=True,
+                    )
+                    return
+                settings["unban_panel_enabled"] = True
+                save_settings_to_disk()
+                embed = build_unban_panel_embed(inter.guild, settings)
+                try:
+                    await ch.send(embed=embed, view=UnbanPanelView())
+                except discord.Forbidden:
+                    await inter.response.send_message(
+                        embed=_notif_embed(f"<a:alerta:1518271939460857968> Sem permissão para enviar mensagem em {ch.mention}."),
+                        ephemeral=True,
+                    )
+                    return
+                await inter.response.send_message(
+                    embed=_notif_embed(f"<a:online:1518271945550856295> Painel de Unban enviado em {ch.mention}."),
+                    ephemeral=True,
+                )
+
+        await interaction.response.send_modal(_SendPanelModal(self))
+
+
+# -----------------------------------------------------------------------------
+# Proxy (servidor de recurso — setup guiado do painel de unban)
+# -----------------------------------------------------------------------------
+
+def _bot_invite_url() -> str:
+    """Link de convite deste bot com permissão de administrador já embutida."""
+    client_id = bot.application_id or (bot.user.id if bot.user else 0)
+    try:
+        return discord.utils.oauth_url(
+            client_id,
+            permissions=discord.Permissions(administrator=True),
+            scopes=("bot", "applications.commands"),
+        )
+    except Exception:
+        return f"https://discord.com/oauth2/authorize?client_id={client_id}&scope=bot+applications.commands&permissions=8"
+
+
+def build_proxy_config_embed(author: discord.Member, settings: dict) -> discord.Embed:
+    icon_url = bot.user.display_avatar.url if bot.user else None
+    embed = discord.Embed(
+        color=settings.get("embed_color", 0xE53935),
+        description=(
+            "Configure o **servidor de recurso (proxy)** — onde os usuários banidos "
+            "abrem o ticket de desbanimento.\n\n"
+            "**Passo a passo:**\n"
+            "`1.` Clique em **Adicionar Bot** e adicione o bot ao servidor de recurso.\n"
+            "`2.` Clique em **Vincular Servidor** e informe o ID desse servidor (trava após vincular).\n"
+            "`3.` Clique em **Configurar Canal** — o painel de unban é postado lá automaticamente."
+        ),
+    )
+    embed.set_author(name="Proxy — Servidor de Recurso", icon_url=icon_url)
+    if icon_url:
+        embed.set_thumbnail(url=author.display_avatar.url)
+
+    recurso_gid = settings.get("proxy_recurso_guild")
+    recurso_ch  = settings.get("proxy_recurso_channel")
+
+    if recurso_gid:
+        g = bot.get_guild(recurso_gid)
+        if g:
+            bot_str     = "<a:online:1518271945550856295> `Bot presente`"
+            servidor_str = f"`{g.name}` (`{recurso_gid}`)"
+        else:
+            bot_str     = "<a:alerta:1518271939460857968> `Bot NÃO está no servidor`"
+            servidor_str = f"`{recurso_gid}` (adicione o bot)"
+    else:
+        bot_str      = "<a:alerta:1518271939460857968> `Não vinculado`"
+        servidor_str = "`Não vinculado`"
+
+    if recurso_gid and recurso_ch:
+        g = bot.get_guild(recurso_gid)
+        ch = g.get_channel(recurso_ch) if g else None
+        canal_str = ch.mention if ch else f"`{recurso_ch}`"
+    else:
+        canal_str = "`Não configurado`"
+
+    embed.add_field(
+        name="<:ferramentas_:1518271998613131274>  Configuração da Proxy",
+        value=(
+            f"┃ **Status do bot:** {bot_str}\n"
+            f"┃ **Servidor de recurso:** {servidor_str}\n"
+            f"┃ **Canal do painel:** {canal_str}"
+        ),
+        inline=False,
+    )
+    embed.set_footer(text=f"Solicitado por {author.name}", icon_url=icon_url)
+    embed.timestamp = datetime.now()
+    return embed
+
+
+class _ProxyVincularModal(discord.ui.Modal, title="Vincular Servidor de Recurso"):
+    guild_id_input = discord.ui.TextInput(
+        label="ID do servidor de recurso",
+        placeholder="Ex: 835695342291779645",
+        required=True,
+        max_length=25,
+    )
+
+    def __init__(self, parent_view: "ProxyView"):
+        super().__init__()
+        self._pv = parent_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        if settings.get("proxy_recurso_guild"):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Já existe um servidor vinculado. Use **Desvincular** primeiro."),
+                ephemeral=True,
+            )
+            return
+        try:
+            gid = int(self.guild_id_input.value.strip())
+        except ValueError:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> ID inválido. Informe apenas números."),
+                ephemeral=True,
+            )
+            return
+        g = bot.get_guild(gid)
+        if g is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> O bot não está nesse servidor. Clique em **Adicionar Bot** primeiro."),
+                ephemeral=True,
+            )
+            return
+
+        settings["proxy_recurso_guild"] = gid
+        # Configura o sistema de unban do recurso para apontar de volta a este servidor
+        recurso_settings = get_settings(gid)
+        recurso_settings["unban_main_guild"] = interaction.guild.id
+        recurso_settings["unban_panel_enabled"] = True
+        save_settings_to_disk()
+
+        embed = build_proxy_config_embed(self._pv.author, settings)
+        await interaction.response.edit_message(embed=embed, view=ProxyView(self._pv.author))
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> Servidor de recurso vinculado: `{g.name}`. Agora configure o canal."),
+            ephemeral=True,
+        )
+
+
+class _ProxyCanalModal(discord.ui.Modal, title="Configurar Canal do Painel"):
+    channel_id_input = discord.ui.TextInput(
+        label="ID do canal (no servidor de recurso)",
+        placeholder="Ex: 123456789012345678",
+        required=True,
+        max_length=25,
+    )
+
+    def __init__(self, parent_view: "ProxyView"):
+        super().__init__()
+        self._pv = parent_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        recurso_gid = settings.get("proxy_recurso_guild")
+        if not recurso_gid:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule um servidor de recurso primeiro."),
+                ephemeral=True,
+            )
+            return
+        g = bot.get_guild(recurso_gid)
+        if g is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> O bot não está mais no servidor de recurso."),
+                ephemeral=True,
+            )
+            return
+        try:
+            cid = int(self.channel_id_input.value.strip("<#> "))
+        except ValueError:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> ID inválido. Informe apenas números."),
+                ephemeral=True,
+            )
+            return
+        ch = g.get_channel(cid)
+        if not isinstance(ch, discord.TextChannel):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Canal de texto não encontrado nesse servidor. Verifique o ID."),
+                ephemeral=True,
+            )
+            return
+
+        settings["proxy_recurso_channel"] = cid
+        recurso_settings = get_settings(recurso_gid)
+        recurso_settings["unban_main_guild"] = interaction.guild.id
+        recurso_settings["unban_panel_enabled"] = True
+        save_settings_to_disk()
+
+        # Posta o painel de unban no canal do recurso
+        panel_embed = build_unban_panel_embed(g, recurso_settings)
+        try:
+            await ch.send(embed=panel_embed, view=UnbanPanelView())
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Sem permissão para enviar mensagem em `#{ch.name}`."),
+                ephemeral=True,
+            )
+            return
+        except discord.HTTPException as e:
+            await interaction.response.send_message(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Erro ao postar o painel: `{e}`"),
+                ephemeral=True,
+            )
+            return
+
+        embed = build_proxy_config_embed(self._pv.author, settings)
+        await interaction.response.edit_message(embed=embed, view=ProxyView(self._pv.author))
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> Painel de unban postado em `{g.name}` → {ch.mention}."),
+            ephemeral=True,
+        )
+
+
+class ProxyView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=None)
+        self.author = author
+        self._build_buttons()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            guild_id = interaction.guild.id if interaction.guild else 0
+            lang = get_settings(guild_id)["language"]
+            await interaction.response.send_message(
+                TRANSLATIONS[lang]["only_author"], ephemeral=True
+            )
+            return False
+        return True
+
+    def _build_buttons(self):
+        settings = get_settings(self.author.guild.id if self.author.guild else 0)
+        self.clear_items()
+        linked = bool(settings.get("proxy_recurso_guild"))
+
+        btn_back = discord.ui.Button(label="Voltar", style=discord.ButtonStyle.primary, emoji=_button_emoji(discord.ButtonStyle.primary), row=0)
+        btn_back.callback = self._back
+        self.add_item(btn_back)
+
+        # Link de convite do bot (botão de URL)
+        self.add_item(discord.ui.Button(
+            label="Adicionar Bot",
+            style=discord.ButtonStyle.link,
+            emoji=discord.PartialEmoji.from_str("<:Bot:1518272060860928072>"),
+            url=_bot_invite_url(),
+            row=0,
+        ))
+
+        btn_vincular = discord.ui.Button(
+            label="Vincular Servidor",
+            style=discord.ButtonStyle.success,
+            emoji=discord.PartialEmoji.from_str(EMOJI_HOUSE),
+            row=0,
+            disabled=linked,
+        )
+        btn_vincular.callback = self._vincular
+        self.add_item(btn_vincular)
+
+        btn_canal = discord.ui.Button(
+            label="Configurar Canal",
+            style=discord.ButtonStyle.secondary,
+            emoji=discord.PartialEmoji.from_str("<:tickets:1518271952526250155>"),
+            row=1,
+            disabled=not linked,
+        )
+        btn_canal.callback = self._configurar_canal
+        self.add_item(btn_canal)
+
+        btn_desvincular = discord.ui.Button(
+            label="Desvincular",
+            style=discord.ButtonStyle.danger,
+            emoji=_button_emoji(discord.ButtonStyle.danger),
+            row=1,
+            disabled=not linked,
+        )
+        btn_desvincular.callback = self._desvincular
+        self.add_item(btn_desvincular)
+
+    async def _back(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_limite_ban_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=LimiteBanView(self.author))
+
+    async def _vincular(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(_ProxyVincularModal(self))
+
+    async def _configurar_canal(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(_ProxyCanalModal(self))
+
+    async def _desvincular(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["proxy_recurso_guild"] = None
+        settings["proxy_recurso_channel"] = None
+        save_settings_to_disk()
+        embed = build_proxy_config_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=ProxyView(self.author))
+        await interaction.followup.send(
+            embed=_notif_embed("<a:online:1518271945550856295> Servidor de recurso desvinculado. Você pode vincular outro."),
+            ephemeral=True,
+        )
+
+
+# -----------------------------------------------------------------------------
 # Proteção de URL
 # -----------------------------------------------------------------------------
 
@@ -20554,7 +21121,7 @@ def build_protecao_url_embed(author: discord.Member, settings: dict) -> discord.
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["protecao_url_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     if settings.get("protecao_url_enabled"):
         status_value = "<a:online:1518271945550856295> `(Ativado)`"
@@ -21138,7 +21705,7 @@ def build_castigo_embed(author: discord.Member, settings: dict) -> discord.Embed
         color=settings["embed_color"],
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(
         name=f"ⓘ  {t['info_section']}",
@@ -21540,7 +22107,7 @@ def build_limpeza_mensagem_embed(author: discord.Member, settings: dict) -> disc
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name="Limpar Mensagem - NATA®", icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(
         name="<:entretenimento_:1518271992191779038>  Informações",
@@ -21960,7 +22527,7 @@ def build_cmd_block_embed(author: discord.Member, settings: dict) -> discord.Emb
     )
 
     icon_url = bot.user.display_avatar.url if bot.user else None
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
     embed.set_footer(text=_footer_name(author.guild, settings), icon_url=icon_url)
     return embed
 
@@ -22351,7 +22918,7 @@ def build_protecao_geral_embed(
         name=f"Anti-Raid · Proteção Geral",
         icon_url=icon_url,
     )
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     # ── campo: administrador ──────────────────────────────────────────────────
     embed.add_field(
@@ -23689,7 +24256,7 @@ def build_blacklist_embed(author: discord.Member, settings: dict) -> discord.Emb
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["blacklist_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(
         name=f"<:f1:1518271958024720555>  {t['administrator_label']}",
@@ -23970,7 +24537,7 @@ def build_backup_embed(author: discord.Member, settings: dict) -> discord.Embed:
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["backup_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     if settings["backup_enabled"]:
         status_value = "<a:online:1518271945550856295> `(Ativado)`"
@@ -24222,7 +24789,7 @@ def build_warns_embed(author: discord.Member, settings: dict) -> discord.Embed:
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["warns_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     mod_roles = settings.get("warns_moderator_roles", [])
     if mod_roles and author.guild:
@@ -24435,7 +25002,7 @@ def build_antspam_embed(author: discord.Member, settings: dict) -> discord.Embed
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["antspam_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.description = (
         f"{t['antspam_configuring']}: **{t['flood_label']}**.\n"
@@ -24792,7 +25359,7 @@ def build_antlink_embed(author: discord.Member, settings: dict) -> discord.Embed
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["antlink_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(
         name=f"<:f1:1518271958024720555>  {t['administrator_label']}",
@@ -25078,7 +25645,7 @@ def build_antfake_embed(author: discord.Member, settings: dict) -> discord.Embed
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["antfake_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     if settings["antfake_enabled"]:
         status_value = "<a:online:1518271945550856295> `(Ativado)`"
@@ -26204,6 +26771,8 @@ async def on_ready():
         (GifsView,                                "GifsView"),
         (_FecharCanalView,                        "FecharCanalView"),
         (TicketThreadView,                        "TicketThreadView"),
+        (UnbanPanelView,                          "UnbanPanelView"),
+        (UnbanTicketView,                         "UnbanTicketView"),
     ]:
         try:
             bot.add_view(_view_cls())
@@ -31410,7 +31979,7 @@ def build_auto_cargo_embed(author: discord.Member, settings: dict) -> discord.Em
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["auto_cargo_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     enabled = settings.get("auto_cargo_enabled", False)
     status_value = (
@@ -31598,7 +32167,7 @@ def build_auto_reacoes_embed(author: discord.Member, settings: dict) -> discord.
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["auto_reacoes_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     enabled = settings.get("auto_reacoes_enabled", False)
     status_value = (
@@ -31868,7 +32437,7 @@ def build_reacoes_user_embed(author: discord.Member, settings: dict) -> discord.
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["reacoes_user_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     enabled = settings.get("reacoes_user_enabled", False)
     status_value = (
@@ -32196,7 +32765,7 @@ def build_auto_msg_embed(author: discord.Member, settings: dict) -> discord.Embe
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["auto_msg_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     enabled = settings.get("auto_msg_enabled", False)
     status_value = (
@@ -32227,7 +32796,7 @@ def build_auto_msg_add_embed(author: discord.Member, settings: dict, draft: dict
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["auto_msg_add_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     embed.add_field(
         name=f"<:tickets:1518271952526250155>  {t['administrator_label']}",
@@ -32556,7 +33125,7 @@ def build_auto_resp_embed(author: discord.Member, settings: dict) -> discord.Emb
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["auto_resp_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     enabled = settings.get("auto_resp_enabled", False)
     status_value = (
@@ -32707,7 +33276,7 @@ def _build_auto_resp_list_embed(author: discord.Member, settings: dict, page: in
 
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name=t["auto_resp_list_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     if author.guild and chans:
         mentions = []
@@ -32911,7 +33480,7 @@ def build_limite_call_embed(author: discord.Member, settings: dict) -> discord.E
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["call_limit_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     roles = settings.get("call_limit_roles", [])
     guild = author.guild
@@ -33036,7 +33605,7 @@ def build_dono_call_embed(author: discord.Member, settings: dict) -> discord.Emb
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["dono_call_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     chans = settings.get("dono_call_channels", [])
     canais_value = f"`{len(chans)} calls`" if chans else "`0 calls`"
@@ -34781,7 +35350,7 @@ def build_call_temp_embed(author: discord.Member, settings: dict) -> discord.Emb
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["call_temp_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     chans = settings.get("call_temporaria_channels", [])
     canais_value = f"`{len(chans)} calls`" if chans else "`0 calls`"
@@ -35145,7 +35714,7 @@ def build_bate_ponto_embed(author: discord.Member, settings: dict) -> discord.Em
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["bp_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     guild = author.guild
     nd = f"`{t['not_defined']}`"
@@ -35595,7 +36164,7 @@ def build_desmute_embed(author: discord.Member, settings: dict) -> discord.Embed
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["desmute_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=icon_url)
+    embed.set_thumbnail(url=author.display_avatar.url)
 
     enabled = settings.get("desmute_enabled", False)
     status_value = (
@@ -41000,6 +41569,7 @@ async def ban_slash(interaction: discord.Interaction, usuario: discord.Member, m
         "banned_by_name":   str(user),
         "reason":           motivo,
         "banned_at":        date_str,
+        "duration":         duracao_seconds,
         "active":           True,
         "unbanned_by_id":   None,
         "unbanned_by_name": None,
@@ -41328,7 +41898,7 @@ async def ban_cmd(ctx: commands.Context, usuario: str = None, *, args: str = "")
     settings.setdefault("ban_records", []).append({
         "id": ban_id, "user_id": membro.id, "user_name": str(membro),
         "banned_by_id": user.id, "banned_by_name": str(user),
-        "reason": motivo, "banned_at": date_str, "active": True,
+        "reason": motivo, "banned_at": date_str, "duration": duracao_seconds, "active": True,
         "unbanned_by_id": None, "unbanned_by_name": None, "unbanned_at": None,
     })
     save_settings_to_disk()
@@ -41850,6 +42420,376 @@ async def ficha_slash(interaction: discord.Interaction, membro: discord.User):
         records=records,
     )
     await interaction.response.send_message(embed=view._build_embed(), view=view, ephemeral=True)
+
+
+# =============================================================================
+# SISTEMA DE UNBAN — painel de recurso / tickets de desbanimento
+# =============================================================================
+# Fluxo:
+#   1. Admin configura em "Segurança → Limite de Banimentos → Painel de Unban":
+#      categoria dos tickets, cargo da staff, servidor principal (opcional) e
+#      envia o painel público num canal.
+#   2. Usuário banido acessa o painel (no próprio servidor ou num servidor de
+#      recurso/proxy vinculado) e clica em "Abrir Ticket" (checa se ele possui
+#      ban ativo) ou "Procurar pelo ID" (informa o ID recebido na DM do ban).
+#   3. Abre um canal privado; a staff avalia e pode "Desbanir Membro". Qualquer
+#      um pode ver o "Registro de Banimentos" e "Fechar Ticket".
+
+UNBAN_ACCENT = 0xE53935
+
+
+def _unban_target_gid(guild: discord.Guild, settings: dict) -> int:
+    """Servidor onde os banimentos realmente estão (principal). Default: servidor atual."""
+    return settings.get("unban_main_guild") or (guild.id if guild else 0)
+
+
+def _unban_find_record(target_settings: dict, ban_id: str) -> dict | None:
+    ban_id = (ban_id or "").strip().upper()
+    for r in target_settings.get("ban_records", []):
+        if str(r.get("id", "")).upper() == ban_id:
+            return r
+    return None
+
+
+def _unban_active_record_for_user(target_settings: dict, user_id: int) -> dict | None:
+    """Registro de ban ATIVO mais recente do usuário (ou None)."""
+    recs = [r for r in target_settings.get("ban_records", []) if r.get("user_id") == user_id and r.get("active", True)]
+    return recs[-1] if recs else None
+
+
+def _unban_duration_str(rec: dict) -> str:
+    dur = rec.get("duration")
+    if not dur:
+        return "Permanente"
+    return _fmt_duration(int(dur))
+
+
+def build_unban_panel_embed(guild: discord.Guild, settings: dict) -> discord.Embed:
+    icon_url = guild.icon.url if guild and guild.icon else (bot.user.display_avatar.url if bot.user else None)
+    emb = discord.Embed(
+        color=settings.get("embed_color", UNBAN_ACCENT),
+        description=(
+            "Foi banido do nosso servidor e quer solicitar o revogamento do banimento?\n"
+            "Abra um ticket abaixo para que nossa equipe possa analisar o seu caso com atenção."
+        ),
+    )
+    emb.set_author(name=f"Unban - {guild.name}" if guild else "Unban", icon_url=icon_url)
+    if icon_url:
+        emb.set_thumbnail(url=icon_url)
+    emb.add_field(
+        name="<:tickets:1518271952526250155>  Abrir ticket",
+        value="Se o banimento ocorreu **nesta conta**, basta abrir o ticket normalmente por aqui.",
+        inline=False,
+    )
+    emb.add_field(
+        name="<:urls:1518272078921339011>  Procurar banimento por ID",
+        value="Caso o banimento tenha sido feito em **outra conta**, utilize o ID de banimento para enviar sua solicitação.",
+        inline=False,
+    )
+    return emb
+
+
+def build_unban_ticket_embed(guild: discord.Guild, opener: discord.abc.User, rec: dict, records_count: int) -> discord.Embed:
+    icon_url = guild.icon.url if guild and guild.icon else (bot.user.display_avatar.url if bot.user else None)
+    emb = discord.Embed(
+        color=UNBAN_ACCENT,
+        description=(
+            f"**Ticket aberto por:** {getattr(opener, 'display_name', str(opener))}\n"
+            "Aguarde o atendimento de um suporte."
+        ),
+    )
+    emb.set_author(name=f"Unban - {guild.name}" if guild else "Unban", icon_url=icon_url)
+    if icon_url:
+        emb.set_thumbnail(url=icon_url)
+    emb.add_field(
+        name="Detalhes do banimento",
+        value=(
+            f"**ID de banimento:** `{rec.get('id', '?')}`\n"
+            f"**Autor:** <@{rec.get('banned_by_id', 0)}> `{rec.get('banned_by_name', '?')}`\n"
+            f"**Motivo do banimento:** `{rec.get('reason', 'Não informado')}`\n"
+            f"**Duração:** `{_unban_duration_str(rec)}`"
+        ),
+        inline=False,
+    )
+    emb.add_field(
+        name="Informações do usuário banido",
+        value=(
+            f"<@{rec.get('user_id', 0)}> `{rec.get('user_name', '?')}`\n"
+            f"`{records_count}` banimento(s) em registro."
+        ),
+        inline=False,
+    )
+    return emb
+
+
+class UnbanPanelView(discord.ui.View):
+    """View persistente do painel público (Abrir Ticket / Procurar pelo ID)."""
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Abrir Ticket", style=discord.ButtonStyle.secondary,
+                       emoji=discord.PartialEmoji.from_str("<:tickets:1518271952526250155>"),
+                       custom_id="unban_open_ticket_v1")
+    async def abrir_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        settings = get_settings(interaction.guild.id)
+        target_gid = _unban_target_gid(interaction.guild, settings)
+        target_settings = get_settings(target_gid)
+        rec = _unban_active_record_for_user(target_settings, interaction.user.id)
+        if rec is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Você não possui banimentos ativos."),
+                ephemeral=True,
+            )
+            return
+        await _unban_open_ticket(interaction, rec, target_gid)
+
+    @discord.ui.button(label="Procurar pelo ID", style=discord.ButtonStyle.secondary,
+                       emoji=discord.PartialEmoji.from_str("<:urls:1518272078921339011>"),
+                       custom_id="unban_search_id_v1")
+    async def procurar_id(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(UnbanSearchModal())
+
+
+class UnbanSearchModal(discord.ui.Modal, title="Procurar banimento ativo"):
+    ban_id = discord.ui.TextInput(
+        label="ID do banimento",
+        placeholder="Ex: HBY16E40W",
+        required=True,
+        max_length=20,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        target_gid = _unban_target_gid(interaction.guild, settings)
+        target_settings = get_settings(target_gid)
+        rec = _unban_find_record(target_settings, self.ban_id.value)
+        if rec is None or not rec.get("active", True):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> ID de banimento inválido."),
+                ephemeral=True,
+            )
+            return
+        await _unban_open_ticket(interaction, rec, target_gid)
+
+
+async def _unban_open_ticket(interaction: discord.Interaction, rec: dict, target_gid: int):
+    """Cria o canal privado do ticket de unban e posta o painel interno."""
+    guild    = interaction.guild
+    settings = get_settings(guild.id)
+    opener   = interaction.user
+    ban_id   = str(rec.get("id", "")).upper()
+
+    # Já existe um ticket aberto para este ban? → aponta para ele
+    for _cid_s, _info in list(settings.get("unban_tickets", {}).items()):
+        if str(_info.get("ban_id", "")).upper() == ban_id:
+            _ch = guild.get_channel(int(_cid_s))
+            if _ch:
+                await interaction.response.send_message(
+                    embed=_notif_embed(f"<a:alerta:1518271939460857968> Já existe um ticket aberto para este banimento: {_ch.mention}"),
+                    ephemeral=True,
+                )
+                return
+            # canal sumiu — limpa referência órfã
+            settings["unban_tickets"].pop(_cid_s, None)
+
+    category = guild.get_channel(settings.get("unban_ticket_category")) if settings.get("unban_ticket_category") else None
+    if category is not None and not isinstance(category, discord.CategoryChannel):
+        category = None
+    staff_role = guild.get_role(settings.get("unban_staff_role")) if settings.get("unban_staff_role") else None
+
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        opener:             discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True),
+        guild.me:           discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True),
+    }
+    if staff_role is not None:
+        overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+    try:
+        canal = await guild.create_text_channel(
+            name=f"unban-{ban_id.lower()}",
+            overwrites=overwrites,
+            category=category,
+            reason=f"Ticket de unban — {opener} ({opener.id})",
+        )
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            embed=_notif_embed("<a:alerta:1518271939460857968> Sem permissão para criar o canal do ticket."),
+            ephemeral=True,
+        )
+        return
+    except discord.HTTPException as e:
+        await interaction.response.send_message(
+            embed=_notif_embed(f"<a:alerta:1518271939460857968> Erro ao criar o canal: `{e}`"),
+            ephemeral=True,
+        )
+        return
+
+    settings.setdefault("unban_tickets", {})[str(canal.id)] = {
+        "ban_id":    ban_id,
+        "user_id":   rec.get("user_id"),
+        "target_gid": target_gid,
+        "opener_id": opener.id,
+    }
+    save_settings_to_disk()
+
+    target_settings = get_settings(target_gid)
+    records_count   = len(_banrec_user(target_settings, rec.get("user_id")))
+    embed = build_unban_ticket_embed(guild, opener, rec, records_count)
+
+    ping = opener.mention + (f" {staff_role.mention}" if staff_role else "")
+    try:
+        await canal.send(
+            content=ping,
+            embed=embed,
+            view=UnbanTicketView(),
+            allowed_mentions=discord.AllowedMentions(users=True, roles=True),
+        )
+    except Exception:
+        await canal.send(embed=embed, view=UnbanTicketView())
+
+    await interaction.response.send_message(
+        embed=_notif_embed(f"<a:online:1518271945550856295> Ticket criado: {canal.mention}"),
+        ephemeral=True,
+    )
+
+
+class UnbanTicketView(discord.ui.View):
+    """View persistente dos botões dentro do ticket de unban."""
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    def _ticket_info(self, interaction: discord.Interaction) -> dict | None:
+        settings = get_settings(interaction.guild.id)
+        info = settings.get("unban_tickets", {}).get(str(interaction.channel.id))
+        if info:
+            return info
+        # Fallback: reconstrói pelo nome do canal (unban-<id>) após restart
+        name = getattr(interaction.channel, "name", "") or ""
+        if name.startswith("unban-"):
+            ban_id = name[len("unban-"):].upper()
+            target_gid = _unban_target_gid(interaction.guild, settings)
+            rec = _unban_find_record(get_settings(target_gid), ban_id)
+            if rec:
+                return {"ban_id": ban_id, "user_id": rec.get("user_id"), "target_gid": target_gid, "opener_id": None}
+        return None
+
+    @discord.ui.button(label="Desbanir Membro", style=discord.ButtonStyle.primary,
+                       custom_id="unban_ticket_unban_v1", row=1)
+    async def desbanir(self, interaction: discord.Interaction, button: discord.ui.Button):
+        settings = get_settings(interaction.guild.id)
+        staff_role_id = settings.get("unban_staff_role")
+        is_staff = _has_unban_perm(interaction.user, settings) or (
+            staff_role_id and any(r.id == staff_role_id for r in getattr(interaction.user, "roles", []))
+        )
+        if not is_staff:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:redalert:1518272086018097352> Você não pode fazer isso 😔"),
+                ephemeral=True,
+            )
+            return
+
+        info = self._ticket_info(interaction)
+        if not info:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Não consegui identificar o banimento deste ticket."),
+                ephemeral=True,
+            )
+            return
+
+        target_gid   = info.get("target_gid") or interaction.guild.id
+        target_guild = bot.get_guild(target_gid)
+        user_id      = info.get("user_id")
+        if target_guild is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Servidor principal não encontrado (o bot precisa estar nele)."),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+        already_unbanned = False
+        try:
+            await target_guild.unban(discord.Object(id=user_id), reason=f"Unban aprovado por {interaction.user} via ticket")
+        except discord.NotFound:
+            already_unbanned = True
+        except (discord.Forbidden, discord.HTTPException) as e:
+            await interaction.followup.send(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Erro ao desbanir: `{e}`"),
+                ephemeral=True,
+            )
+            return
+
+        # Atualiza o registro de ban → inativo
+        date_str = datetime.now().strftime("%d/%m/%Y")
+        target_settings = get_settings(target_gid)
+        for r in reversed(target_settings.get("ban_records", [])):
+            if r.get("user_id") == user_id and r.get("active", True):
+                r["active"] = False
+                r["unbanned_by_id"] = interaction.user.id
+                r["unbanned_by_name"] = str(interaction.user)
+                r["unbanned_at"] = date_str
+                break
+        save_settings_to_disk()
+
+        if already_unbanned:
+            await interaction.followup.send(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> <@{user_id}> já não estava banido. Encerrando o ticket...")
+            )
+        else:
+            await interaction.followup.send(
+                embed=_notif_embed(f"<a:online:1518271945550856295> <@{user_id}> foi **desbanido** por {interaction.user.mention}.")
+            )
+        # Encerra o ticket após o desbanimento
+        await asyncio.sleep(5)
+        await self._close_channel(interaction)
+
+    @discord.ui.button(label="Registro de Banimentos", style=discord.ButtonStyle.secondary,
+                       custom_id="unban_ticket_ficha_v1", row=0)
+    async def registro(self, interaction: discord.Interaction, button: discord.ui.Button):
+        info = self._ticket_info(interaction)
+        if not info:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Não consegui identificar o usuário deste ticket."),
+                ephemeral=True,
+            )
+            return
+        target_settings = get_settings(info.get("target_gid") or interaction.guild.id)
+        user_id = info.get("user_id")
+        records = _banrec_user(target_settings, user_id)
+        try:
+            u = await bot.fetch_user(user_id)
+            target_name   = str(u)
+            target_avatar = u.display_avatar.url
+        except Exception:
+            target_name, target_avatar = str(user_id), None
+        if not records:
+            await interaction.response.send_message(
+                embed=_notif_embed(f"<a:online:1518271945550856295> **{target_name}** não possui registros de banimento."),
+                ephemeral=True,
+            )
+            return
+        view = FichaView(requester=interaction.user, target_name=target_name, target_avatar=target_avatar, records=records)
+        await interaction.response.send_message(embed=view._build_embed(), view=view, ephemeral=True)
+
+    @discord.ui.button(label="Fechar Ticket", style=discord.ButtonStyle.danger,
+                       custom_id="unban_ticket_close_v1", row=1)
+    async def fechar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(
+            content=f"{interaction.user.mention}",
+            embed=_notif_embed("<a:alerta:1518271939460857968> Encerrando canal em **5 segundos**..."),
+        )
+        await asyncio.sleep(5)
+        await self._close_channel(interaction)
+
+    async def _close_channel(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings.get("unban_tickets", {}).pop(str(interaction.channel.id), None)
+        save_settings_to_disk()
+        try:
+            await interaction.channel.delete(reason="Ticket de unban encerrado")
+        except Exception:
+            pass
 
 
 # ── /nuke — confirmação antes de executar ────────────────────────────────────
