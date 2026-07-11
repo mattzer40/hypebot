@@ -31875,8 +31875,14 @@ async def roxo_cmd(ctx: commands.Context, horas: float = 6.0):
             raw       = await e.read()
             recolored = _colorize_purple(raw)
             _name     = e.name
-            await e.delete(reason=f"Recolorir roxo — {ctx.author}")
+            # Cria a versão roxa ANTES de apagar a original — se o Discord travar
+            # (rate limit/limite de emojis), o emoji original NÃO é perdido.
             await ctx.guild.create_custom_emoji(name=_name, image=recolored, reason=f"Recolorir roxo — {ctx.author}")
+            await asyncio.sleep(1.0)
+            try:
+                await e.delete(reason=f"Recolorir roxo — {ctx.author}")
+            except Exception:
+                pass  # não conseguiu apagar o antigo → fica original + roxo (apague o antigo manualmente)
             done += 1
         except Exception as _ex:
             failed += 1
