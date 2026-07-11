@@ -487,8 +487,9 @@ async def _global_guild_check(ctx: commands.Context) -> bool:
             _cmd_name = ctx.command.name if ctx.command is not None else ""
             if _cmd_name in ("perm", "migrar_emojis", "exportar_config", "clonar_config", "migrar_canais"):
                 return True  # sempre liberado para o dono do servidor
-            # No servidor de recurso (proxy): libera também o addemoji
-            if _cmd_name in ("addemoji", "addemote") and _is_recurso_guild(ctx.guild.id):
+            # No servidor de recurso (proxy): libera addemoji, embed e o menu
+            # (o menu dá acesso a mudar o prefixo e configurar o recurso)
+            if _cmd_name in ("addemoji", "addemote", "embed", "menu") and _is_recurso_guild(ctx.guild.id):
                 return True
             return False
     return True
