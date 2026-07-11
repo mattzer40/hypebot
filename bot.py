@@ -20527,21 +20527,11 @@ class LimiteBanView(discord.ui.View):
         btn_proxy.callback = self._set_proxy_link
         self.add_item(btn_proxy)
 
-        # Botão extra: painel de unban (recurso de banimento)
-        btn_unban = discord.ui.Button(
+        # Botão: Painel de Unban / Proxy (servidor de recurso — vincular, add bot, canal, categoria)
+        btn_proxy_sys = discord.ui.Button(
             label="Painel de Unban",
             style=discord.ButtonStyle.secondary,
             emoji=discord.PartialEmoji.from_str("<:seguranca:1518271987393232936>"),
-            row=1,
-        )
-        btn_unban.callback = self._open_unban_config
-        self.add_item(btn_unban)
-
-        # Botão extra: Proxy (servidor de recurso — add bot, vincular, canal)
-        btn_proxy_sys = discord.ui.Button(
-            label="Proxy",
-            style=discord.ButtonStyle.secondary,
-            emoji=discord.PartialEmoji.from_str("<:ferramentas_:1518271998613131274>"),
             row=1,
         )
         btn_proxy_sys.callback = self._open_proxy_config
