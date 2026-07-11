@@ -5149,6 +5149,35 @@ def is_authorized(member: discord.Member, settings: dict) -> bool:
     return member.id in settings.get("authorized_members", [])
 
 
+# ── Cache de avatar do admin ──────────────────────────────────────────────
+# O Discord não notifica o bot sobre troca de avatar de OUTROS usuários de forma
+# confiável, então o avatar em cache pode ficar velho. Ao abrir o menu buscamos o
+# membro atual via API (_warm_avatar) e todos os painéis leem daqui (_avatar_url).
+_avatar_cache: dict[int, str] = {}
+
+def _avatar_url(author):
+    if author is None:
+        return None
+    cached = _avatar_cache.get(getattr(author, "id", 0))
+    if cached:
+        return cached
+    try:
+        return author.display_avatar.url
+    except Exception:
+        return None
+
+async def _warm_avatar(user, guild=None) -> None:
+    try:
+        if guild is not None:
+            _m = await guild.fetch_member(user.id)
+            _avatar_cache[user.id] = _m.display_avatar.url
+        else:
+            _u = await bot.fetch_user(user.id)
+            _avatar_cache[user.id] = _u.display_avatar.url
+    except Exception:
+        pass
+
+
 def build_main_embed(author: discord.Member, lang: str) -> discord.Embed:
     t = TRANSLATIONS[lang]
     guild_id = author.guild.id if author.guild else 0
@@ -5157,7 +5186,7 @@ def build_main_embed(author: discord.Member, lang: str) -> discord.Embed:
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["central_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name=t["administrator"],
@@ -5194,7 +5223,7 @@ def build_appearance_embed(author: discord.Member, settings: dict) -> discord.Em
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     # Resolve bot's current display name (nickname > global username)
     bot_display_name = None
@@ -5957,7 +5986,7 @@ class AppearanceView(discord.ui.View):
         ask = discord.Embed(color=color)
         ask.set_author(name="Banner do Painel — NATA®", icon_url=icon_url)
         if icon_url:
-            ask.set_thumbnail(url=author.display_avatar.url)
+            ask.set_thumbnail(url=_avatar_url(author))
         ask.add_field(
             name="<:aparncia_:1518271975317962895>  Como configurar:",
             value=(
@@ -6130,7 +6159,7 @@ def build_servidor_embed(author: discord.Member, settings: dict) -> discord.Embe
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["servidor_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name=t["administrator"],
@@ -6378,7 +6407,7 @@ def build_tickets_embed(author: discord.Member, settings: dict) -> discord.Embed
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["tickets_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(name=t["administrator"], value=author.mention, inline=True)
     embed.add_field(name=t["expires_in"], value=_fmt_expira(settings["language"]), inline=True)
@@ -6514,7 +6543,7 @@ def build_ticket_config_embed(author: discord.Member, settings: dict) -> discord
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     log_channel_id = settings.get("ticket_log_channel")
     if log_channel_id and author.guild:
@@ -6942,7 +6971,7 @@ class TicketConfigView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_select_log_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=author.display_avatar.url)
+        embed.set_thumbnail(url=_avatar_url(author))
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _define_marcacao(self, interaction: discord.Interaction):
@@ -7010,7 +7039,7 @@ def build_ticket_ia_embed(author: discord.Member, settings: dict) -> discord.Emb
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_ia_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name=f"<:entretenimento_:1518271992191779038>  {t['ticket_config_info_section']}",
@@ -7113,7 +7142,7 @@ def build_ticket_ia_config_embed(author: discord.Member, settings: dict, panel_i
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_ia_config_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     panel = next((p for p in _get_ticket_panels(settings) if str(p.get("id")) == panel_id), None)
     channel_value = f"`{t['ticket_unknown_channel']}`"
@@ -7271,7 +7300,7 @@ def build_ticket_aval_embed(author: discord.Member, settings: dict) -> discord.E
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_aval_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name=f"<:comunidade_:1518272016971595807>  {t['ticket_aval_how']}",
@@ -7368,7 +7397,7 @@ def build_ticket_aval_config_embed(
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_aval_config_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     panel = next((p for p in _get_ticket_panels(settings) if str(p.get("id")) == panel_id), None)
     ticket_channel = f"`{t['ticket_unknown_channel']}`"
@@ -7680,7 +7709,7 @@ def build_ticket_manager_embed(author: discord.Member, settings: dict) -> discor
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_manager_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     na = f"`{t['ticket_na']}`"
     embed.add_field(
@@ -7795,7 +7824,7 @@ def build_ticket_per_manager_embed(
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ticket_manager_per_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     panel = _find_panel(settings, panel_id) or {}
     na = f"`{t['ticket_na']}`"
@@ -7965,7 +7994,7 @@ def build_ticket_horarios_config_embed(author: discord.Member, settings: dict, p
         value=t["ticket_horarios_como_config_text"],
         inline=False,
     )
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
     embed.set_footer(text=f"NATA® ® • Hoje às {datetime.now().strftime('%H:%M')}", icon_url=icon_url)
     return embed
 
@@ -8972,7 +9001,7 @@ def build_ticket_painel_leia_embed(author: discord.Member, settings: dict) -> di
         ),
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
     embed.set_footer(text=_footer_name(author.guild, settings), icon_url=icon_url)
     return embed
 
@@ -9252,7 +9281,7 @@ class TicketPerManagerView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_setar_categoria_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=author.display_avatar.url)
+        embed.set_thumbnail(url=_avatar_url(author))
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _cargos_resp(self, interaction: discord.Interaction):
@@ -9264,7 +9293,7 @@ class TicketPerManagerView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_cargos_resp_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=author.display_avatar.url)
+        embed.set_thumbnail(url=_avatar_url(author))
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _toggle_topico(self, interaction: discord.Interaction):
@@ -9332,7 +9361,7 @@ class TicketPerManagerView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_select_log_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=author.display_avatar.url)
+        embed.set_thumbnail(url=_avatar_url(author))
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _editar_embed(self, interaction: discord.Interaction):
@@ -9367,7 +9396,7 @@ def build_comunidade_embed(author: discord.Member, settings: dict) -> discord.Em
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["comunidade_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(name=t["administrator"], value=author.mention, inline=True)
     embed.add_field(name=t["expires_in"], value=_fmt_expira(settings["language"]), inline=True)
@@ -9474,7 +9503,7 @@ def build_verificacao_embed(author: discord.Member, settings: dict) -> discord.E
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["verif_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     enabled = settings.get("verif_enabled", False)
     status_value = (
@@ -9952,7 +9981,7 @@ def build_ig_verif_admin_embed(author: discord.Member, settings: dict) -> discor
 
     embed = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
     embed.set_author(name="Painel de Verificação - NATA®", icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
     embed.add_field(
         name="<:entretenimento_:1518271992191779038>  Informações",
         value=(
@@ -11328,7 +11357,7 @@ def build_welcome_embed(author: discord.Member, settings: dict) -> discord.Embed
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["welcome_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name=f"<:entretenimento_:1518271992191779038>  {t['ticket_config_info_section']}",
@@ -11716,7 +11745,7 @@ def build_vendas_embed(author: discord.Member, settings: dict) -> discord.Embed:
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["vendas_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     vips = settings.get("vendas_vips", [])
     cargos = settings.get("vendas_cargos", [])
@@ -12041,7 +12070,7 @@ def build_mencao_embed(author: discord.Member, settings: dict) -> discord.Embed:
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["mencao_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     enabled = settings.get("mencao_enabled", False)
     status_value = (
@@ -12221,7 +12250,7 @@ def build_gifs_embed(author: discord.Member, settings: dict) -> discord.Embed:
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["gifs_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(name=t["administrator"], value=author.mention, inline=True)
     embed.add_field(name=t["expires_in"], value=_fmt_expira(settings["language"]), inline=True)
@@ -13320,7 +13349,7 @@ class GifsConversorView(discord.ui.View):
             color=cor,
         )
         emb.set_author(name=f"Central de Gifs — {bot_name}", icon_url=icon_url)
-        emb.set_thumbnail(url=author.display_avatar.url)
+        emb.set_thumbnail(url=_avatar_url(author))
         if banner:
             emb.set_image(url=banner)
 
@@ -13454,7 +13483,7 @@ def build_gifs_decoracoes_embed(author: discord.Member, settings: dict) -> disco
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name="Central de Decorações - NATA®", icon_url=icon_url)
     if icon_url:
-        embed.set_thumbnail(url=author.display_avatar.url)
+        embed.set_thumbnail(url=_avatar_url(author))
 
     ch_id = settings.get("gifs_decoracoes_log_channel")
     if ch_id and author.guild:
@@ -15185,7 +15214,7 @@ def build_gifs_postadores_embed(author: discord.Member, settings: dict) -> disco
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name="Central de GIFs - NATA®", icon_url=icon_url)
     if icon_url:
-        embed.set_thumbnail(url=author.display_avatar.url)
+        embed.set_thumbnail(url=_avatar_url(author))
     embed.add_field(
         name="<a:alerta:1518271939460857968>  Informações",
         value=(
@@ -15221,7 +15250,7 @@ def _build_config_sistema_embed(author: discord.Member, settings: dict) -> disco
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name="Painel de Configuração — Postadores", icon_url=icon_url)
     if icon_url:
-        embed.set_thumbnail(url=author.display_avatar.url)
+        embed.set_thumbnail(url=_avatar_url(author))
     embed.add_field(
         name="<a:alerta:1518271939460857968>  Informações",
         value=(
@@ -15534,7 +15563,7 @@ def _build_gerenciar_user_embed(author: discord.Member, settings: dict) -> disco
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name="Gerenciar Postadores — NATA®", icon_url=icon_url)
     if icon_url:
-        embed.set_thumbnail(url=author.display_avatar.url)
+        embed.set_thumbnail(url=_avatar_url(author))
     embed.add_field(
         name="<:comunidade_:1518272016971595807>  Selecionar Postador(a)",
         value="Selecione um postador(a) para gerenciar:",
@@ -15888,7 +15917,7 @@ def build_entretenimento_embed(author: discord.Member, settings: dict) -> discor
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["entretenimento_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(name=t["administrator"], value=author.mention, inline=True)
     embed.add_field(name=t["expires_in"], value=_fmt_expira(settings["language"]), inline=True)
@@ -15998,7 +16027,7 @@ def build_calendario_embed(author: discord.Member, settings: dict) -> discord.Em
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["cal_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     enabled = settings.get("calendar_enabled", False)
     status_value = (
@@ -16644,7 +16673,7 @@ def build_instagram_embed(author: discord.Member, settings: dict) -> discord.Emb
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["ig_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     enabled = settings.get("ig_enabled", False)
     status_value = (
@@ -17416,7 +17445,7 @@ def build_tellonym_embed(author: discord.Member, settings: dict) -> discord.Embe
     guild = author.guild if hasattr(author, "guild") else None
 
     embed.set_author(name=f"Painel Tellonym — {_footer_name(guild, settings)}", icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     def _ch(cid):
         if not cid:
@@ -17468,7 +17497,7 @@ def build_tellonym_blocked_embed(author: discord.Member, settings: dict) -> disc
     icon_url = bot.user.display_avatar.url if bot.user else None
     guild = author.guild if hasattr(author, "guild") else None
     embed.set_author(name="Painel de Usuários Bloqueados", icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     blocked = settings.get("tellonym_blocked_users", [])
     if blocked:
@@ -18082,7 +18111,7 @@ def build_historico_cargos_embed(author: discord.Member, settings: dict) -> disc
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["historico_cargos_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
     embed.description = t["historico_cargos_description"]
 
     allowed_count = len(settings.get("historygroles_allowed_roles", []))
@@ -18252,7 +18281,7 @@ def build_security_embed(author: discord.Member, settings: dict) -> discord.Embe
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["security_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name=t["administrator"],
@@ -18475,7 +18504,7 @@ def build_advertencia_embed(author: discord.Member, settings: dict) -> discord.E
         color=settings["embed_color"],
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     roles = settings.get("warning_roles", [])
     role_slots = []
@@ -18535,7 +18564,7 @@ def build_antban_embed(author: discord.Member, settings: dict) -> discord.Embed:
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["antban_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name=f"<:tickets:1518271952526250155>  {t['administrator_label']}",
@@ -18917,7 +18946,7 @@ def build_antbot_embed(author: discord.Member, settings: dict) -> discord.Embed:
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["antbot_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     if settings["antbot_enabled"]:
         status_value = "<a:online:1518271945550856295> `(Ativado)`"
@@ -19205,7 +19234,7 @@ def build_protecao_cargos_embed(author: discord.Member, settings: dict) -> disco
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["protecao_cargos_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     if settings["protecao_cargos_enabled"]:
         status_value = "<a:online:1518271945550856295> `(Ativado)`"
@@ -19274,7 +19303,7 @@ def build_editando_cargos_embed(author: discord.Member, settings: dict) -> disco
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["editando_cargos_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     grupos_cargos = settings.get("protecao_grupos_cargos", {})
     grupos_usuarios = settings.get("protecao_grupos_usuarios", {})
@@ -20073,7 +20102,7 @@ def build_proteger_cargo_embed(author: discord.Member, settings: dict) -> discor
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["proteger_cargo_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     blocked = settings.get("protecao_cargo_bloqueado", {})
     if not blocked:
@@ -20601,7 +20630,7 @@ def build_unban_config_embed(author: discord.Member, settings: dict) -> discord.
     )
     embed.set_author(name="Painel de Unban", icon_url=icon_url)
     if icon_url:
-        embed.set_thumbnail(url=author.display_avatar.url)
+        embed.set_thumbnail(url=_avatar_url(author))
 
     if settings.get("unban_panel_enabled"):
         status_str = "<a:online:1518271945550856295> `(Ativado)`"
@@ -20702,6 +20731,74 @@ class _UnbanIdModal(discord.ui.Modal):
         await interaction.response.edit_message(embed=embed, view=UnbanConfigView(self._pv.author))
 
 
+class _UnbanCategorySelect(discord.ui.ChannelSelect):
+    def __init__(self, author: discord.Member):
+        super().__init__(
+            channel_types=[discord.ChannelType.category],
+            placeholder="Selecione a categoria dos tickets",
+            min_values=1, max_values=1,
+        )
+        self.author = author
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["unban_ticket_category"] = self.values[0].id
+        save_settings_to_disk()
+        await interaction.response.edit_message(
+            embed=build_unban_config_embed(self.author, settings),
+            view=UnbanConfigView(self.author),
+        )
+
+
+class _UnbanStaffRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, author: discord.Member):
+        super().__init__(
+            placeholder="Selecione o cargo da staff",
+            min_values=1, max_values=1,
+        )
+        self.author = author
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["unban_staff_role"] = self.values[0].id
+        save_settings_to_disk()
+        await interaction.response.edit_message(
+            embed=build_unban_config_embed(self.author, settings),
+            view=UnbanConfigView(self.author),
+        )
+
+
+class _UnbanPickerView(discord.ui.View):
+    """View temporária com um dropdown nativo (categoria ou cargo)."""
+    def __init__(self, author: discord.Member, mode: str):
+        super().__init__(timeout=300)
+        self.author = author
+        if mode == "categoria":
+            self.add_item(_UnbanCategorySelect(author))
+        else:
+            self.add_item(_UnbanStaffRoleSelect(author))
+        btn = discord.ui.Button(
+            label="Voltar", style=discord.ButtonStyle.primary,
+            emoji=_button_emoji(discord.ButtonStyle.primary),
+        )
+        btn.callback = self._back
+        self.add_item(btn)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
+            await interaction.response.send_message(TRANSLATIONS[lang]["only_author"], ephemeral=True)
+            return False
+        return True
+
+    async def _back(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=build_unban_config_embed(self.author, settings),
+            view=UnbanConfigView(self.author),
+        )
+
+
 class UnbanConfigView(discord.ui.View):
     def __init__(self, author: discord.Member):
         super().__init__(timeout=None)
@@ -20763,16 +20860,10 @@ class UnbanConfigView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=UnbanConfigView(self.author))
 
     async def _set_category(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(_UnbanIdModal(
-            self, "unban_ticket_category", "Categoria dos Tickets",
-            "ID da categoria", "Ex: 123456789012345678", allow_empty=True,
-        ))
+        await interaction.response.edit_message(view=_UnbanPickerView(self.author, "categoria"))
 
     async def _set_role(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(_UnbanIdModal(
-            self, "unban_staff_role", "Cargo da Staff",
-            "ID do cargo", "Ex: 123456789012345678", allow_empty=True,
-        ))
+        await interaction.response.edit_message(view=_UnbanPickerView(self.author, "cargo"))
 
     async def _set_main(self, interaction: discord.Interaction):
         await interaction.response.send_modal(_UnbanIdModal(
@@ -20859,7 +20950,7 @@ def build_proxy_config_embed(author: discord.Member, settings: dict) -> discord.
     )
     embed.set_author(name="Proxy — Servidor de Recurso", icon_url=icon_url)
     if icon_url:
-        embed.set_thumbnail(url=author.display_avatar.url)
+        embed.set_thumbnail(url=_avatar_url(author))
 
     recurso_gid = settings.get("proxy_recurso_guild")
     recurso_ch  = settings.get("proxy_recurso_channel")
@@ -21121,7 +21212,7 @@ def build_protecao_url_embed(author: discord.Member, settings: dict) -> discord.
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["protecao_url_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     if settings.get("protecao_url_enabled"):
         status_value = "<a:online:1518271945550856295> `(Ativado)`"
@@ -21705,7 +21796,7 @@ def build_castigo_embed(author: discord.Member, settings: dict) -> discord.Embed
         color=settings["embed_color"],
     )
     icon_url = bot.user.display_avatar.url if bot.user else None
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name=f"ⓘ  {t['info_section']}",
@@ -22107,7 +22198,7 @@ def build_limpeza_mensagem_embed(author: discord.Member, settings: dict) -> disc
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name="Limpar Mensagem - NATA®", icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name="<:entretenimento_:1518271992191779038>  Informações",
@@ -22527,7 +22618,7 @@ def build_cmd_block_embed(author: discord.Member, settings: dict) -> discord.Emb
     )
 
     icon_url = bot.user.display_avatar.url if bot.user else None
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
     embed.set_footer(text=_footer_name(author.guild, settings), icon_url=icon_url)
     return embed
 
@@ -22918,7 +23009,7 @@ def build_protecao_geral_embed(
         name=f"Anti-Raid · Proteção Geral",
         icon_url=icon_url,
     )
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     # ── campo: administrador ──────────────────────────────────────────────────
     embed.add_field(
@@ -24256,7 +24347,7 @@ def build_blacklist_embed(author: discord.Member, settings: dict) -> discord.Emb
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["blacklist_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name=f"<:f1:1518271958024720555>  {t['administrator_label']}",
@@ -24537,7 +24628,7 @@ def build_backup_embed(author: discord.Member, settings: dict) -> discord.Embed:
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["backup_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     if settings["backup_enabled"]:
         status_value = "<a:online:1518271945550856295> `(Ativado)`"
@@ -24789,7 +24880,7 @@ def build_warns_embed(author: discord.Member, settings: dict) -> discord.Embed:
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["warns_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     mod_roles = settings.get("warns_moderator_roles", [])
     if mod_roles and author.guild:
@@ -25002,7 +25093,7 @@ def build_antspam_embed(author: discord.Member, settings: dict) -> discord.Embed
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["antspam_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.description = (
         f"{t['antspam_configuring']}: **{t['flood_label']}**.\n"
@@ -25359,7 +25450,7 @@ def build_antlink_embed(author: discord.Member, settings: dict) -> discord.Embed
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["antlink_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name=f"<:f1:1518271958024720555>  {t['administrator_label']}",
@@ -25645,7 +25736,7 @@ def build_antfake_embed(author: discord.Member, settings: dict) -> discord.Embed
 
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=_apply_name(t["antfake_panel_title"], settings), icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     if settings["antfake_enabled"]:
         status_value = "<a:online:1518271945550856295> `(Ativado)`"
@@ -30403,6 +30494,7 @@ async def menu(ctx: commands.Context):
         if not is_authorized(ctx.author, settings) and not has_dev:
             await ctx.reply(TRANSLATIONS[lang]["not_authorized"], delete_after=8)
             return
+        await _warm_avatar(ctx.author, ctx.guild)
         embed = build_main_embed(ctx.author, lang)
         await ctx.send(embed=embed, view=MenuView(ctx.author.id, lang=lang))
     finally:
@@ -30557,6 +30649,7 @@ async def menu_slash(interaction: discord.Interaction):
         if not is_authorized(interaction.user, settings) and not has_dev:
             await interaction.response.send_message(TRANSLATIONS[lang]["not_authorized"], ephemeral=True)
             return
+        await _warm_avatar(interaction.user, interaction.guild)
         embed = build_main_embed(interaction.user, lang)
         await interaction.response.send_message(embed=embed, view=MenuView(interaction.user.id, lang=lang), ephemeral=True)
     except Exception as _e:
@@ -31979,7 +32072,7 @@ def build_auto_cargo_embed(author: discord.Member, settings: dict) -> discord.Em
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["auto_cargo_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     enabled = settings.get("auto_cargo_enabled", False)
     status_value = (
@@ -32167,7 +32260,7 @@ def build_auto_reacoes_embed(author: discord.Member, settings: dict) -> discord.
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["auto_reacoes_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     enabled = settings.get("auto_reacoes_enabled", False)
     status_value = (
@@ -32437,7 +32530,7 @@ def build_reacoes_user_embed(author: discord.Member, settings: dict) -> discord.
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["reacoes_user_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     enabled = settings.get("reacoes_user_enabled", False)
     status_value = (
@@ -32765,7 +32858,7 @@ def build_auto_msg_embed(author: discord.Member, settings: dict) -> discord.Embe
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["auto_msg_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     enabled = settings.get("auto_msg_enabled", False)
     status_value = (
@@ -32796,7 +32889,7 @@ def build_auto_msg_add_embed(author: discord.Member, settings: dict, draft: dict
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["auto_msg_add_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
         name=f"<:tickets:1518271952526250155>  {t['administrator_label']}",
@@ -33125,7 +33218,7 @@ def build_auto_resp_embed(author: discord.Member, settings: dict) -> discord.Emb
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["auto_resp_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     enabled = settings.get("auto_resp_enabled", False)
     status_value = (
@@ -33276,7 +33369,7 @@ def _build_auto_resp_list_embed(author: discord.Member, settings: dict, page: in
 
     embed = discord.Embed(color=settings["embed_color"])
     embed.set_author(name=t["auto_resp_list_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     if author.guild and chans:
         mentions = []
@@ -33480,7 +33573,7 @@ def build_limite_call_embed(author: discord.Member, settings: dict) -> discord.E
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["call_limit_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     roles = settings.get("call_limit_roles", [])
     guild = author.guild
@@ -33605,7 +33698,7 @@ def build_dono_call_embed(author: discord.Member, settings: dict) -> discord.Emb
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["dono_call_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     chans = settings.get("dono_call_channels", [])
     canais_value = f"`{len(chans)} calls`" if chans else "`0 calls`"
@@ -35350,7 +35443,7 @@ def build_call_temp_embed(author: discord.Member, settings: dict) -> discord.Emb
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["call_temp_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     chans = settings.get("call_temporaria_channels", [])
     canais_value = f"`{len(chans)} calls`" if chans else "`0 calls`"
@@ -35714,7 +35807,7 @@ def build_bate_ponto_embed(author: discord.Member, settings: dict) -> discord.Em
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["bp_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     guild = author.guild
     nd = f"`{t['not_defined']}`"
@@ -36164,7 +36257,7 @@ def build_desmute_embed(author: discord.Member, settings: dict) -> discord.Embed
     embed = discord.Embed(color=settings["embed_color"])
     icon_url = bot.user.display_avatar.url if bot.user else None
     embed.set_author(name=t["desmute_panel_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=author.display_avatar.url)
+    embed.set_thumbnail(url=_avatar_url(author))
 
     enabled = settings.get("desmute_enabled", False)
     status_value = (
