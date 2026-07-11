@@ -484,8 +484,12 @@ async def _global_guild_check(ctx: commands.Context) -> bool:
             if _configured_guild is None:
                 # BOT_GUILD_ID não encontrado no cache — permite o servidor atual
                 return True
-            if ctx.command is not None and ctx.command.name in ("perm", "migrar_emojis", "exportar_config", "clonar_config", "migrar_canais"):
+            _cmd_name = ctx.command.name if ctx.command is not None else ""
+            if _cmd_name in ("perm", "migrar_emojis", "exportar_config", "clonar_config", "migrar_canais"):
                 return True  # sempre liberado para o dono do servidor
+            # No servidor de recurso (proxy): libera também o addemoji
+            if _cmd_name in ("addemoji", "addemote") and _is_recurso_guild(ctx.guild.id):
+                return True
             return False
     return True
 
