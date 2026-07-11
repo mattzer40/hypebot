@@ -45546,7 +45546,7 @@ async def on_interaction(interaction: discord.Interaction):
                 settings = get_settings(guild_id)
                 lang     = settings.get("language", "pt-br")
                 color    = settings.get("embed_color", 0x2B2D31)
-                icon_url = bot.user.display_avatar.url if bot.user else None
+                icon_url = interaction.guild.icon.url if (interaction.guild and interaction.guild.icon) else None
                 prefix   = settings.get("prefix", "hype!")
 
                 if lang == "pt-br":
