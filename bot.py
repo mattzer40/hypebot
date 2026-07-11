@@ -489,7 +489,8 @@ async def _global_guild_check(ctx: commands.Context) -> bool:
                 return True  # sempre liberado para o dono do servidor
             # No servidor de recurso (proxy): libera addemoji, embed, menu e roxo
             # (o menu dá acesso a mudar o prefixo e configurar o recurso)
-            if _cmd_name in ("addemoji", "addemote", "embed", "menu", "roxo", "recolorir") and _is_recurso_guild(ctx.guild.id):
+            if _cmd_name in ("addemoji", "addemote", "embed", "menu", "roxo", "recolorir",
+                             "renomear", "renameemoji", "renomearemoji") and _is_recurso_guild(ctx.guild.id):
                 return True
             return False
     return True
@@ -31908,6 +31909,57 @@ def _colorize_purple(img_bytes: bytes) -> bytes:
     out = io.BytesIO()
     colored.save(out, format="PNG")
     return out.getvalue()
+
+
+@bot.command(name="renomear", aliases=["renameemoji", "renomearemoji"])
+async def renomear_cmd(ctx: commands.Context, de: str = "", para: str = ""):
+    """Renomeia emojis do servidor substituindo <de> por <para> no nome."""
+    if ctx.guild is None:
+        return
+    settings = get_settings(ctx.guild.id)
+    _is_owner_admin = bool(
+        (ctx.guild and ctx.author.id == ctx.guild.owner_id)
+        or getattr(ctx.author.guild_permissions, "administrator", False)
+    )
+    if not (_is_owner_admin or _has_perm_category(ctx.author, "adicionar_remover_emojis", settings)):
+        await ctx.reply(
+            f"{ctx.author.mention}, você não tem permissão para isso.",
+            allowed_mentions=discord.AllowedMentions(users=False), delete_after=10,
+        )
+        return
+    if not de or not para:
+        await ctx.reply(
+            f"Use: `{settings.get('prefix','n!')}renomear <de> <para>` — ex: "
+            f"`{settings.get('prefix','n!')}renomear hit nata` (troca 'hit' por 'nata' no nome dos emojis).",
+            delete_after=18,
+        )
+        return
+    targets = [e for e in ctx.guild.emojis if de.lower() in e.name.lower()]
+    if not targets:
+        await ctx.reply(f"Nenhum emoji com `{de}` no nome.", delete_after=12)
+        return
+    status = await ctx.reply(f"<a:load:1518322852028354600> Renomeando `{len(targets)}` emoji(s)...")
+    done, failed = 0, 0
+    for e in targets:
+        try:
+            _new = re.sub(re.escape(de), para, e.name, flags=re.IGNORECASE)
+            _new = re.sub(r'[^a-zA-Z0-9_]', '', _new)[:32] or "emoji"
+            if len(_new) < 2:
+                _new = (_new + "emoji")[:32]
+            if _new != e.name:
+                await e.edit(name=_new, reason=f"Renomear — {ctx.author}")
+                done += 1
+        except Exception as _ex:
+            failed += 1
+            print(f"[renomear] falha em '{e.name}': {type(_ex).__name__}: {_ex}", flush=True)
+        await asyncio.sleep(1.5)
+    _msg = f"<a:online:1518271945550856295> **{done}** emoji(s) renomeado(s)"
+    if failed:
+        _msg += f" · <a:alerta:1518271939460857968> **{failed}** falha(s)"
+    try:
+        await status.edit(content=_msg)
+    except Exception:
+        await ctx.reply(_msg)
 
 
 @bot.command(name="roxo", aliases=["recolorir"])
