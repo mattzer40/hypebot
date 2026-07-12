@@ -42961,9 +42961,9 @@ def _unban_duration_str(rec: dict) -> str:
 def build_unban_panel_embed(guild: discord.Guild, settings: dict) -> discord.Embed:
     icon_url = guild.icon.url if guild and guild.icon else None
     # Emojis do próprio servidor de recurso (busca por nome, fallback pros padrão)
-    _e_title  = str(_guild_emoji(guild, "cadeadohit", "martelo", "ban", fallback="🔨"))
-    _e_ticket = str(_guild_emoji(guild, "hitticket", fallback="🎟️"))
-    _e_id     = str(_guild_emoji(guild, "hitid", fallback="🆔"))
+    _e_title  = str(_guild_emoji(guild, "cadeado", "martelo", "ban", fallback="🔨"))
+    _e_ticket = str(_guild_emoji(guild, "ticket", fallback="🎟️"))
+    _e_id     = str(_guild_emoji(guild, "hitid", "nataid", fallback="🆔"))
     _nome = guild.name if guild else "Servidor"
     emb = discord.Embed(color=settings.get("embed_color", UNBAN_ACCENT))
     if icon_url:
@@ -42993,10 +42993,10 @@ def build_unban_ticket_embed(guild: discord.Guild, opener: discord.abc.User, rec
     if icon_url:
         emb.set_thumbnail(url=icon_url)
     # Emojis do próprio servidor de recurso (busca por nome, fallback pros padrão)
-    _e_ticket = str(_guild_emoji(guild, "hitticket", fallback="📋"))
-    _e_id     = str(_guild_emoji(guild, "hitid", fallback="🆔"))
-    _e_autor  = str(_guild_emoji(guild, "confighit", fallback="👤"))
-    _e_motivo = str(_guild_emoji(guild, "regrashit", fallback="📝"))
+    _e_ticket = str(_guild_emoji(guild, "ticket", fallback="📋"))
+    _e_id     = str(_guild_emoji(guild, "hitid", "nataid", fallback="🆔"))
+    _e_autor  = str(_guild_emoji(guild, "config", fallback="👤"))
+    _e_motivo = str(_guild_emoji(guild, "regra", fallback="📝"))
     _e_dur    = str(_guild_emoji(guild, "relogio", fallback="⏱️"))
     emb.add_field(
         name=f"{_e_ticket}  Detalhes do banimento",
@@ -43052,8 +43052,8 @@ class UnbanPanelLayout(discord.ui.LayoutView):
         settings  = settings or {}
         color     = settings.get("embed_color", UNBAN_ACCENT)
         _e_title  = str(_guild_emoji(guild, "banhit", "ban", "martelo", "cadeadohit", fallback="🔨"))
-        _e_ticket = str(_guild_emoji(guild, "hitticket", fallback="🎟️"))
-        _e_id     = str(_guild_emoji(guild, "hitid", fallback="🆔"))
+        _e_ticket = str(_guild_emoji(guild, "ticket", fallback="🎟️"))
+        _e_id     = str(_guild_emoji(guild, "hitid", "nataid", fallback="🆔"))
         _nome     = guild.name if guild else "Servidor"
         # Logo configurável (URL) → fallback pro ícone do servidor
         icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
