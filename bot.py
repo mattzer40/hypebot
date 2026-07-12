@@ -43076,6 +43076,7 @@ class UnbanPanelLayout(discord.ui.LayoutView):
             ),
             accessory=_UnbanOpenBtn(),
         ))
+        items.append(discord.ui.Separator(visible=True))
         items.append(discord.ui.Section(
             discord.ui.TextDisplay(
                 f"# {_e_id} Procurar banimento por ID\n"
