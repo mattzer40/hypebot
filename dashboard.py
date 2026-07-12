@@ -41,6 +41,9 @@ CUSTOMERS_FILE = DATA_DIR / "customers.json"
 CONFIG_FILE    = DATA_DIR / "dashboard_config.json"
 CLIENTS_DIR    = DATA_DIR / "clientes"
 CLIENTS_DIR.mkdir(exist_ok=True)
+BACKUPS_DIR    = DATA_DIR / "backups"          # histórico versionado das configs
+BACKUPS_DIR.mkdir(exist_ok=True)
+_BACKUP_KEEP   = 50                            # quantas versões manter por cliente
 
 # ── Auto-download default_avatar.png se não existir ───────────────────────────
 _DEFAULT_AVATAR_URL = os.environ.get(
@@ -336,6 +339,16 @@ class BotManager:
                                         print(f"[seed-auto] erro ao empurrar {_bid}: {_ep}", flush=True)
                 except Exception as _es:
                     print(f"[seed-auto] erro no monitor: {_es}", flush=True)
+
+            # ── Backup versionado local (independe do Railway) ────────────────
+            # Cria uma nova versão só quando a config do cliente muda de verdade
+            # (dedup por hash). Assim toda alteração feita no /menu fica salva.
+            try:
+                _n_bk = backup_all_clients(reason="auto")
+                if _n_bk:
+                    print(f"[backup] {_n_bk} config(s) versionada(s) (mudanca detectada)", flush=True)
+            except Exception as _ebk:
+                print(f"[backup] erro no monitor: {_ebk}", flush=True)
 
             _time.sleep(30)
 
@@ -865,9 +878,133 @@ def load_settings(cid: str) -> dict:
 def save_settings(cid: str, data: dict) -> None:
     d = CLIENTS_DIR / cid
     d.mkdir(exist_ok=True)
-    (d / "bot_settings.json").write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    _atomic_write_text(d / "bot_settings.json",
+                       json.dumps(data, ensure_ascii=False, indent=2))
+
+
+# ── Backup versionado das configs dos clientes ────────────────────────────────
+# Guarda um histórico do bot_settings.json de cada cliente em /data/backups/<cid>/.
+# Objetivo: se a config se perder, dá para restaurar uma versão anterior pelo site.
+# Regras (pedido do usuário): NUNCA faz backup de config vazia, e o restore
+# recusa versões vazias — nenhuma config volta ao padrão por causa do backup.
+
+def _atomic_write_text(path, text: str) -> None:
+    """Escrita atômica (.tmp + os.replace) — kill no meio não corrompe o arquivo."""
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            pass
+    os.replace(tmp, path)
+
+
+def _settings_fingerprint(raw: str):
+    """Hash estável do conteúdo (None se vazio/inválido)."""
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return None
+    if not data:
+        return None
+    import hashlib
+    norm = json.dumps(data, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()
+
+
+def backup_client_settings(cid: str, reason: str = "auto", force: bool = False):
+    """Cria um snapshot versionado se a config mudou desde o último backup.
+    Nunca faz backup de config vazia. force=True ignora o dedup (backup manual).
+    Retorna o Path do snapshot criado, ou None."""
+    f = CLIENTS_DIR / cid / "bot_settings.json"
+    if not f.exists():
+        return None
+    try:
+        raw = f.read_text(encoding="utf-8")
+    except Exception:
+        return None
+    fp = _settings_fingerprint(raw)
+    if fp is None:
+        return None  # config vazia/inválida — nunca faz backup (proteção)
+
+    cdir = BACKUPS_DIR / cid
+    cdir.mkdir(parents=True, exist_ok=True)
+    last_fp_file = cdir / ".last_fp"
+    if not force and last_fp_file.exists():
+        try:
+            if last_fp_file.read_text(encoding="utf-8").strip() == fp:
+                return None  # sem mudança real desde o último backup
+        except Exception:
+            pass
+    try:
+        data = json.loads(raw)
+        n_srv = len([k for k in data.keys() if str(k).isdigit()])
+    except Exception:
+        n_srv = 0
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    snap = cdir / f"{ts}_{reason}_{n_srv}srv.json"
+    try:
+        _atomic_write_text(snap, raw)
+        last_fp_file.write_text(fp, encoding="utf-8")
+    except Exception as e:
+        print(f"[backup] erro ao salvar snapshot de {cid}: {e}", flush=True)
+        return None
+    _prune_backups(cid)
+    return snap
+
+
+def _prune_backups(cid: str) -> None:
+    cdir = BACKUPS_DIR / cid
+    if not cdir.exists():
+        return
+    snaps = sorted(cdir.glob("*.json"), key=lambda p: p.name)
+    for old in snaps[:-_BACKUP_KEEP]:
+        try:
+            old.unlink()
+        except Exception:
+            pass
+
+
+def list_backups(cid: str) -> list:
+    cdir = BACKUPS_DIR / cid
+    if not cdir.exists():
+        return []
+    out = []
+    for p in sorted(cdir.glob("*.json"), reverse=True):
+        try:
+            st = p.stat()
+            parts = p.stem.split("_")
+            reason = parts[1] if len(parts) > 1 else "auto"
+            srv = ""
+            for tok in parts:
+                if tok.endswith("srv"):
+                    srv = tok[:-3]
+            out.append({
+                "file": p.name,
+                "reason": reason,
+                "servers": srv,
+                "size": st.st_size,
+                "when": datetime.fromtimestamp(st.st_mtime).strftime("%d/%m/%Y %H:%M:%S"),
+            })
+        except Exception:
+            continue
+    return out
+
+
+def backup_all_clients(reason: str = "auto") -> int:
+    n = 0
+    if CLIENTS_DIR.exists():
+        for d in CLIENTS_DIR.iterdir():
+            if d.is_dir():
+                try:
+                    if backup_client_settings(d.name, reason=reason):
+                        n += 1
+                except Exception:
+                    pass
+    return n
 
 
 def first_prefix(settings: dict) -> str:
@@ -1428,6 +1565,24 @@ select option{background:var(--surface)}
   </div>
 </div>
 
+<!-- ─── Modal: Backups da configuração ─── -->
+<div class="overlay" id="m-backups">
+  <div class="modal" style="max-width:600px">
+    <button class="modal-close" onclick="close_('m-backups')">✕</button>
+    <div class="modal-title">💾 Backups da configuração — <span id="bk-name"></span></div>
+    <p style="color:var(--muted);font-size:.82rem;margin-bottom:14px">
+      Cada alteração feita no <code>/menu</code> gera uma versão automática. Restaure qualquer
+      versão se a config se perder. <b>Config vazia nunca é salva nem restaurada.</b>
+    </p>
+    <input type="hidden" id="bk-cid">
+    <div style="display:flex;gap:10px;margin-bottom:14px">
+      <button class="btn btn-primary btn-sm" onclick="createBackup()">＋ Fazer backup agora</button>
+      <button class="btn btn-ghost btn-sm" onclick="reloadBackups()">🔄 Atualizar</button>
+    </div>
+    <div id="bk-list" style="max-height:360px;overflow-y:auto"></div>
+  </div>
+</div>
+
 <!-- ─── Modal: Retirar Bot ─── -->
 <div class="overlay" id="m-leave">
   <div class="modal" style="max-width:420px;text-align:center">
@@ -1617,6 +1772,7 @@ function renderTable() {
       <td class="col-exp" style="color:var(--muted);font-size:.85rem">${esc(c.expira||'—')}</td>
       <td><div class="actions">
         <button class="btn btn-ghost btn-sm" onclick="openEdit('${esc(c.id)}')">✏️</button>
+        <button class="btn btn-ghost btn-sm" title="Backups da configuração" onclick="openBackups('${esc(c.id)}','${esc(c.nome||c.id)}')">💾</button>
         ${botBtns}
         <button class="btn btn-danger btn-sm" onclick="openDel('${esc(c.id)}','${esc(c.nome||c.id)}')">🗑️</button>
       </div></td>
@@ -1634,6 +1790,53 @@ async function botAction(cid, action) {
   } else {
     toast('❌ '+(r.error||'Erro'),'error');
   }
+}
+
+/* Backups da configuração */
+function openBackups(cid, name){
+  document.getElementById('bk-cid').value = cid;
+  document.getElementById('bk-name').textContent = name;
+  document.getElementById('bk-list').innerHTML =
+    '<div style="color:var(--muted);padding:20px;text-align:center">Carregando…</div>';
+  open_('m-backups');
+  reloadBackups();
+}
+async function reloadBackups(){
+  const cid = document.getElementById('bk-cid').value;
+  const r = await api('GET', `/api/customers/${cid}/backups`);
+  const el = document.getElementById('bk-list');
+  if(!r.ok){ el.innerHTML = '<div style="color:var(--red);padding:20px">Erro ao carregar.</div>'; return; }
+  if(!r.backups.length){
+    el.innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center">Nenhuma versão salva ainda.<br><small>Assim que o cliente alterar algo no /menu, aparece aqui.</small></div>';
+    return;
+  }
+  const rlabel = {auto:'automático', manual:'manual', 'pre-restore':'antes de restaurar'};
+  el.innerHTML = r.backups.map(b => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:.9rem">${esc(b.when)}</div>
+        <div style="font-size:.74rem;color:var(--muted)">${esc(rlabel[b.reason]||b.reason)} · ${esc(b.servers||'?')} servidor(es) · ${(b.size/1024).toFixed(1)} KB</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" title="Baixar cópia" onclick="downloadBackup('${esc(b.file)}')">⬇️</button>
+      <button class="btn btn-success btn-sm" onclick="restoreBackup('${esc(b.file)}','${esc(b.when)}')">♻️ Restaurar</button>
+    </div>`).join('');
+}
+async function createBackup(){
+  const cid = document.getElementById('bk-cid').value;
+  const r = await api('POST', `/api/customers/${cid}/backups/create`);
+  if(r.ok){ toast('✅ Backup criado!','success'); reloadBackups(); }
+  else toast('❌ '+(r.error||'Erro'),'error');
+}
+function downloadBackup(file){
+  const cid = document.getElementById('bk-cid').value;
+  window.open(`/api/customers/${cid}/backups/${encodeURIComponent(file)}/download`,'_blank');
+}
+async function restoreBackup(file, when){
+  if(!confirm(`Restaurar a versão de ${when}?\n\nIsso substitui a configuração atual do cliente por esta versão. O estado atual é salvo antes, então dá pra desfazer.`)) return;
+  const cid = document.getElementById('bk-cid').value;
+  const r = await api('POST', `/api/customers/${cid}/backups/${encodeURIComponent(file)}/restore`);
+  if(r.ok){ toast(`✅ Restaurado! ${r.servers} servidor(es). O bot recarrega em ~8s.`,'success'); reloadBackups(); }
+  else toast('❌ '+(r.error||'Erro'),'error');
 }
 
 /* Add */
@@ -3028,6 +3231,68 @@ def api_delete(cid):
 @login_required
 def api_settings(cid):
     return jsonify({"ok": True, "settings": load_settings(cid)})
+
+
+# ── Backups versionados da config do cliente ──────────────────────────────────
+@app.route("/api/customers/<cid>/backups", methods=["GET"])
+@login_required
+def api_list_backups(cid):
+    return jsonify({"ok": True, "backups": list_backups(cid)})
+
+
+@app.route("/api/customers/<cid>/backups/create", methods=["POST"])
+@login_required
+def api_create_backup(cid):
+    p = backup_client_settings(cid, reason="manual", force=True)
+    if p:
+        return jsonify({"ok": True, "file": p.name})
+    return jsonify({"ok": False,
+                    "error": "Config vazia ou inexistente — backup não criado (proteção)"}), 400
+
+
+def _safe_backup_path(cid: str, fname: str):
+    safe = os.path.basename(fname or "")
+    if not safe.endswith(".json") or "/" in fname or "\\" in fname or ".." in safe:
+        return None
+    p = BACKUPS_DIR / cid / safe
+    return p if p.exists() else None
+
+
+@app.route("/api/customers/<cid>/backups/<fname>/download", methods=["GET"])
+@login_required
+def api_download_backup(cid, fname):
+    p = _safe_backup_path(cid, fname)
+    if not p:
+        return jsonify({"ok": False, "error": "backup não encontrado"}), 404
+    from flask import send_file
+    return send_file(str(p), as_attachment=True,
+                     download_name=f"{cid}_{p.name}", mimetype="application/json")
+
+
+@app.route("/api/customers/<cid>/backups/<fname>/restore", methods=["POST"])
+@login_required
+def api_restore_backup(cid, fname):
+    p = _safe_backup_path(cid, fname)
+    if not p:
+        return jsonify({"ok": False, "error": "backup não encontrado"}), 404
+    try:
+        raw = p.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"backup inválido: {e}"}), 400
+    if not data:
+        return jsonify({"ok": False, "error": "backup vazio — restauração recusada (proteção)"}), 400
+    # Antes de restaurar, salva o estado atual (se não-vazio) para poder desfazer.
+    try:
+        backup_client_settings(cid, reason="pre-restore", force=True)
+    except Exception:
+        pass
+    target = CLIENTS_DIR / cid / "bot_settings.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write_text(target, raw)
+    n_srv = len([k for k in data if str(k).isdigit()])
+    print(f"[backup] RESTAURADO {p.name} -> cliente {cid} ({n_srv} servidor(es))", flush=True)
+    return jsonify({"ok": True, "restored": p.name, "servers": n_srv})
 
 
 @app.route("/api/admin/backup-settings", methods=["GET"])
