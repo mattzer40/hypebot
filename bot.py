@@ -43050,17 +43050,18 @@ class UnbanPanelLayout(discord.ui.LayoutView):
         super().__init__(timeout=None)
         settings  = settings or {}
         color     = settings.get("embed_color", UNBAN_ACCENT)
-        _e_title  = str(_guild_emoji(guild, "cadeadohit", "martelo", "ban", fallback="🔨"))
+        _e_title  = str(_guild_emoji(guild, "banhit", "ban", "martelo", "cadeadohit", fallback="🔨"))
         _e_ticket = str(_guild_emoji(guild, "hitticket", fallback="🎟️"))
         _e_id     = str(_guild_emoji(guild, "hitid", fallback="🆔"))
         _nome     = guild.name if guild else "Servidor"
         # Logo configurável (URL) → fallback pro ícone do servidor
         icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
 
-        _title = discord.ui.TextDisplay(f"## {_e_title} Unban - {_nome}")
+        # Formato exato do HIT: # (H1) nos títulos, **negrito** na pergunta, -# (subtexto) nas descrições
+        _title = discord.ui.TextDisplay(f"# {_e_title} Unban - {_nome}")
         _desc  = discord.ui.TextDisplay(
-            "Foi banido do nosso servidor e quer solicitar o revogamento do banimento?\n"
-            "Abra um ticket abaixo para que nossa equipe possa analisar o seu caso com atenção."
+            "**Foi banido do nosso servidor e quer solicitar o revogamento do banimento?**\n"
+            "-# Abra um ticket abaixo para que nossa equipe possa analisar o seu caso com atenção."
         )
         items = []
         if icon_url:
@@ -43070,15 +43071,15 @@ class UnbanPanelLayout(discord.ui.LayoutView):
         items.append(discord.ui.Separator(visible=True))
         items.append(discord.ui.Section(
             discord.ui.TextDisplay(
-                f"## {_e_ticket} Abrir ticket\n"
-                "Se o banimento ocorreu **nesta conta**, basta abrir o ticket normalmente por aqui."
+                f"# {_e_ticket} Abrir ticket\n"
+                "-# Se o banimento ocorreu nesta conta, basta abrir o ticket normalmente por aqui."
             ),
             accessory=_UnbanOpenBtn(),
         ))
         items.append(discord.ui.Section(
             discord.ui.TextDisplay(
-                f"## {_e_id} Procurar banimento por ID\n"
-                "Caso o banimento tenha sido feito em **outra conta**, utilize o ID de banimento para enviar sua solicitação."
+                f"# {_e_id} Procurar banimento por ID\n"
+                "-# Caso o banimento tenha sido feito em outra conta, utilize o ID de banimento para enviar sua solicitação."
             ),
             accessory=_UnbanSearchBtn(),
         ))
