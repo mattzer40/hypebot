@@ -4479,6 +4479,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("limite_ban_counts", {})
     # ── Painel de Unban (recurso de banimento) ──────────────────────────────
     settings.setdefault("unban_panel_enabled", False)
+    settings.setdefault("unban_panel_logo", None)  # URL do logo/gif do painel (fallback: ícone do servidor)
     settings.setdefault("unban_ticket_category", None)  # categoria onde os tickets são criados
     settings.setdefault("unban_staff_role", None)       # cargo da staff (acesso + desbanir)
     settings.setdefault("unban_main_guild", None)       # ID do servidor principal (None = servidor atual)
@@ -21378,10 +21379,58 @@ class ProxyView(discord.ui.View):
         btn_role.callback = self._set_recurso_role
         self.add_item(btn_role)
 
+        btn_logo = discord.ui.Button(
+            label="Logo do Painel",
+            style=discord.ButtonStyle.secondary,
+            emoji="🖼️",
+            row=2,
+            disabled=not linked,
+        )
+        btn_logo.callback = self._set_logo
+        self.add_item(btn_logo)
+
     async def _back(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         embed = build_limite_ban_embed(self.author, settings)
         await interaction.response.edit_message(embed=embed, view=LimiteBanView(self.author))
+
+    async def _set_logo(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        if not settings.get("proxy_recurso_guild"):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule o servidor de recurso primeiro."),
+                ephemeral=True,
+            )
+            return
+
+        class _LogoModal(discord.ui.Modal, title="Logo/Imagem do Painel"):
+            url = discord.ui.TextInput(
+                label="URL da imagem/gif (vazio = ícone do servidor)",
+                placeholder="https://... .png / .gif",
+                required=False,
+                max_length=300,
+            )
+            def __init__(inner, pv): super().__init__(); inner._pv = pv
+            async def on_submit(inner, inter: discord.Interaction):
+                s = get_settings(inter.guild.id)
+                rgid = s.get("proxy_recurso_guild")
+                rs = get_settings(rgid) if rgid else s
+                val = inner.url.value.strip()
+                if val and not val.startswith(("http://", "https://")):
+                    await inter.response.send_message(
+                        embed=_notif_embed("<a:alerta:1518271939460857968> URL inválida (precisa começar com http)."),
+                        ephemeral=True,
+                    )
+                    return
+                rs["unban_panel_logo"] = val or None
+                save_settings_to_disk()
+                await inter.response.edit_message(
+                    embed=build_proxy_config_embed(inner._pv.author, s), view=ProxyView(inner._pv.author),
+                )
+                _txt = "Logo do painel definido." if val else "Logo removido (usa o ícone do servidor)."
+                await inter.followup.send(embed=_notif_embed(f"<a:online:1518271945550856295> {_txt} Reenvie o painel (Configurar Canal)."), ephemeral=True)
+
+        await interaction.response.send_modal(_LogoModal(self))
 
     async def _vincular(self, interaction: discord.Interaction):
         await interaction.response.send_modal(_ProxyVincularModal(self))
@@ -43005,7 +43054,8 @@ class UnbanPanelLayout(discord.ui.LayoutView):
         _e_ticket = str(_guild_emoji(guild, "hitticket", fallback="🎟️"))
         _e_id     = str(_guild_emoji(guild, "hitid", fallback="🆔"))
         _nome     = guild.name if guild else "Servidor"
-        icon_url  = guild.icon.url if (guild and guild.icon) else None
+        # Logo configurável (URL) → fallback pro ícone do servidor
+        icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
 
         _title = discord.ui.TextDisplay(f"## {_e_title} Unban - {_nome}")
         _desc  = discord.ui.TextDisplay(
