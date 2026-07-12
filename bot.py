@@ -20918,9 +20918,8 @@ class UnbanConfigView(discord.ui.View):
                     return
                 settings["unban_panel_enabled"] = True
                 save_settings_to_disk()
-                embed = build_unban_panel_embed(inter.guild, settings)
                 try:
-                    await ch.send(embed=embed, view=UnbanPanelView())
+                    await ch.send(view=UnbanPanelLayout(guild=inter.guild, settings=settings))
                 except discord.Forbidden:
                     await inter.response.send_message(
                         embed=_notif_embed(f"<a:alerta:1518271939460857968> Sem permissão para enviar mensagem em {ch.mention}."),
@@ -21125,10 +21124,9 @@ class _ProxyCanalModal(discord.ui.Modal, title="Configurar Canal do Painel"):
         recurso_settings["unban_panel_enabled"] = True
         save_settings_to_disk()
 
-        # Posta o painel de unban no canal do recurso
-        panel_embed = build_unban_panel_embed(g, recurso_settings)
+        # Posta o painel de unban no canal do recurso (Components V2 — botões nas seções)
         try:
-            await ch.send(embed=panel_embed, view=UnbanPanelView())
+            await ch.send(view=UnbanPanelLayout(guild=g, settings=recurso_settings))
         except discord.Forbidden:
             await interaction.response.send_message(
                 embed=_notif_embed(f"<a:alerta:1518271939460857968> Sem permissão para enviar mensagem em `#{ch.name}`."),
@@ -27082,7 +27080,7 @@ async def on_ready():
         (GifsView,                                "GifsView"),
         (_FecharCanalView,                        "FecharCanalView"),
         (TicketThreadView,                        "TicketThreadView"),
-        (UnbanPanelView,                          "UnbanPanelView"),
+        (UnbanPanelLayout,                        "UnbanPanelLayout"),
         (UnbanTicketView,                         "UnbanTicketView"),
     ]:
         try:
@@ -42969,6 +42967,72 @@ def build_unban_ticket_embed(guild: discord.Guild, opener: discord.abc.User, rec
         inline=False,
     )
     return emb
+
+
+class _UnbanOpenBtn(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Abrir Ticket", style=discord.ButtonStyle.secondary, custom_id="unban_open_ticket_v1")
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        target_gid = _unban_target_gid(interaction.guild, settings)
+        target_settings = get_settings(target_gid)
+        rec = _unban_active_record_for_user(target_settings, interaction.user.id)
+        if rec is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Você não possui banimentos ativos."),
+                ephemeral=True,
+            )
+            return
+        await _unban_open_ticket(interaction, rec, target_gid)
+
+
+class _UnbanSearchBtn(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Procurar pelo ID", style=discord.ButtonStyle.secondary, custom_id="unban_search_id_v1")
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(UnbanSearchModal())
+
+
+class UnbanPanelLayout(discord.ui.LayoutView):
+    """Painel público de unban (Components V2) — botões ao lado de cada seção, igual HIT."""
+    def __init__(self, guild: discord.Guild | None = None, settings: dict | None = None):
+        super().__init__(timeout=None)
+        settings  = settings or {}
+        color     = settings.get("embed_color", UNBAN_ACCENT)
+        _e_title  = str(_guild_emoji(guild, "cadeadohit", "martelo", "ban", fallback="🔨"))
+        _e_ticket = str(_guild_emoji(guild, "hitticket", fallback="🎟️"))
+        _e_id     = str(_guild_emoji(guild, "hitid", fallback="🆔"))
+        _nome     = guild.name if guild else "Servidor"
+        icon_url  = guild.icon.url if (guild and guild.icon) else None
+
+        _title = discord.ui.TextDisplay(f"## {_e_title} Unban - {_nome}")
+        _desc  = discord.ui.TextDisplay(
+            "Foi banido do nosso servidor e quer solicitar o revogamento do banimento?\n"
+            "Abra um ticket abaixo para que nossa equipe possa analisar o seu caso com atenção."
+        )
+        items = []
+        if icon_url:
+            items.append(discord.ui.Section(_title, _desc, accessory=discord.ui.Thumbnail(icon_url)))
+        else:
+            items.extend([_title, _desc])
+        items.append(discord.ui.Separator(visible=True))
+        items.append(discord.ui.Section(
+            discord.ui.TextDisplay(
+                f"## {_e_ticket} Abrir ticket\n"
+                "Se o banimento ocorreu **nesta conta**, basta abrir o ticket normalmente por aqui."
+            ),
+            accessory=_UnbanOpenBtn(),
+        ))
+        items.append(discord.ui.Section(
+            discord.ui.TextDisplay(
+                f"## {_e_id} Procurar banimento por ID\n"
+                "Caso o banimento tenha sido feito em **outra conta**, utilize o ID de banimento para enviar sua solicitação."
+            ),
+            accessory=_UnbanSearchBtn(),
+        ))
+        self.add_item(discord.ui.Container(*items, accent_colour=color))
 
 
 class UnbanPanelView(discord.ui.View):
