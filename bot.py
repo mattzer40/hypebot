@@ -4481,6 +4481,7 @@ def get_settings(guild_id: int) -> dict:
     # ── Painel de Unban (recurso de banimento) ──────────────────────────────
     settings.setdefault("unban_panel_enabled", False)
     settings.setdefault("unban_panel_logo", None)  # URL do logo/gif do painel (fallback: ícone do servidor)
+    settings.setdefault("unban_emojis", {})        # {title, ticket, id, autor, dur, motivo} emojis do painel/ticket
     settings.setdefault("unban_ticket_category", None)  # categoria onde os tickets são criados
     settings.setdefault("unban_staff_role", None)       # cargo da staff (acesso + desbanir)
     settings.setdefault("unban_main_guild", None)       # ID do servidor principal (None = servidor atual)
@@ -21390,10 +21391,59 @@ class ProxyView(discord.ui.View):
         btn_logo.callback = self._set_logo
         self.add_item(btn_logo)
 
+        btn_emojis = discord.ui.Button(
+            label="Emojis do Painel",
+            style=discord.ButtonStyle.secondary,
+            emoji="😀",
+            row=3,
+            disabled=not linked,
+        )
+        btn_emojis.callback = self._set_emojis
+        self.add_item(btn_emojis)
+
     async def _back(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         embed = build_limite_ban_embed(self.author, settings)
         await interaction.response.edit_message(embed=embed, view=LimiteBanView(self.author))
+
+    async def _set_emojis(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        rgid = settings.get("proxy_recurso_guild")
+        if not rgid:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule o servidor de recurso primeiro."),
+                ephemeral=True,
+            )
+            return
+        _cur = get_settings(rgid).get("unban_emojis", {})
+
+        class _EmojiModal(discord.ui.Modal, title="Emojis do Painel de Unban"):
+            e_title  = discord.ui.TextInput(label="Emoji do título", placeholder="Cole o emoji (vazio = padrão)", required=False, max_length=60, default=_cur.get("title", ""))
+            e_ticket = discord.ui.TextInput(label="Emoji 'Abrir ticket'", placeholder="Cole o emoji", required=False, max_length=60, default=_cur.get("ticket", ""))
+            e_id     = discord.ui.TextInput(label="Emoji 'ID / Procurar por ID'", placeholder="Cole o emoji", required=False, max_length=60, default=_cur.get("id", ""))
+            e_autor  = discord.ui.TextInput(label="Emoji 'Autor'", placeholder="Cole o emoji", required=False, max_length=60, default=_cur.get("autor", ""))
+            e_dur    = discord.ui.TextInput(label="Emoji 'Duração'", placeholder="Cole o emoji", required=False, max_length=60, default=_cur.get("dur", ""))
+
+            def __init__(inner, pv): super().__init__(); inner._pv = pv
+            async def on_submit(inner, inter: discord.Interaction):
+                s = get_settings(inter.guild.id)
+                _rg = s.get("proxy_recurso_guild")
+                rs = get_settings(_rg) if _rg else s
+                _em = rs.setdefault("unban_emojis", {})
+                for _k, _field in (("title", inner.e_title), ("ticket", inner.e_ticket), ("id", inner.e_id), ("autor", inner.e_autor), ("dur", inner.e_dur)):
+                    _v = _field.value.strip()
+                    if _v:
+                        _em[_k] = _v
+                    else:
+                        _em.pop(_k, None)
+                save_settings_to_disk()
+                await inter.response.edit_message(embed=build_proxy_config_embed(inner._pv.author, s), view=ProxyView(inner._pv.author))
+                await inter.followup.send(
+                    embed=_notif_embed("<a:online:1518271945550856295> Emojis atualizados. **Reenvie o painel** (Configurar Canal) pra ver."),
+                    ephemeral=True,
+                )
+
+        await interaction.response.send_modal(_EmojiModal(self))
 
     async def _set_logo(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -43003,65 +43053,13 @@ def _unban_duration_str(rec: dict) -> str:
     return _fmt_duration(int(dur))
 
 
-def build_unban_panel_embed(guild: discord.Guild, settings: dict) -> discord.Embed:
-    icon_url = guild.icon.url if guild and guild.icon else None
-    # Emojis do próprio servidor de recurso (busca por nome, fallback pros padrão)
-    _e_title  = str(_guild_emoji(guild, "cadeado", "martelo", "ban", fallback="🔨"))
-    _e_ticket = str(_guild_emoji(guild, "ticket", fallback="🎟️"))
-    _e_id     = str(_guild_emoji(guild, "hitid", "nataid", fallback="🆔"))
-    _nome = guild.name if guild else "Servidor"
-    emb = discord.Embed(color=settings.get("embed_color", UNBAN_ACCENT))
-    if icon_url:
-        emb.set_thumbnail(url=icon_url)
-    emb.description = (
-        f"## {_e_title} Unban - {_nome}\n"
-        "Foi banido do nosso servidor e quer solicitar o revogamento do banimento?\n"
-        "Abra um ticket abaixo para que nossa equipe possa analisar o seu caso com atenção.\n\n"
-        f"## {_e_ticket} Abrir ticket\n"
-        "Se o banimento ocorreu **nesta conta**, basta abrir o ticket normalmente por aqui.\n\n"
-        f"## {_e_id} Procurar banimento por ID\n"
-        "Caso o banimento tenha sido feito em **outra conta**, utilize o ID de banimento para enviar sua solicitação."
-    )
-    return emb
-
-
-def build_unban_ticket_embed(guild: discord.Guild, opener: discord.abc.User, rec: dict, records_count: int) -> discord.Embed:
-    icon_url = guild.icon.url if guild and guild.icon else (bot.user.display_avatar.url if bot.user else None)
-    emb = discord.Embed(
-        color=UNBAN_ACCENT,
-        description=(
-            f"**Ticket aberto por:** {getattr(opener, 'display_name', str(opener))}\n"
-            "Aguarde o atendimento de um suporte."
-        ),
-    )
-    emb.set_author(name=f"Unban - {guild.name}" if guild else "Unban", icon_url=icon_url)
-    if icon_url:
-        emb.set_thumbnail(url=icon_url)
-    # Emojis do próprio servidor de recurso (busca por nome, fallback pros padrão)
-    _e_ticket = str(_guild_emoji(guild, "ticket", fallback="📋"))
-    _e_id     = str(_guild_emoji(guild, "hitid", "nataid", fallback="🆔"))
-    _e_autor  = str(_guild_emoji(guild, "config", fallback="👤"))
-    _e_motivo = str(_guild_emoji(guild, "regra", fallback="📝"))
-    _e_dur    = str(_guild_emoji(guild, "relogio", fallback="⏱️"))
-    emb.add_field(
-        name=f"{_e_ticket}  Detalhes do banimento",
-        value=(
-            f"{_e_id} **ID de banimento:** `{rec.get('id', '?')}`\n"
-            f"{_e_autor} **Autor:** <@{rec.get('banned_by_id', 0)}> `{rec.get('banned_by_name', '?')}`\n"
-            f"{_e_motivo} **Motivo do banimento:** `{rec.get('reason', 'Não informado')}`\n"
-            f"{_e_dur} **Duração:** `{_unban_duration_str(rec)}`"
-        ),
-        inline=False,
-    )
-    emb.add_field(
-        name=f"{_e_id}  Informações do usuário banido",
-        value=(
-            f"<@{rec.get('user_id', 0)}> `{rec.get('user_name', '?')}`\n"
-            f"`{records_count}` banimento(s) em registro."
-        ),
-        inline=False,
-    )
-    return emb
+def _ue(settings: dict, key: str, guild, *keywords: str, uni: str = "•") -> str:
+    """Emoji do painel/ticket de unban: usa o configurado (unban_emojis[key]);
+    senão busca por nome no servidor; senão o unicode de fallback."""
+    cfg = (settings or {}).get("unban_emojis", {}).get(key)
+    if cfg:
+        return cfg
+    return str(_guild_emoji(guild, *keywords, fallback=uni)) if keywords else uni
 
 
 class _UnbanOpenBtn(discord.ui.Button):
@@ -43097,8 +43095,8 @@ class UnbanPanelLayout(discord.ui.LayoutView):
         settings  = settings or {}
         color     = settings.get("embed_color", UNBAN_ACCENT)
         _e_title  = str(_guild_emoji(guild, "banhit", "ban", "martelo", "cadeadohit", fallback="🔨"))
-        _e_ticket = str(_guild_emoji(guild, "ticket", fallback="🎟️"))
-        _e_id     = str(_guild_emoji(guild, "hitid", "nataid", fallback="🆔"))
+        _e_ticket = _ue(settings, "ticket", guild, "ticket", uni="🎟️")
+        _e_id     = _ue(settings, "id", guild, "hitid", "nataid", uni="🆔")
         _nome     = guild.name if guild else "Servidor"
         # Logo configurável (URL) → fallback pro ícone do servidor
         icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
@@ -43403,11 +43401,11 @@ class UnbanTicketLayout(discord.ui.LayoutView):
         super().__init__(timeout=None)
         settings = settings if settings is not None else (get_settings(guild.id) if guild else {})
         rec = rec or {}
-        _e_title  = str(_guild_emoji(guild, "cadeado", "martelo", "ban", fallback="🔨"))
-        _e_id     = str(_guild_emoji(guild, "hitid", "nataid", fallback="🆔"))
-        _e_autor  = str(_guild_emoji(guild, "config", fallback="👤"))
-        _e_motivo = str(_guild_emoji(guild, "regra", fallback="📝"))
-        _e_dur    = str(_guild_emoji(guild, "relogio", fallback="⏱️"))
+        _e_title  = _ue(settings, "title", guild, "cadeado", "martelo", "ban", uni="🔨")
+        _e_id     = _ue(settings, "id", guild, "hitid", "nataid", uni="🆔")
+        _e_autor  = _ue(settings, "autor", guild, "config", uni="👤")
+        _e_motivo = _ue(settings, "motivo", guild, "regra", uni="📝")
+        _e_dur    = _ue(settings, "dur", guild, "relogio", uni="⏱️")
         _nome     = guild.name if guild else "Servidor"
         icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
         opener_name = getattr(opener, "display_name", str(opener)) if opener else "?"
