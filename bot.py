@@ -490,7 +490,8 @@ async def _global_guild_check(ctx: commands.Context) -> bool:
             # No servidor de recurso (proxy): libera addemoji, embed, menu e roxo
             # (o menu dá acesso a mudar o prefixo e configurar o recurso)
             if _cmd_name in ("addemoji", "addemote", "embed", "menu", "roxo", "recolorir",
-                             "renomear", "renameemoji", "renomearemoji") and _is_recurso_guild(ctx.guild.id):
+                             "renomear", "renameemoji", "renomearemoji",
+                             "natatudo", "renomeartudo", "prefixaremoji") and _is_recurso_guild(ctx.guild.id):
                 return True
             return False
     return True
@@ -31957,6 +31958,50 @@ def _colorize_purple(img_bytes: bytes) -> bytes:
     out = io.BytesIO()
     colored.save(out, format="PNG")
     return out.getvalue()
+
+
+@bot.command(name="natatudo", aliases=["renomeartudo", "prefixaremoji"])
+async def natatudo_cmd(ctx: commands.Context, prefixo: str = "nata"):
+    """Prefixa com <prefixo>_ todos os emojis que ainda não têm <prefixo> no nome."""
+    if ctx.guild is None:
+        return
+    settings = get_settings(ctx.guild.id)
+    _is_owner_admin = bool(
+        (ctx.guild and ctx.author.id == ctx.guild.owner_id)
+        or getattr(ctx.author.guild_permissions, "administrator", False)
+    )
+    if not (_is_owner_admin or _has_perm_category(ctx.author, "adicionar_remover_emojis", settings)):
+        await ctx.reply(
+            f"{ctx.author.mention}, você não tem permissão para isso.",
+            allowed_mentions=discord.AllowedMentions(users=False), delete_after=10,
+        )
+        return
+    _pfx = re.sub(r'[^a-zA-Z0-9]', '', prefixo).lower() or "nata"
+    targets = [e for e in ctx.guild.emojis if _pfx not in e.name.lower()]
+    if not targets:
+        await ctx.reply(f"Todos os emojis já têm `{_pfx}` no nome.", delete_after=12)
+        return
+    status = await ctx.reply(f"<a:load:1518322852028354600> Prefixando `{len(targets)}` emoji(s) com `{_pfx}_`...")
+    done, failed = 0, 0
+    for e in targets:
+        try:
+            _new = re.sub(r'[^a-zA-Z0-9_]', '', f"{_pfx}_{e.name}")[:32]
+            if len(_new) < 2:
+                _new = (_new + "emoji")[:32]
+            if _new != e.name:
+                await e.edit(name=_new, reason=f"Prefixar {_pfx} — {ctx.author}")
+                done += 1
+        except Exception as _ex:
+            failed += 1
+            print(f"[natatudo] falha em '{e.name}': {type(_ex).__name__}: {_ex}", flush=True)
+        await asyncio.sleep(1.5)
+    _msg = f"<a:online:1518271945550856295> **{done}** emoji(s) prefixado(s) com `{_pfx}_`"
+    if failed:
+        _msg += f" · <a:alerta:1518271939460857968> **{failed}** falha(s)"
+    try:
+        await status.edit(content=_msg)
+    except Exception:
+        await ctx.reply(_msg)
 
 
 @bot.command(name="renomear", aliases=["renameemoji", "renomearemoji"])
