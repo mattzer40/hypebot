@@ -863,9 +863,11 @@ TRANSLATIONS = {
         "protecao_url_info_section": "Informações",
         "protecao_url_observations_title": "Observações",
         "protecao_url_observations_text": (
-            "Você precisa definir a **TOKEN** e a **SENHA** de uma conta com "
-            "permissões de administrador no servidor! Use uma conta fake, "
-            "**A CONTA NÃO PODE TER AUTH MULTIFATORIAL.**"
+            "O bot **avisa na hora** se alguém alterar a URL (vanity) do servidor, "
+            "mostrando **quem** mudou e de/para qual link, no canal de logs. "
+            "Basta definir o **link** correto e o **canal de logs**.\n"
+            "Dica: restrinja a permissão **Gerenciar Servidor** para impedir "
+            "que mudem a URL."
         ),
         "protecao_url_status_label": "Status",
         "protecao_url_conta_label": "Conta",
@@ -2584,9 +2586,10 @@ TRANSLATIONS = {
         "protecao_url_info_section": "Information",
         "protecao_url_observations_title": "Notes",
         "protecao_url_observations_text": (
-            "You must set the **TOKEN** and the **PASSWORD** of an account with "
-            "administrator permissions on the server! Use a throwaway account, "
-            "**THE ACCOUNT CANNOT HAVE MULTI-FACTOR AUTH.**"
+            "The bot **alerts instantly** if someone changes the server's URL "
+            "(vanity), showing **who** changed it and the old/new link, in the "
+            "log channel. Just set the correct **link** and the **log channel**.\n"
+            "Tip: restrict the **Manage Server** permission to prevent URL changes."
         ),
         "protecao_url_status_label": "Status",
         "protecao_url_conta_label": "Account",
@@ -21649,13 +21652,6 @@ def build_protecao_url_embed(author: discord.Member, settings: dict) -> discord.
     else:
         status_value = "<a:alerta:1518271939460857968> `(Desativado)`"
 
-    token = settings.get("protecao_url_token")
-    password = settings.get("protecao_url_password")
-    if token and password:
-        conta_value = "<a:online:1518271945550856295> `Configurada (oculta)`"
-    else:
-        conta_value = f"`{t['not_defined']}`"
-
     link = settings.get("protecao_url_link")
     if link:
         link_value = f"[`{link[:60] + ('...' if len(link) > 60 else '')}`]({link})"
@@ -21673,7 +21669,6 @@ def build_protecao_url_embed(author: discord.Member, settings: dict) -> discord.
         name=f"<:entretenimento_:1518271992191779038>  {t['protecao_url_info_section']}",
         value=(
             f"┃ **{t['protecao_url_status_label']}:** {status_value}\n"
-            f"<:urls:1518272078921339011> **{t['protecao_url_conta_label']}:** {conta_value}\n"
             f"<:urls:1518272078921339011> **{t['protecao_url_link_label']}:** {link_value}\n"
             f"<:mov_call:1518271964077232150> **{t['protecao_url_logs_label']}:** {log_value}"
         ),
@@ -21849,11 +21844,7 @@ class ProtecaoUrlView(discord.ui.View):
         t = TRANSLATIONS[settings["language"]]
 
         if not settings.get("protecao_url_enabled"):
-            if not (settings.get("protecao_url_token") and settings.get("protecao_url_password")):
-                await interaction.response.send_message(
-                    t["protecao_url_observations_text"], ephemeral=True
-                )
-                return
+            # Modelo seguro: basta o link estar definido (não exige conta/senha).
             if not settings.get("protecao_url_link"):
                 await interaction.response.send_message(
                     f"`{t['protecao_url_link_label']}` — `{t['not_defined']}`",
@@ -21862,6 +21853,7 @@ class ProtecaoUrlView(discord.ui.View):
                 return
 
         settings["protecao_url_enabled"] = not settings.get("protecao_url_enabled", False)
+        save_settings_to_disk()
         embed = build_protecao_url_embed(self.author, settings)
         new_view = ProtecaoUrlView(self.author)
         await interaction.response.edit_message(embed=embed, view=new_view)
@@ -21873,10 +21865,15 @@ class ProtecaoUrlView(discord.ui.View):
         await interaction.followup.send(embed=_notif_embed(msg), ephemeral=True)
 
     async def _definir_conta(self, interaction: discord.Interaction):
-        settings = get_settings(interaction.guild.id)
-        t = TRANSLATIONS[settings["language"]]
-        modal = ProtecaoUrlContaModal(self, t)
-        await interaction.response.send_modal(modal)
+        # Modelo seguro: não usa mais conta/senha. Pedir token/senha de uma conta
+        # seria self-bot (contra as regras do Discord e arrisca banir a conta).
+        # A proteção agora é feita pelo próprio bot (alerta + quem mudou).
+        await interaction.response.send_message(
+            "ℹ️ Não é mais necessário definir conta/senha. A proteção agora é feita "
+            "pelo próprio bot: ele **avisa na hora** se a URL do servidor for alterada "
+            "e mostra **quem** mudou. Basta definir o **Link** e o **Canal de Logs**.",
+            ephemeral=True,
+        )
 
     async def _definir_link(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -24133,9 +24130,98 @@ async def on_guild_remove(guild: discord.Guild):
         print(f"[guild] bot removido de '{guild.name}' ({gid}) — settings limpas", flush=True)
 
 
+async def _protecao_url_alert(before: discord.Guild, after: discord.Guild) -> None:
+    """Proteção de URL: avisa quando a vanity do servidor é alterada, mostrando
+    QUEM mudou (via audit log). O bot não reverte automaticamente — reverter a
+    vanity só é possível por uma conta de usuário (self-bot), o que viola as
+    regras do Discord e arrisca banir a conta. Então notifica na hora para o
+    responsável reverter manualmente e revisar quem tem 'Gerenciar Servidor'."""
+    settings = get_settings(after.id)
+    if not settings.get("protecao_url_enabled"):
+        return
+
+    lang = settings.get("language", "pt-br")
+    pt = lang == "pt-br"
+    before_code, after_code = before.vanity_url_code, after.vanity_url_code
+    old_link = f"discord.gg/{before_code}" if before_code else ("(nenhuma)" if pt else "(none)")
+    new_link = f"discord.gg/{after_code}" if after_code else ("(removida)" if pt else "(removed)")
+
+    # Quem alterou (audit log — ação de update do servidor nos últimos 5s)
+    culprit_id = await _antraid_get_responsible(after, discord.AuditLogAction.guild_update)
+    culprit = after.get_member(culprit_id) if culprit_id else None
+    if culprit:
+        who = f"{culprit.mention} — `{culprit.id}`"
+    elif culprit_id:
+        who = f"`{culprit_id}`"
+    else:
+        who = ("Não identificado (o bot precisa da permissão *Ver Registro de Auditoria*)"
+               if pt else "Unknown (the bot needs the *View Audit Log* permission)")
+    protegido = settings.get("protecao_url_link") or "—"
+
+    embed = discord.Embed(
+        color=0xE74C3C,
+        title=("🚨 A URL do servidor foi alterada!" if pt else "🚨 The server URL was changed!"),
+        description=(
+            (f"A URL (vanity) de **{after.name}** foi modificada.\n\n" if pt
+             else f"The URL (vanity) of **{after.name}** was modified.\n\n") +
+            (f"**Antes:** `{old_link}`\n**Agora:** `{new_link}`" if pt
+             else f"**Before:** `{old_link}`\n**Now:** `{new_link}`")
+        ),
+    )
+    embed.add_field(
+        name=("👤 Quem alterou" if pt else "👤 Changed by"),
+        value=f"┃ {who}", inline=False,
+    )
+    embed.add_field(
+        name=("↩️ O que fazer" if pt else "↩️ What to do"),
+        value=(
+            (f"┃ Reverta para o link protegido: **{protegido}**\n"
+             f"┃ (Configurações do Servidor → Vanity URL)\n"
+             f"┃ Reveja quem tem a permissão **Gerenciar Servidor**." if pt
+             else f"┃ Revert to the protected link: **{protegido}**\n"
+             f"┃ (Server Settings → Vanity URL)\n"
+             f"┃ Review who has the **Manage Server** permission.")
+        ),
+        inline=False,
+    )
+    guild_icon = after.icon.url if after.icon else None
+    if guild_icon:
+        embed.set_thumbnail(url=guild_icon)
+    embed.timestamp = datetime.now()
+
+    # Envia no canal de logs; se não houver/falhar, manda DM ao dono do servidor
+    sent = False
+    log_id = settings.get("protecao_url_log_channel")
+    if log_id:
+        ch = after.get_channel(log_id)
+        if ch:
+            try:
+                await ch.send(embed=embed)
+                sent = True
+            except Exception:
+                pass
+    if not sent:
+        try:
+            owner = after.owner or await after.fetch_member(after.owner_id)
+            if owner:
+                await owner.send(embed=embed)
+        except Exception:
+            pass
+    print(f"[protecao_url] vanity alterada em '{after.name}': {old_link} -> {new_link} "
+          f"(por {culprit_id})", flush=True)
+
+
 @bot.event
 async def on_guild_update(before: discord.Guild, after: discord.Guild):
-    """Detecta transferência de coroa (owner) e atualiza o dono do s!perm."""
+    """Proteção de URL (alerta de vanity) + transferência de coroa (owner)."""
+    # ── Proteção de URL: alerta se a vanity do servidor mudou ──────────────
+    try:
+        if before.vanity_url_code != after.vanity_url_code:
+            await _protecao_url_alert(before, after)
+    except Exception as _eurl:
+        print(f"[protecao_url] erro ao alertar: {_eurl}", flush=True)
+
+    # ── Transferência de coroa (owner) ─────────────────────────────────────
     # Ignora se não houve mudança de dono
     if before.owner_id == after.owner_id:
         return
