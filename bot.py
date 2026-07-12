@@ -27131,7 +27131,7 @@ async def on_ready():
         (_FecharCanalView,                        "FecharCanalView"),
         (TicketThreadView,                        "TicketThreadView"),
         (UnbanPanelLayout,                        "UnbanPanelLayout"),
-        (UnbanTicketView,                         "UnbanTicketView"),
+        (UnbanTicketLayout,                       "UnbanTicketLayout"),
     ]:
         try:
             bot.add_view(_view_cls())
@@ -43244,23 +43244,202 @@ async def _unban_open_ticket(interaction: discord.Interaction, rec: dict, target
 
     target_settings = get_settings(target_gid)
     records_count   = len(_banrec_user(target_settings, rec.get("user_id")))
-    embed = build_unban_ticket_embed(guild, opener, rec, records_count)
+    _tk_layout = UnbanTicketLayout(guild=guild, opener=opener, rec=rec, records_count=records_count, settings=settings)
 
     ping = opener.mention + (f" {staff_role.mention}" if staff_role else "")
     try:
         await canal.send(
             content=ping,
-            embed=embed,
-            view=UnbanTicketView(),
+            view=_tk_layout,
             allowed_mentions=discord.AllowedMentions(users=True, roles=True),
         )
     except Exception:
-        await canal.send(embed=embed, view=UnbanTicketView())
+        await canal.send(view=UnbanTicketLayout(guild=guild, opener=opener, rec=rec, records_count=records_count, settings=settings))
 
     await interaction.response.send_message(
         embed=_notif_embed(f"<a:online:1518271945550856295> Ticket criado: {canal.mention}"),
         ephemeral=True,
     )
+
+
+def _unban_ticket_info(interaction: discord.Interaction) -> dict | None:
+    settings = get_settings(interaction.guild.id)
+    info = settings.get("unban_tickets", {}).get(str(interaction.channel.id))
+    if info:
+        return info
+    name = getattr(interaction.channel, "name", "") or ""
+    if name.startswith("unban-"):
+        ban_id = name[len("unban-"):].upper()
+        target_gid = _unban_target_gid(interaction.guild, settings)
+        rec = _unban_find_record(get_settings(target_gid), ban_id)
+        if rec:
+            return {"ban_id": ban_id, "user_id": rec.get("user_id"), "target_gid": target_gid, "opener_id": None}
+    return None
+
+
+async def _unban_close_channel(interaction: discord.Interaction):
+    settings = get_settings(interaction.guild.id)
+    settings.get("unban_tickets", {}).pop(str(interaction.channel.id), None)
+    save_settings_to_disk()
+    try:
+        await interaction.channel.delete(reason="Ticket de unban encerrado")
+    except Exception:
+        pass
+
+
+class _TkDesbanirBtn(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Desbanir Membro", style=discord.ButtonStyle.primary, custom_id="unban_ticket_unban_v1")
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        staff_role_id = settings.get("unban_staff_role")
+        is_staff = _has_unban_perm(interaction.user, settings) or (
+            staff_role_id and any(r.id == staff_role_id for r in getattr(interaction.user, "roles", []))
+        )
+        if not is_staff:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:redalert:1518272086018097352> Você não pode fazer isso <:disslike:1518272066506330232>"),
+                ephemeral=True,
+            )
+            return
+        info = _unban_ticket_info(interaction)
+        if not info:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Não consegui identificar o banimento deste ticket."),
+                ephemeral=True,
+            )
+            return
+        target_gid   = info.get("target_gid") or interaction.guild.id
+        target_guild = bot.get_guild(target_gid)
+        user_id      = info.get("user_id")
+        if target_guild is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Servidor principal não encontrado (o bot precisa estar nele)."),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.defer()
+        already_unbanned = False
+        try:
+            await target_guild.unban(discord.Object(id=user_id), reason=f"Unban aprovado por {interaction.user} via ticket")
+        except discord.NotFound:
+            already_unbanned = True
+        except (discord.Forbidden, discord.HTTPException) as e:
+            await interaction.followup.send(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Erro ao desbanir: `{e}`"),
+                ephemeral=True,
+            )
+            return
+        date_str = datetime.now().strftime("%d/%m/%Y")
+        target_settings = get_settings(target_gid)
+        for r in reversed(target_settings.get("ban_records", [])):
+            if r.get("user_id") == user_id and r.get("active", True):
+                r["active"] = False
+                r["unbanned_by_id"] = interaction.user.id
+                r["unbanned_by_name"] = str(interaction.user)
+                r["unbanned_at"] = date_str
+                break
+        save_settings_to_disk()
+        if already_unbanned:
+            await interaction.followup.send(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> <@{user_id}> já não estava banido. Encerrando o ticket...")
+            )
+        else:
+            await interaction.followup.send(
+                embed=_notif_embed(f"<a:online:1518271945550856295> <@{user_id}> foi **desbanido** por {interaction.user.mention}.")
+            )
+        await asyncio.sleep(5)
+        await _unban_close_channel(interaction)
+
+
+class _TkRegistroBtn(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Registro de Banimentos", style=discord.ButtonStyle.secondary, custom_id="unban_ticket_ficha_v1")
+
+    async def callback(self, interaction: discord.Interaction):
+        info = _unban_ticket_info(interaction)
+        if not info:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Não consegui identificar o usuário deste ticket."),
+                ephemeral=True,
+            )
+            return
+        target_settings = get_settings(info.get("target_gid") or interaction.guild.id)
+        user_id = info.get("user_id")
+        records = _banrec_user(target_settings, user_id)
+        try:
+            u = await bot.fetch_user(user_id)
+            target_name   = str(u)
+            target_avatar = u.display_avatar.url
+        except Exception:
+            target_name, target_avatar = str(user_id), None
+        if not records:
+            await interaction.response.send_message(
+                embed=_notif_embed(f"<a:online:1518271945550856295> **{target_name}** não possui registros de banimento."),
+                ephemeral=True,
+            )
+            return
+        view = FichaView(requester=interaction.user, target_name=target_name, target_avatar=target_avatar, records=records)
+        await interaction.response.send_message(embed=view._build_embed(), view=view, ephemeral=True)
+
+
+class _TkFecharBtn(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Fechar Ticket", style=discord.ButtonStyle.danger, custom_id="unban_ticket_close_v1")
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            content=f"{interaction.user.mention}",
+            embed=_notif_embed("<a:alerta:1518271939460857968> Encerrando canal em **5 segundos**..."),
+        )
+        await asyncio.sleep(5)
+        await _unban_close_channel(interaction)
+
+
+class UnbanTicketLayout(discord.ui.LayoutView):
+    """Ticket de unban (Components V2) — botões nas seções, igual ao HIT."""
+    def __init__(self, guild=None, opener=None, rec=None, records_count=0, settings=None):
+        super().__init__(timeout=None)
+        settings = settings if settings is not None else (get_settings(guild.id) if guild else {})
+        rec = rec or {}
+        _e_title  = str(_guild_emoji(guild, "cadeado", "martelo", "ban", fallback="🔨"))
+        _e_id     = str(_guild_emoji(guild, "hitid", "nataid", fallback="🆔"))
+        _e_autor  = str(_guild_emoji(guild, "config", fallback="👤"))
+        _e_motivo = str(_guild_emoji(guild, "regra", fallback="📝"))
+        _e_dur    = str(_guild_emoji(guild, "relogio", fallback="⏱️"))
+        _nome     = guild.name if guild else "Servidor"
+        icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
+        opener_name = getattr(opener, "display_name", str(opener)) if opener else "?"
+
+        items = [discord.ui.TextDisplay(f"# {_e_title} Unban - {_nome}"), discord.ui.Separator(visible=True)]
+        _top = discord.ui.TextDisplay(
+            f"**Ticket aberto por: {opener_name}**\n"
+            "-# Aguarde o atendimento de um suporte."
+        )
+        if icon_url:
+            items.append(discord.ui.Section(_top, accessory=discord.ui.Thumbnail(icon_url)))
+        else:
+            items.append(_top)
+        items.append(discord.ui.Separator(visible=True))
+        items.append(discord.ui.TextDisplay(
+            f"{_e_id} **ID de banimento:** `{rec.get('id','?')}`\n"
+            f"{_e_autor} **Autor:** <@{rec.get('banned_by_id',0)}> `{rec.get('banned_by_name','?')}`\n"
+            f"{_e_motivo} **Motivo do banimento:** `{rec.get('reason','Não informado')}`\n"
+            f"{_e_dur} **Duração:** `{_unban_duration_str(rec)}`"
+        ))
+        items.append(discord.ui.Separator(visible=True))
+        items.append(discord.ui.Section(
+            discord.ui.TextDisplay(
+                "**Informações do usuário banido**\n"
+                f"<@{rec.get('user_id',0)}> `{rec.get('user_name','?')}`\n"
+                f"-# `{records_count}` banimento(s) em registro."
+            ),
+            accessory=_TkRegistroBtn(),
+        ))
+        items.append(discord.ui.Separator(visible=True))
+        items.append(discord.ui.ActionRow(_TkDesbanirBtn(), _TkFecharBtn()))
+        self.add_item(discord.ui.Container(*items, accent_colour=UNBAN_ACCENT))
 
 
 class UnbanTicketView(discord.ui.View):
