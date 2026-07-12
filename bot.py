@@ -43063,11 +43063,12 @@ class UnbanPanelLayout(discord.ui.LayoutView):
             "**Foi banido do nosso servidor e quer solicitar o revogamento do banimento?**\n"
             "-# Abra um ticket abaixo para que nossa equipe possa analisar o seu caso com atenção."
         )
-        items = []
+        # Estrutura EXATA do HIT: título → linha → descrição+logo → linha → seções
+        items = [_title, discord.ui.Separator(visible=True)]
         if icon_url:
-            items.append(discord.ui.Section(_title, _desc, accessory=discord.ui.Thumbnail(icon_url)))
+            items.append(discord.ui.Section(_desc, accessory=discord.ui.Thumbnail(icon_url)))
         else:
-            items.extend([_title, _desc])
+            items.append(_desc)
         items.append(discord.ui.Separator(visible=True))
         items.append(discord.ui.Section(
             discord.ui.TextDisplay(
@@ -43076,7 +43077,6 @@ class UnbanPanelLayout(discord.ui.LayoutView):
             ),
             accessory=_UnbanOpenBtn(),
         ))
-        items.append(discord.ui.Separator(visible=True))
         items.append(discord.ui.Section(
             discord.ui.TextDisplay(
                 f"# {_e_id} Procurar banimento por ID\n"
