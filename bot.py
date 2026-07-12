@@ -4014,8 +4014,53 @@ def _is_recurso_guild(gid: int) -> bool:
     return False
 
 
+# ── Persistência segura de settings (anti-perda de config) ────────────────────
+# Contexto do bug: um kill no meio de open(SETTINGS_FILE,"w") truncava o arquivo
+# → boot com config vazia → _settings_save_loop (30s) gravava defaults por cima
+# → PERDA TOTAL da config do cliente. Blindagem abaixo:
+#   1) escrita atômica (.tmp + os.replace) — kill no meio não corrompe o arquivo
+#   2) backup rolante (.bak) — última cópia boa para restaurar
+#   3) trava anti-vazio no save — nunca grava vazio por cima de config real
+#   4) _settings_load_failed — bloqueia save se o load falhou sem .bak válido
+_settings_load_failed: bool = False
+
+
+def _atomic_dump_json(path, data, keep_bak: bool = False) -> None:
+    """Grava JSON de forma atômica. Um kill no meio deixa o arquivo original
+    intacto (escreve em .tmp e troca com os.replace). keep_bak mantém um .bak."""
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            pass
+    os.replace(tmp, path)
+    if keep_bak:
+        try:
+            import shutil as _sh
+            _sh.copy2(path, f"{path}.bak")
+        except Exception:
+            pass
+
+
+def _apply_settings_data(data: dict) -> int:
+    """Substitui bot_settings pelo conteúdo já parseado (só após parse OK)."""
+    bot_settings.clear()
+    for k, v in data.items():
+        try:
+            bot_settings[int(k)] = v
+        except (ValueError, TypeError):
+            continue
+    return len(bot_settings)
+
+
 def save_settings_to_disk() -> None:
     global _settings_last_mtime
+    # Load falhou (corrompido e sem .bak): não grava — protege arquivo recuperável.
+    if _settings_load_failed:
+        return
     try:
         snapshot = {}
         for gid, data in bot_settings.items():
@@ -4027,9 +4072,23 @@ def save_settings_to_disk() -> None:
                 except (TypeError, ValueError):
                     cleaned[k] = str(v)
             snapshot[str(gid)] = cleaned
-        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(snapshot, f, ensure_ascii=False, indent=2)
-        # Atualiza mtime para que o watchdog não faça reload desnecessário desta gravação
+
+        # Trava anti-vazio: memória vazia + disco/.bak com conteúdo real = aborta.
+        if not snapshot:
+            for _chkf in (SETTINGS_FILE, SETTINGS_FILE + ".bak"):
+                try:
+                    if os.path.exists(_chkf) and os.path.getsize(_chkf) > 4:
+                        with open(_chkf, "r", encoding="utf-8") as _cf:
+                            if json.load(_cf):
+                                print("[settings] ABORTADO save vazio — disco tem config real (anti-perda)", flush=True)
+                                return
+                except Exception:
+                    # ilegível: por segurança trata como "tem dado" e aborta
+                    print("[settings] ABORTADO save vazio — arquivo ilegível (anti-perda)", flush=True)
+                    return
+
+        # Escrita atômica + backup rolante da última cópia boa (não-vazia).
+        _atomic_dump_json(SETTINGS_FILE, snapshot, keep_bak=bool(snapshot))
         try:
             _settings_last_mtime = os.path.getmtime(SETTINGS_FILE)
         except Exception:
@@ -4204,8 +4263,7 @@ def _dev_save_client_settings(guild_id: int) -> None:
             latest_guild.update(dev_changes)
             existing[str(guild_id)] = latest_guild
             cf.parent.mkdir(parents=True, exist_ok=True)
-            with open(cf, "w", encoding="utf-8") as f:
-                json.dump(existing, f, ensure_ascii=False, indent=2)
+            _atomic_dump_json(str(cf), existing, keep_bak=True)
             print(f"[dev] settings salvas no cliente (diff {len(dev_changes)} campo(s)): {cf}", flush=True)
         except Exception as e:
             print(f"[dev] erro ao salvar em {cf}: {e}", flush=True)
@@ -4215,18 +4273,10 @@ def _dev_save_client_settings(guild_id: int) -> None:
 
 
 def load_settings_from_disk() -> None:
-    if not os.path.exists(SETTINGS_FILE):
-        return
-    try:
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        bot_settings.clear()
-        for k, v in data.items():
-            try:
-                bot_settings[int(k)] = v
-            except ValueError:
-                continue
-        print(f"[settings] carregado {len(bot_settings)} servidor(es) do disco.")
+    global _settings_load_failed
+    bak = SETTINGS_FILE + ".bak"
+
+    def _dbg():
         for _gid, _gs in bot_settings.items():
             if _gs.get("protecao_cargos_enabled"):
                 _bl = _gs.get("protecao_cargo_bloqueado", {})
@@ -4234,8 +4284,70 @@ def load_settings_from_disk() -> None:
                 print(f"[settings] guild={_gid} protecao=ON bloqueado={list(_bl.keys())[:10]} acesso={_ac[:5]}", flush=True)
                 for _rid, _racesso in list(_bl.items())[:10]:
                     print(f"[settings]   cargo={_rid} acesso_especifico={_racesso[:5]}", flush=True)
+
+    # Caso 1: principal ausente → tenta restaurar do .bak antes de rodar vazio
+    if not os.path.exists(SETTINGS_FILE):
+        if os.path.exists(bak):
+            try:
+                with open(bak, "r", encoding="utf-8") as f:
+                    _data = json.load(f)
+                n = _apply_settings_data(_data)
+                try:
+                    import shutil as _sh
+                    _sh.copy2(bak, SETTINGS_FILE)
+                except Exception:
+                    pass
+                _settings_load_failed = False
+                print(f"[settings] principal ausente — RESTAURADO do .bak ({n} servidor(es)).", flush=True)
+                _dbg()
+                return
+            except Exception as e:
+                print(f"[settings] .bak ilegível: {e}", flush=True)
+        _settings_load_failed = False  # bot novo, sem arquivo nenhum
+        return
+
+    # Caso 2: tenta o principal (parse ANTES de tocar na memória)
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            _data = json.load(f)
+        n = _apply_settings_data(_data)
+        _settings_load_failed = False
+        # Snapshot de segurança imediato: garante .bak já no boot (não espera o
+        # save loop de 30s), fechando a janela de corrupção no restart seguinte.
+        if _data:
+            try:
+                import shutil as _sh
+                _sh.copy2(SETTINGS_FILE, bak)
+            except Exception:
+                pass
+        print(f"[settings] carregado {n} servidor(es) do disco.")
+        _dbg()
+        return
     except Exception as e:
-        print(f"[settings] erro ao carregar: {e}")
+        print(f"[settings] erro ao carregar principal: {e}")
+
+    # Caso 3: principal corrompido → restaura do .bak (preservando o corrompido)
+    if os.path.exists(bak):
+        try:
+            with open(bak, "r", encoding="utf-8") as f:
+                _data = json.load(f)
+            n = _apply_settings_data(_data)
+            try:
+                import shutil as _sh
+                _sh.copy2(SETTINGS_FILE, SETTINGS_FILE + ".corrupted")
+                _sh.copy2(bak, SETTINGS_FILE)
+            except Exception:
+                pass
+            _settings_load_failed = False
+            print(f"[settings] principal corrompido — RESTAURADO do .bak ({n} servidor(es)); corrompido salvo em .corrupted", flush=True)
+            _dbg()
+            return
+        except Exception as e2:
+            print(f"[settings] .bak também falhou: {e2}")
+
+    # Caso 4: nem principal nem .bak válidos → bloqueia save p/ não gravar defaults
+    _settings_load_failed = True
+    print("[settings] [ALERTA] load falhou e sem .bak valido - SAVE BLOQUEADO (protege arquivo recuperavel).", flush=True)
 
 
 # ── Auto-reload: detecta mudanças externas no arquivo de settings ───────────────
