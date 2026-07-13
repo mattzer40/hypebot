@@ -4616,6 +4616,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("cargos_title", None)           # título da embed de cargos/benefícios
     settings.setdefault("cargos_text", None)            # texto (benefícios + contatos)
     settings.setdefault("cargos_footer", None)          # rodapé/aviso da embed de cargos
+    settings.setdefault("cargos_emoji", None)           # emoji do título (ex: <:natalogo:id>); None = sem emoji
     settings.setdefault("cargos_logo", None)            # logo/imagem do lado (URL)
     settings.setdefault("cargos_channel", None)         # canal (no recurso) onde a embed de cargos é postada
     settings.setdefault("unban_panel_color", None)      # cor da barra lateral (painel/ticket/entrada); None = padrão
@@ -21394,6 +21395,7 @@ def build_cargos_config_embed(author: discord.Member, settings: dict) -> discord
     txt    = settings.get("cargos_text")
     footer = settings.get("cargos_footer")
     logo   = settings.get("cargos_logo")
+    emoji  = settings.get("cargos_emoji")
     rgid   = settings.get("proxy_recurso_guild")
     ch_id  = settings.get("cargos_channel")
     canal_str = "`Não configurado`"
@@ -21409,6 +21411,7 @@ def build_cargos_config_embed(author: discord.Member, settings: dict) -> discord
             f"┃ **Texto:** {('`definido`' if txt else '`padrão`')}\n"
             f"┃ **Rodapé:** {('`definido`' if footer else '`Não definido`')}\n"
             f"┃ **Logo/imagem:** {('`definida`' if logo else '`ícone do servidor`')}\n"
+            f"┃ **Emoji do título:** {(emoji if emoji else '`Nenhum`')}\n"
             f"┃ **Canal:** {canal_str}"
         ),
         inline=False,
@@ -21439,6 +21442,11 @@ class _CargosContentModal(discord.ui.Modal, title="Conteúdo da Embed de Cargos"
         placeholder="https://... .png/.gif (vazio = ícone do servidor)",
         required=False, max_length=300,
     )
+    emoji = discord.ui.TextInput(
+        label="Emoji do título",
+        placeholder="Cole o emoji, ex: <:natalogo:id> (vazio = sem emoji)",
+        required=False, max_length=60,
+    )
 
     def __init__(self, parent_view, settings):
         super().__init__()
@@ -21447,6 +21455,7 @@ class _CargosContentModal(discord.ui.Modal, title="Conteúdo da Embed de Cargos"
         self.txt.default    = settings.get("cargos_text") or ""
         self.footer.default = settings.get("cargos_footer") or ""
         self.logo.default   = settings.get("cargos_logo") or ""
+        self.emoji.default  = settings.get("cargos_emoji") or ""
 
     async def on_submit(self, interaction: discord.Interaction):
         s = get_settings(interaction.guild.id)
@@ -21460,6 +21469,7 @@ class _CargosContentModal(discord.ui.Modal, title="Conteúdo da Embed de Cargos"
         s["cargos_text"]   = self.txt.value.strip() or None
         s["cargos_footer"] = self.footer.value.strip() or None
         s["cargos_logo"]   = _lg or None
+        s["cargos_emoji"]  = self.emoji.value.strip() or None
         save_settings_to_disk()
         await interaction.response.edit_message(
             embed=build_cargos_config_embed(self._pv.author, s), view=CargosConfigView(self._pv.author))
@@ -44181,6 +44191,7 @@ class CargosLayout(discord.ui.LayoutView):
         settings = settings or {}
         color  = _unban_panel_color(settings)
         logo   = settings.get("cargos_logo") or (guild.icon.url if (guild and guild.icon) else None)
+        emoji  = settings.get("cargos_emoji")
         titulo = settings.get("cargos_title") or "Quer ficar hypado na NATA?"
         text   = settings.get("cargos_text") or (
             "Chegou o momento de conseguir agora — de forma simples, tranquila e com "
@@ -44189,7 +44200,7 @@ class CargosLayout(discord.ui.LayoutView):
         )
         footer = settings.get("cargos_footer")
 
-        _title = discord.ui.TextDisplay(f"# {titulo}")
+        _title = discord.ui.TextDisplay(f"# {emoji + ' ' if emoji else ''}{titulo}")
         _body  = discord.ui.TextDisplay(text)
         items  = [_title, discord.ui.Separator(visible=True)]
         if logo:
