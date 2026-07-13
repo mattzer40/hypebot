@@ -44537,20 +44537,16 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
             pass
         return
 
-    # Reaproveita as MESMAS chaves configuráveis do ticket/painel ("Emojis do
-    # Painel") em vez de adivinhar por palavra-chave — se o usuário já tem um
-    # emoji do servidor configurado pra "autor"/"motivo"/"dur", o log usa
-    # automaticamente, sem precisar configurar de novo.
-    _e_title   = _ue(settings, "title", interaction.guild, "cadeado", "martelo", "ban", uni="✅")
-    _e_id      = _ue(settings, "id", interaction.guild, "hitid", "nataid", uni="🆔")
-    _e_autor   = _ue(settings, "autor", interaction.guild, "config", uni="👤")   # quem BANIU originalmente
-    # IDs confirmados via n!listaremojis (servidor NATA - Entrance) — usados
-    # como padrão fixo em vez de busca por palavra-chave, que não estava
-    # encontrando esses por causa de settings antigas já configuradas (vazias).
-    _e_motivo  = _ue(settings, "motivo", interaction.guild, uni="<:regrasnata2:1525607918580535377>")
-    _e_dur     = _ue(settings, "dur", interaction.guild, uni="<:nata_relogio:1525607873814728705>")
-    _e_usuario = _ue(settings, "usuario", interaction.guild, uni="👤")   # quem foi desbanido — sem match claro na lista
-    _e_staff   = _ue(settings, "staff", interaction.guild, uni="<:nata_staff_StorM:1525605069205012561>")  # quem desbaniu agora
+    # Emojis do servidor NATA - Entrance, IDs confirmados via n!listaremojis.
+    # Fixos DIRETO (sem passar por _ue/config) — o usuário pediu "só coloque",
+    # e assim não há risco de uma config antiga sobrescrever com emoji genérico.
+    _e_title   = "<:corretonata:1525607974419304588>"     # check (desbanido com sucesso)
+    _e_id      = "<:nataid:1525607862590771260>"          # ID
+    _e_usuario = "<:natapai:1526181140996689972>"         # usuário desbanido
+    _e_staff   = "<:nata_staff_StorM:1525605069205012561>"  # quem desbaniu (staff)
+    _e_motivo  = "<:regrasnata2:1525607918580535377>"     # motivo (regras)
+    _e_autor   = "<:confignata:1525607930232307812>"      # quem baniu originalmente
+    _e_dur     = "<:nata_relogio:1525607873814728705>"    # duração (relógio)
 
     try:
         user = await bot.fetch_user(user_id)
