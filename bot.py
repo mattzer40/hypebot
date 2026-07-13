@@ -44301,10 +44301,16 @@ async def _unban_open_ticket(interaction: discord.Interaction, rec: dict, target
     except Exception:
         await canal.send(view=UnbanTicketLayout(guild=guild, opener=opener, rec=rec, records_count=records_count, settings=settings))
 
-    await interaction.response.send_message(
-        embed=_notif_embed(f"<a:online:1518271945550856295> Seja desbanido aqui: {canal.mention}"),
-        ephemeral=True,
+    _confirm_embed = discord.Embed(
+        title="✅ Ticket criado com sucesso!",
+        description=f"**Seja desbanido aqui:** {canal.mention}\n-# Nossa equipe já foi notificada.",
+        color=_unban_panel_color(settings),
     )
+    _confirm_view = discord.ui.View()
+    _confirm_view.add_item(discord.ui.Button(
+        label="Abrir Ticket", style=discord.ButtonStyle.link, url=canal.jump_url, emoji="🎫",
+    ))
+    await interaction.response.send_message(embed=_confirm_embed, view=_confirm_view, ephemeral=True)
 
 
 def _unban_ticket_info(interaction: discord.Interaction) -> dict | None:
