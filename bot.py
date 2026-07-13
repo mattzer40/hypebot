@@ -42500,6 +42500,164 @@ def _fmt_duration(seconds: int) -> str:
     return " e ".join(parts) or "menos de 1 minuto"
 
 
+# ── DM de moderação (ban/kick) — inclusive quando feito "no dedo" ─────────────
+# Comandos do bot registram aqui (_mod_dm_mark) para os listeners abaixo NÃO
+# enviarem DM duplicada. Ações manuais (pela interface do Discord) caem só nos
+# listeners. DM é best-effort: após ban/kick o usuário já saiu, então só chega
+# se houver um servidor mútuo com o bot.
+_CMD_MOD_DM_SENT: dict[tuple, float] = {}  # (guild_id, user_id, action) -> monotonic
+
+
+def _mod_dm_mark(guild_id: int, user_id: int, action: str = "ban") -> None:
+    import time as _t
+    _CMD_MOD_DM_SENT[(guild_id, user_id, action)] = _t.monotonic()
+
+
+def _mod_dm_was_cmd(guild_id: int, user_id: int, action: str = "ban", ttl: float = 30.0) -> bool:
+    import time as _t
+    k = (guild_id, user_id, action)
+    ts = _CMD_MOD_DM_SENT.pop(k, None)
+    _now = _t.monotonic()
+    for _k in [k2 for k2, v in list(_CMD_MOD_DM_SENT.items()) if _now - v > 120]:
+        _CMD_MOD_DM_SENT.pop(_k, None)
+    return ts is not None and (_now - ts) < ttl
+
+
+def _build_moderation_dm_view(guild, banned_by_str: str, motivo: str,
+                              duracao_seconds, ban_id, action: str = "ban"):
+    """View V2 da DM de banimento/expulsão (mesmo visual da ação por comando)."""
+    settings     = get_settings(guild.id)
+    guild_name   = guild.name
+    bot_avatar   = bot.user.display_avatar.url if bot.user else None
+    server_thumb = guild.icon.url if guild.icon else bot_avatar
+    verbo        = "banido" if action == "ban" else "expulso"
+
+    _proxy_url = (settings.get("ban_proxy_link", "") or "").strip()
+    if _proxy_url and not _proxy_url.startswith(("http://", "https://")):
+        _proxy_url = "https://" + _proxy_url
+    if _proxy_url:
+        try:
+            if "." not in _proxy_url.split("/")[2]:
+                _proxy_url = ""
+        except IndexError:
+            _proxy_url = ""
+
+    _dm_cv2   = discord.ui.LayoutView(timeout=None)
+    _dm_title = discord.ui.TextDisplay(f"**{guild_name} — Você foi {verbo} do servidor!**")
+    _dm_info  = discord.ui.TextDisplay(
+        f"**<:Picsart_260523_224131777:1518272109925630042> {'Banido' if action == 'ban' else 'Expulso'} por:** `{banned_by_str}`\n"
+        f"**<:emoji_52:1518272091898515608> Motivo:** `{motivo or 'Não informado'}`"
+        + (f"\n**<a:redalert:1518272086018097352> Duração:** `{_fmt_duration(duracao_seconds)}`" if duracao_seconds else "")
+    )
+    _dm_items = [_dm_title, discord.ui.Separator(visible=True)]
+    if server_thumb:
+        _dm_items.append(discord.ui.Section(_dm_info, accessory=discord.ui.Thumbnail(server_thumb)))
+    else:
+        _dm_items.append(_dm_info)
+    _dm_items.append(discord.ui.Separator(visible=True))
+    if _proxy_url:
+        _dm_proxy_txt = discord.ui.TextDisplay(
+            "**Se você acredita que foi injusto, entre em contato pelo servidor da Proxy:**\n"
+            f"> 🔗 {_proxy_url}"
+        )
+        _dm_items.append(discord.ui.Section(
+            _dm_proxy_txt, accessory=discord.ui.Button(label="Servidor Proxy", url=_proxy_url, emoji="🔗")
+        ))
+    if ban_id:
+        _dm_items.append(discord.ui.TextDisplay(f"-# ID de banimento: {ban_id}"))
+    _dm_cv2.add_item(discord.ui.Container(*_dm_items, accent_colour=_unban_panel_color(settings)))
+    return _dm_cv2
+
+
+async def _send_moderation_dm(user, guild, banned_by_str, motivo, duracao_seconds, ban_id, action="ban") -> bool:
+    try:
+        view = _build_moderation_dm_view(guild, banned_by_str, motivo, duracao_seconds, ban_id, action)
+        dm = await user.create_dm()
+        await dm.send(view=view)
+        print(f"[mod_dm] DM de {action} enviada para {user} ({user.id})", flush=True)
+        return True
+    except discord.Forbidden:
+        print(f"[mod_dm] DM de {action} bloqueada/indisponível para {user} ({user.id})", flush=True)
+        return False
+    except Exception as _e:
+        print(f"[mod_dm] falha DM {action} para {user}: {type(_e).__name__}: {_e}", flush=True)
+        return False
+
+
+@bot.listen("on_member_ban")
+async def _dm_on_manual_ban(guild: discord.Guild, user: discord.User):
+    """DM + registro quando o ban é feito 'no dedo' (fora do comando do bot)."""
+    try:
+        if _mod_dm_was_cmd(guild.id, user.id, "ban"):
+            return  # o comando do bot já enviou a DM
+        await asyncio.sleep(1.6)  # deixa o anti-raid decidir (pode reverter)
+        try:
+            await guild.fetch_ban(user)  # NotFound = ban revertido → não avisa
+        except discord.NotFound:
+            return
+        except discord.HTTPException:
+            pass
+        _resp, _motivo = None, "Não informado"
+        try:
+            import datetime as _adt
+            async for _e in guild.audit_logs(limit=6, action=discord.AuditLogAction.ban):
+                if _e.target and _e.target.id == user.id and \
+                        (_adt.datetime.now(_adt.timezone.utc) - _e.created_at).total_seconds() < 90:
+                    _resp = _e.user
+                    if _e.reason:
+                        _motivo = _e.reason
+                    break
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+        if _resp and bot.user and _resp.id == bot.user.id:
+            return  # ban pelo próprio bot (comando) — DM já saiu
+        _by = str(_resp) if _resp else "Equipe"
+        settings = get_settings(guild.id)
+        _ban_id = _banrec_gen_id()
+        settings.setdefault("ban_records", []).append({
+            "id": _ban_id, "user_id": user.id, "user_name": str(user),
+            "banned_by_id": (_resp.id if _resp else None), "banned_by_name": _by,
+            "reason": _motivo, "banned_at": datetime.now().strftime("%d/%m/%Y"),
+            "duration": None, "active": True,
+            "unbanned_by_id": None, "unbanned_by_name": None, "unbanned_at": None,
+        })
+        save_settings_to_disk()
+        await _send_moderation_dm(user, guild, _by, _motivo, None, _ban_id, "ban")
+    except Exception as _e:
+        print(f"[mod_dm] listener on_member_ban erro: {type(_e).__name__}: {_e}", flush=True)
+
+
+@bot.listen("on_member_remove")
+async def _dm_on_manual_kick(member: discord.Member):
+    """DM quando o membro é expulso (kick) 'no dedo'. Ignora saídas normais."""
+    try:
+        if member.bot:
+            return
+        guild = member.guild
+        if _mod_dm_was_cmd(guild.id, member.id, "kick"):
+            return
+        await asyncio.sleep(1.2)  # audit log propagar
+        _resp, _motivo = None, "Não informado"
+        import datetime as _kdt
+        try:
+            async for _e in guild.audit_logs(limit=6, action=discord.AuditLogAction.kick):
+                if _e.target and _e.target.id == member.id and \
+                        (_kdt.datetime.now(_kdt.timezone.utc) - _e.created_at).total_seconds() < 8:
+                    _resp = _e.user
+                    if _e.reason:
+                        _motivo = _e.reason
+                    break
+        except (discord.Forbidden, discord.HTTPException):
+            return
+        if _resp is None:
+            return  # não foi kick — o membro saiu por conta própria
+        if bot.user and _resp.id == bot.user.id:
+            return  # kick pelo próprio bot (ex: anti-raid) — não avisa
+        await _send_moderation_dm(member, guild, str(_resp), _motivo, None, None, "kick")
+    except Exception as _e:
+        print(f"[mod_dm] listener on_member_remove erro: {type(_e).__name__}: {_e}", flush=True)
+
+
 @bot.tree.command(name="ban", description="Utilize para banir um usuário do servidor")
 @discord.app_commands.describe(
     usuario="Mencione o membro a ser banido.",
@@ -42634,6 +42792,7 @@ async def ban_slash(interaction: discord.Interaction, usuario: discord.Member, m
         print(f"[BAN] DM erro para {membro} ({membro.id}): {type(_dm_err).__name__}: {_dm_err}", flush=True)
 
     # ── Executar o ban ────────────────────────────────────────────────────────
+    _mod_dm_mark(interaction.guild.id, membro.id, "ban")  # dedup: listener não reenvia DM
     try:
         await membro.ban(reason=f"[{ban_id}] {user} — {motivo}", delete_message_days=0)
     except (discord.Forbidden, discord.HTTPException) as e:
@@ -42968,6 +43127,7 @@ async def ban_cmd(ctx: commands.Context, usuario: str = None, *, args: str = "")
     except Exception:
         pass
 
+    _mod_dm_mark(ctx.guild.id, membro.id, "ban")  # dedup: listener não reenvia DM
     try:
         await ctx.guild.ban(membro, reason=f"[{ban_id}] {user} — {motivo}", delete_message_days=0)
     except (discord.Forbidden, discord.HTTPException) as e:
