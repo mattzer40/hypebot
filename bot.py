@@ -22068,6 +22068,53 @@ class ProxyView(discord.ui.View):
         btn_log.callback = self._set_log_channel
         self.add_item(btn_log)
 
+        btn_more_emojis = discord.ui.Button(
+            label="Mais Emojis (Motivo/Usuário/Staff)",
+            style=discord.ButtonStyle.secondary,
+            emoji="🧩",
+            row=4,
+            disabled=not linked,
+        )
+        btn_more_emojis.callback = self._set_more_emojis
+        self.add_item(btn_more_emojis)
+
+    async def _set_more_emojis(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        rgid = settings.get("proxy_recurso_guild")
+        if not rgid:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule o servidor de recurso primeiro."),
+                ephemeral=True,
+            )
+            return
+        _cur = get_settings(rgid).get("unban_emojis", {})
+
+        class _MoreEmojiModal(discord.ui.Modal, title="Mais Emojis (Motivo/Usuário/Staff)"):
+            e_motivo = discord.ui.TextInput(label="Emoji 'Motivo original'", placeholder="Cole o emoji (vazio = padrão)", required=False, max_length=60, default=_cur.get("motivo", ""))
+            e_usuario = discord.ui.TextInput(label="Emoji 'Usuário' (desbanido)", placeholder="Cole o emoji", required=False, max_length=60, default=_cur.get("usuario", ""))
+            e_staff = discord.ui.TextInput(label="Emoji 'Desbanido por' (staff)", placeholder="Cole o emoji", required=False, max_length=60, default=_cur.get("staff", ""))
+
+            def __init__(inner, pv): super().__init__(); inner._pv = pv
+            async def on_submit(inner, inter: discord.Interaction):
+                s = get_settings(inter.guild.id)
+                _rg = s.get("proxy_recurso_guild")
+                rs = get_settings(_rg) if _rg else s
+                _em = rs.setdefault("unban_emojis", {})
+                for _k, _field in (("motivo", inner.e_motivo), ("usuario", inner.e_usuario), ("staff", inner.e_staff)):
+                    _v = _field.value.strip()
+                    if _v:
+                        _em[_k] = _v
+                    else:
+                        _em.pop(_k, None)
+                save_settings_to_disk()
+                await inter.response.edit_message(embed=build_proxy_config_embed(inner._pv.author, s), view=ProxyView(inner._pv.author))
+                await inter.followup.send(
+                    embed=_notif_embed("<a:online:1518271945550856295> Emojis atualizados."),
+                    ephemeral=True,
+                )
+
+        await interaction.response.send_modal(_MoreEmojiModal(self))
+
     async def _set_log_channel(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         if not settings.get("proxy_recurso_guild"):
@@ -44460,11 +44507,13 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
     # Painel") em vez de adivinhar por palavra-chave — se o usuário já tem um
     # emoji do servidor configurado pra "autor"/"motivo"/"dur", o log usa
     # automaticamente, sem precisar configurar de novo.
-    _e_title  = _ue(settings, "title", interaction.guild, "cadeado", "martelo", "ban", uni="✅")
-    _e_id     = _ue(settings, "id", interaction.guild, "hitid", "nataid", uni="🆔")
-    _e_autor  = _ue(settings, "autor", interaction.guild, "config", uni="👤")   # quem BANIU originalmente
-    _e_motivo = _ue(settings, "motivo", interaction.guild, "regra", uni="📝")
-    _e_dur    = _ue(settings, "dur", interaction.guild, "relogio", uni="⏱️")
+    _e_title   = _ue(settings, "title", interaction.guild, "cadeado", "martelo", "ban", uni="✅")
+    _e_id      = _ue(settings, "id", interaction.guild, "hitid", "nataid", uni="🆔")
+    _e_autor   = _ue(settings, "autor", interaction.guild, "config", uni="👤")   # quem BANIU originalmente
+    _e_motivo  = _ue(settings, "motivo", interaction.guild, uni="📝")
+    _e_dur     = _ue(settings, "dur", interaction.guild, "relogio", uni="⏱️")
+    _e_usuario = _ue(settings, "usuario", interaction.guild, uni="👤")           # quem foi desbanido
+    _e_staff   = _ue(settings, "staff", interaction.guild, uni="🛡️")            # quem desbaniu agora
 
     try:
         user = await bot.fetch_user(user_id)
@@ -44476,8 +44525,8 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
     if user_avatar:
         embed.set_thumbnail(url=user_avatar)
     embed.add_field(name=f"{_e_id} ID de Banimento", value=f"`{info.get('ban_id', '—')}`", inline=True)
-    embed.add_field(name="👤 Usuário", value=f"{user_name}\n<@{user_id}>", inline=True)
-    embed.add_field(name="🛡️ Desbanido por", value=interaction.user.mention, inline=True)
+    embed.add_field(name=f"{_e_usuario} Usuário", value=f"{user_name}\n<@{user_id}>", inline=True)
+    embed.add_field(name=f"{_e_staff} Desbanido por", value=interaction.user.mention, inline=True)
     if record:
         _dur_val = record.get("duration")
         _dur_str = _fmt_duration(_dur_val) if _dur_val else "Permanente"
@@ -44629,7 +44678,7 @@ class UnbanTicketLayout(discord.ui.LayoutView):
         _e_title  = _ue(settings, "title", guild, "cadeado", "martelo", "ban", uni="🔨")
         _e_id     = _ue(settings, "id", guild, "hitid", "nataid", uni="🆔")
         _e_autor  = _ue(settings, "autor", guild, "config", uni="👤")
-        _e_motivo = _ue(settings, "motivo", guild, "regra", uni="📝")
+        _e_motivo = _ue(settings, "motivo", guild, uni="📝")
         _e_dur    = _ue(settings, "dur", guild, "relogio", uni="⏱️")
         _nome     = _unban_display_name(guild, settings)
         icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
