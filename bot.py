@@ -44079,7 +44079,7 @@ class EntranceLayout(discord.ui.LayoutView):
         color = _unban_panel_color(settings)
         nome  = _unban_display_name(guild, settings)
         logo  = settings.get("entrance_logo") or (guild.icon.url if (guild and guild.icon) else None)
-        _e_title = str(_guild_emoji(guild, "nata", "logo", "hit", fallback="🏠"))
+        _e_title = "<:natacu:1526181031965884446>"
         text = settings.get("entrance_text") or "Esse é nosso **servidor de utilidades**."
         link = settings.get("entrance_link")
 
