@@ -43804,7 +43804,7 @@ async def _unban_open_ticket(interaction: discord.Interaction, rec: dict, target
         await canal.send(view=UnbanTicketLayout(guild=guild, opener=opener, rec=rec, records_count=records_count, settings=settings))
 
     await interaction.response.send_message(
-        embed=_notif_embed(f"<a:online:1518271945550856295> Ticket criado: {canal.mention}"),
+        embed=_notif_embed(f"<a:online:1518271945550856295> Seja desbanido aqui: {canal.mention}"),
         ephemeral=True,
     )
 
