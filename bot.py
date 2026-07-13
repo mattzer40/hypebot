@@ -21882,6 +21882,18 @@ class _UnbanLogCanalModal(discord.ui.Modal, title="Canal de Logs de Desbanimento
             await interaction.followup.send(
                 embed=_notif_embed("<a:online:1518271945550856295> Canal de logs desativado."), ephemeral=True)
             return
+        rgid = settings.get("proxy_recurso_guild")
+        if not rgid:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule um servidor de recurso primeiro (no Proxy)."),
+                ephemeral=True)
+            return
+        g = bot.get_guild(rgid)
+        if g is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> O bot não está no servidor de recurso."),
+                ephemeral=True)
+            return
         try:
             cid = int(raw.strip("<#> "))
         except ValueError:
@@ -21889,7 +21901,7 @@ class _UnbanLogCanalModal(discord.ui.Modal, title="Canal de Logs de Desbanimento
                 embed=_notif_embed("<a:alerta:1518271939460857968> ID inválido. Informe apenas números."),
                 ephemeral=True)
             return
-        ch = interaction.guild.get_channel(cid)
+        ch = g.get_channel(cid)
         if not isinstance(ch, discord.TextChannel):
             await interaction.response.send_message(
                 embed=_notif_embed("<a:alerta:1518271939460857968> Canal de texto não encontrado nesse servidor. Verifique o ID."),
