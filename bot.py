@@ -492,7 +492,7 @@ async def _global_guild_check(ctx: commands.Context) -> bool:
             if _cmd_name in ("addemoji", "addemote", "embed", "menu", "roxo", "recolorir",
                              "renomear", "renameemoji", "renomearemoji",
                              "natatudo", "renomeartudo", "prefixaremoji",
-                             "trocarlogos") and _is_recurso_guild(ctx.guild.id):
+                             "trocarlogos", "listaremojis", "listemojis", "emojislist") and _is_recurso_guild(ctx.guild.id):
                 return True
             return False
     return True
@@ -33047,6 +33047,40 @@ _LOGO_NATA_MAP: dict[int, str] = {
     1525620127914135613: "pink.png",            # cursiva — roxo + branco
     1525620129293930496: "p_hit_hit_h1t.png",   # estrela — roxo + branco
 }
+
+
+@bot.command(name="listaremojis", aliases=["listemojis", "emojislist"])
+async def listaremojis_cmd(ctx: commands.Context):
+    """Lista todos os emojis custom do servidor com o código cru <:nome:id> (texto puro, sem renderizar)."""
+    if ctx.guild is None:
+        return
+    settings = get_settings(ctx.guild.id)
+    _is_owner_admin = bool(
+        (ctx.guild and ctx.author.id == ctx.guild.owner_id)
+        or getattr(ctx.author.guild_permissions, "administrator", False)
+    )
+    if not (_is_owner_admin or _has_perm_category(ctx.author, "adicionar_remover_emojis", settings)):
+        await ctx.reply(
+            f"{ctx.author.mention}, você não tem permissão para isso.",
+            allowed_mentions=discord.AllowedMentions(users=False), delete_after=10,
+        )
+        return
+    emojis = ctx.guild.emojis
+    if not emojis:
+        await ctx.reply("Nenhum emoji custom neste servidor.", delete_after=12)
+        return
+    lines = [f"{e} — `<{'a' if e.animated else ''}:{e.name}:{e.id}>`" for e in emojis]
+    print(f"[listaremojis] {ctx.guild.name} ({ctx.guild.id}) — {len(emojis)} emoji(s):", flush=True)
+    for e in emojis:
+        print(f"[listaremojis]   {e.name} -> <{'a' if e.animated else ''}:{e.name}:{e.id}>", flush=True)
+    chunk = ""
+    for line in lines:
+        if len(chunk) + len(line) + 1 > 1900:
+            await ctx.send(chunk)
+            chunk = ""
+        chunk += line + "\n"
+    if chunk:
+        await ctx.send(chunk)
 
 
 @bot.command(name="trocarlogos")
