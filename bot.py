@@ -44544,10 +44544,13 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
     _e_title   = _ue(settings, "title", interaction.guild, "cadeado", "martelo", "ban", uni="✅")
     _e_id      = _ue(settings, "id", interaction.guild, "hitid", "nataid", uni="🆔")
     _e_autor   = _ue(settings, "autor", interaction.guild, "config", uni="👤")   # quem BANIU originalmente
-    _e_motivo  = _ue(settings, "motivo", interaction.guild, "regra", "nota", uni="📝")
-    _e_dur     = _ue(settings, "dur", interaction.guild, "relogio", uni="⏱️")
-    _e_usuario = _ue(settings, "usuario", interaction.guild, "membro", "pessoa", uni="👤")   # quem foi desbanido
-    _e_staff   = _ue(settings, "staff", interaction.guild, "seguranca", "mod", uni="🛡️")     # quem desbaniu agora
+    # IDs confirmados via n!listaremojis (servidor NATA - Entrance) — usados
+    # como padrão fixo em vez de busca por palavra-chave, que não estava
+    # encontrando esses por causa de settings antigas já configuradas (vazias).
+    _e_motivo  = _ue(settings, "motivo", interaction.guild, uni="<:regrasnata2:1525607918580535377>")
+    _e_dur     = _ue(settings, "dur", interaction.guild, uni="<:nata_relogio:1525607873814728705>")
+    _e_usuario = _ue(settings, "usuario", interaction.guild, uni="👤")   # quem foi desbanido — sem match claro na lista
+    _e_staff   = _ue(settings, "staff", interaction.guild, uni="<:nata_staff_StorM:1525605069205012561>")  # quem desbaniu agora
 
     try:
         user = await bot.fetch_user(user_id)
@@ -44712,8 +44715,8 @@ class UnbanTicketLayout(discord.ui.LayoutView):
         _e_title  = _ue(settings, "title", guild, "cadeado", "martelo", "ban", uni="🔨")
         _e_id     = _ue(settings, "id", guild, "hitid", "nataid", uni="🆔")
         _e_autor  = _ue(settings, "autor", guild, "config", uni="👤")
-        _e_motivo = _ue(settings, "motivo", guild, "regra", "nota", uni="📝")
-        _e_dur    = _ue(settings, "dur", guild, "relogio", uni="⏱️")
+        _e_motivo = _ue(settings, "motivo", guild, uni="<:regrasnata2:1525607918580535377>")
+        _e_dur    = _ue(settings, "dur", guild, uni="<:nata_relogio:1525607873814728705>")
         _nome     = _unban_display_name(guild, settings)
         icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
         opener_name = getattr(opener, "display_name", str(opener)) if opener else "?"
