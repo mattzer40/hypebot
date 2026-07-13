@@ -44447,6 +44447,13 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
         return
     log_ch = interaction.guild.get_channel(log_ch_id)
     if not isinstance(log_ch, discord.TextChannel):
+        print(f"[unban_log] canal {log_ch_id} não encontrado em '{interaction.guild.name}' — log não enviado", flush=True)
+        try:
+            await interaction.followup.send(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Canal de logs configurado (`{log_ch_id}`) não foi encontrado — verifique se ele ainda existe."),
+                ephemeral=True)
+        except Exception:
+            pass
         return
 
     _e_id    = _ue(settings, "id", interaction.guild, "hitid", "nataid", uni="🆔")
@@ -44472,8 +44479,22 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
     embed.timestamp = datetime.now()
     try:
         await log_ch.send(embed=embed)
-    except Exception:
-        pass
+    except discord.Forbidden:
+        print(f"[unban_log] SEM PERMISSÃO para enviar em #{log_ch.name} ({log_ch_id})", flush=True)
+        try:
+            await interaction.followup.send(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Sem permissão para enviar o log em {log_ch.mention} — dê permissão de **Enviar Mensagens** ao bot nesse canal."),
+                ephemeral=True)
+        except Exception:
+            pass
+    except Exception as _e:
+        print(f"[unban_log] erro ao enviar em #{log_ch.name} ({log_ch_id}): {type(_e).__name__}: {_e}", flush=True)
+        try:
+            await interaction.followup.send(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Erro ao postar o log: `{_e}`"),
+                ephemeral=True)
+        except Exception:
+            pass
 
 
 class _TkDesbanirBtn(discord.ui.Button):
