@@ -32883,6 +32883,81 @@ async def roxo_cmd(ctx: commands.Context, horas: float = 6.0):
         await ctx.reply(_msg)
 
 
+# ── Troca pontual dos 5 emojis de logo (imagem HIT → NATA) ────────────────────
+# Mapeamento por ID (não por nome — sobrevive a qualquer rename feito antes com
+# n!renomear/n!natatudo). Cada ID aponta para o arquivo local com a versão NATA
+# aprovada pelo usuário (fundo/estilo mantido, texto/cor trocados pra NATA).
+_LOGO_NATA_MAP: dict[int, str] = {
+    1525620123954712639: "hitlogo.png",        # badge preto — mantido como estava
+    1525620130908995655: "p_hit_h1t.png",       # bolha — roxo + branco
+    1525620121987584162: "hitroxo2.png",        # roxo + branco
+    1525620125527441449: "hitroxo2.png",        # duplicata idêntica do hitroxo2
+    1525620127914135613: "pink.png",            # cursiva — roxo + branco
+    1525620129293930496: "p_hit_hit_h1t.png",   # estrela — roxo + branco
+}
+
+
+@bot.command(name="trocarlogos")
+async def trocarlogos_cmd(ctx: commands.Context):
+    """Troca a IMAGEM dos 5 emojis de logo HIT pelas versões NATA aprovadas (mesmo nome, ID novo)."""
+    if ctx.guild is None:
+        return
+    settings = get_settings(ctx.guild.id)
+
+    _is_owner_admin = bool(
+        (ctx.guild and ctx.author.id == ctx.guild.owner_id)
+        or getattr(ctx.author.guild_permissions, "administrator", False)
+    )
+    if not (_is_owner_admin or _has_perm_category(ctx.author, "adicionar_remover_emojis", settings)):
+        await ctx.reply(
+            f"{ctx.author.mention}, você não tem permissão para isso.",
+            allowed_mentions=discord.AllowedMentions(users=False),
+            delete_after=10,
+        )
+        return
+
+    _assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_nata")
+    targets = [(eid, fname) for eid, fname in _LOGO_NATA_MAP.items() if ctx.guild.get_emoji(eid)]
+    if not targets:
+        await ctx.reply(
+            "Nenhum dos emojis de logo mapeados foi encontrado neste servidor "
+            "(os IDs alvo estão fixos no código — rode em `NATA - Entrance`).",
+            delete_after=15,
+        )
+        return
+
+    status = await ctx.reply(f"<a:load:1518322852028354600> Trocando a imagem de `{len(targets)}` emoji(s)...")
+    done, failed = 0, 0
+    for eid, fname in targets:
+        old = ctx.guild.get_emoji(eid)
+        try:
+            img_path = os.path.join(_assets_dir, fname)
+            with open(img_path, "rb") as f:
+                new_image = f.read()
+            _name = old.name
+            # Cria a nova imagem ANTES de apagar a antiga — se travar (rate limit/
+            # limite de emojis), o emoji original não é perdido.
+            await ctx.guild.create_custom_emoji(name=_name, image=new_image, reason=f"Troca de logo NATA — {ctx.author}")
+            await asyncio.sleep(1.0)
+            try:
+                await old.delete(reason=f"Troca de logo NATA — {ctx.author}")
+            except Exception:
+                pass  # não conseguiu apagar o antigo → apague manualmente depois
+            done += 1
+        except Exception as _ex:
+            failed += 1
+            print(f"[trocarlogos] falha em '{old.name}' ({eid}): {type(_ex).__name__}: {_ex}", flush=True)
+        await asyncio.sleep(2.0)  # respeita o rate limit de emojis
+
+    _msg = f"<a:online:1518271945550856295> **{done}** logo(s) trocada(s) para NATA"
+    if failed:
+        _msg += f" · <a:alerta:1518271939460857968> **{failed}** falha(s)"
+    try:
+        await status.edit(content=_msg)
+    except Exception:
+        await ctx.reply(_msg)
+
+
 @bot.command(name="historygroles")
 async def historygroles_cmd(ctx: commands.Context, target: discord.Member = None):
     if ctx.guild is None:

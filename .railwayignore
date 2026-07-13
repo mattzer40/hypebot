@@ -17,6 +17,7 @@ deploy_update.zip
 *.png
 !default_avatar.png
 !default_banner.png
+!logo_nata/*.png
 bot_settings.json
 customers.json
 embed_drafts.json
