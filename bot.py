@@ -21872,16 +21872,12 @@ class _UnbanLogCanalModal(discord.ui.Modal, title="Canal de Logs de Desbanimento
         self._pv = parent_view
 
     async def on_submit(self, interaction: discord.Interaction):
+        # IMPORTANTE: unban_log_channel precisa ficar salvo nas settings do
+        # servidor de RECURSO (rs = get_settings(rgid)), não nas de onde o menu
+        # foi aberto — é de lá que _post_unban_log lê (o clique em "Desbanir
+        # Membro" acontece dentro do próprio servidor de recurso). Mesmo padrão
+        # já usado por unban_ticket_category/unban_staff_role (_ProxyRecursoSelect).
         settings = get_settings(interaction.guild.id)
-        raw = self.channel_id_input.value.strip()
-        if not raw:
-            settings["unban_log_channel"] = None
-            save_settings_to_disk()
-            await interaction.response.edit_message(
-                embed=build_proxy_config_embed(self._pv.author, settings), view=ProxyView(self._pv.author))
-            await interaction.followup.send(
-                embed=_notif_embed("<a:online:1518271945550856295> Canal de logs desativado."), ephemeral=True)
-            return
         rgid = settings.get("proxy_recurso_guild")
         if not rgid:
             await interaction.response.send_message(
@@ -21893,6 +21889,16 @@ class _UnbanLogCanalModal(discord.ui.Modal, title="Canal de Logs de Desbanimento
             await interaction.response.send_message(
                 embed=_notif_embed("<a:alerta:1518271939460857968> O bot não está no servidor de recurso."),
                 ephemeral=True)
+            return
+        rs = get_settings(rgid)
+        raw = self.channel_id_input.value.strip()
+        if not raw:
+            rs["unban_log_channel"] = None
+            save_settings_to_disk()
+            await interaction.response.edit_message(
+                embed=build_proxy_config_embed(self._pv.author, settings), view=ProxyView(self._pv.author))
+            await interaction.followup.send(
+                embed=_notif_embed("<a:online:1518271945550856295> Canal de logs desativado."), ephemeral=True)
             return
         try:
             cid = int(raw.strip("<#> "))
@@ -21907,7 +21913,7 @@ class _UnbanLogCanalModal(discord.ui.Modal, title="Canal de Logs de Desbanimento
                 embed=_notif_embed("<a:alerta:1518271939460857968> Canal de texto não encontrado nesse servidor. Verifique o ID."),
                 ephemeral=True)
             return
-        settings["unban_log_channel"] = cid
+        rs["unban_log_channel"] = cid
         save_settings_to_disk()
         await interaction.response.edit_message(
             embed=build_proxy_config_embed(self._pv.author, settings), view=ProxyView(self._pv.author))
