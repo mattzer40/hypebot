@@ -43538,7 +43538,16 @@ class UnbanPanelLayout(discord.ui.LayoutView):
         super().__init__(timeout=None)
         settings  = settings or {}
         color     = settings.get("embed_color", UNBAN_ACCENT)
-        _e_title  = _ue(settings, "title", guild, "banhit", "ban", "martelo", "cadeadohit", uni="🔨")
+        # título: emoji configurado ("Emojis do Painel") > emoji chamado exatamente
+        # "nata" no servidor > por palavra-chave (ban/martelo/cadeado) > 🔨 unicode
+        _cfg_title  = (settings or {}).get("unban_emojis", {}).get("title")
+        _nata_emoji = discord.utils.get(guild.emojis, name="nata") if guild else None
+        if _cfg_title:
+            _e_title = _cfg_title
+        elif _nata_emoji:
+            _e_title = str(_nata_emoji)
+        else:
+            _e_title = str(_guild_emoji(guild, "banhit", "ban", "martelo", "cadeadohit", fallback="🔨"))
         _e_ticket = _ue(settings, "ticket", guild, "ticket", uni="🎟️")
         _e_id     = _ue(settings, "id", guild, "hitid", "nataid", uni="🆔")
         _nome     = guild.name if guild else "Servidor"
