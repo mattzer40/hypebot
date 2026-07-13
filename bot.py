@@ -45964,6 +45964,17 @@ async def on_interaction(interaction: discord.Interaction):
 
     cid = interaction.custom_id or ""
 
+    # Botões do sistema de Unban (UnbanPanelLayout/UnbanTicketLayout) são
+    # discord.ui.Button com callback próprio, já tratados pelo dispatch interno
+    # do discord.py via view persistente (bot.add_view). Este dispatcher
+    # genérico não tem handler para eles — sem este skip, o _fallback() abaixo
+    # entra em corrida com o callback real: como criar o canal do ticket demora
+    # mais que 0.8s, o fallback assume "painel expirado" e responde primeiro,
+    # e quando o callback real tenta responder também, quebra com
+    # "InteractionResponded" (o ticket é criado, mas o usuário vê os dois erros).
+    if cid.startswith("unban_"):
+        return
+
     # ── Botões de gerenciamento de ticket (persistem após restart) ─────────────
     if cid == "ticket_add_remove_user":
         try:
