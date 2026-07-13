@@ -4611,6 +4611,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("entrance_link", None)          # link do servidor principal
     settings.setdefault("entrance_logo", None)          # logo/imagem do lado (URL)
     settings.setdefault("entrance_channel", None)       # canal (no recurso) onde a embed de entrada é postada
+    settings.setdefault("unban_panel_color", None)      # cor da barra lateral (painel/ticket/entrada); None = padrão
     settings.setdefault("protecao_cargos_enabled", False)
     settings.setdefault("protecao_cargos_grupos", [])
     settings.setdefault("protecao_cargos_whitelist", [])
@@ -21741,6 +21742,69 @@ class ProxyView(discord.ui.View):
         )
         btn_entrance.callback = self._open_entrance
         self.add_item(btn_entrance)
+
+        btn_color = discord.ui.Button(
+            label="Cor do Painel",
+            style=discord.ButtonStyle.secondary,
+            emoji="🎨",
+            row=3,
+            disabled=not linked,
+        )
+        btn_color.callback = self._set_color
+        self.add_item(btn_color)
+
+    async def _set_color(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        if not settings.get("proxy_recurso_guild"):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule o servidor de recurso primeiro."),
+                ephemeral=True,
+            )
+            return
+        _rgid = settings.get("proxy_recurso_guild")
+        _cur  = get_settings(_rgid).get("unban_panel_color")
+        _cur_hex = f"{_cur:06X}" if _cur else ""
+
+        class _ColorModal(discord.ui.Modal, title="Cor do Painel de Unban"):
+            hex_input = discord.ui.TextInput(
+                label="Cor (hex)",
+                placeholder="Ex: 7C3AED (vazio = cor padrão)",
+                required=False,
+                max_length=7,
+                default=_cur_hex,
+            )
+
+            def __init__(inner, pv):
+                super().__init__()
+                inner._pv = pv
+
+            async def on_submit(inner, inter: discord.Interaction):
+                s = get_settings(inter.guild.id)
+                rgid = s.get("proxy_recurso_guild")
+                rs = get_settings(rgid) if rgid else s
+                raw = inner.hex_input.value.strip().lstrip("#")
+                if not raw:
+                    rs["unban_panel_color"] = None
+                    _txt = "Cor removida (volta pra cor padrão)."
+                else:
+                    if not re.fullmatch(r"[0-9A-Fa-f]{6}", raw):
+                        await inter.response.send_message(
+                            embed=_notif_embed("<a:alerta:1518271939460857968> Cor inválida. Use hex de 6 dígitos, ex: `7C3AED`."),
+                            ephemeral=True,
+                        )
+                        return
+                    rs["unban_panel_color"] = int(raw, 16)
+                    _txt = f"Cor definida: `#{raw.upper()}`."
+                save_settings_to_disk()
+                await inter.response.edit_message(
+                    embed=build_proxy_config_embed(inner._pv.author, s), view=ProxyView(inner._pv.author),
+                )
+                await inter.followup.send(
+                    embed=_notif_embed(f"<a:online:1518271945550856295> {_txt} Reenvie o painel (Configurar Canal) e a embed de entrada pra ver."),
+                    ephemeral=True,
+                )
+
+        await interaction.response.send_modal(_ColorModal(self))
 
     async def _back(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -43482,6 +43546,25 @@ def _unban_duration_str(rec: dict) -> str:
     return _fmt_duration(int(dur))
 
 
+def _unban_display_name(guild, settings: dict) -> str:
+    """Nome exibido nos títulos do sistema de Unban/Entrada: prioriza o nome do
+    servidor PRINCIPAL (unban_main_guild) — o recurso costuma ter um nome interno
+    de infraestrutura (ex: "NATA - Entrance") que não deve aparecer pro usuário
+    banido. Sem servidor principal acessível, cai pro nome do próprio servidor."""
+    main_gid = (settings or {}).get("unban_main_guild")
+    if main_gid:
+        main_guild = bot.get_guild(main_gid)
+        if main_guild:
+            return main_guild.name
+    return guild.name if guild else "Servidor"
+
+
+def _unban_panel_color(settings: dict) -> int:
+    """Cor da barra lateral do painel/ticket/entrada: usa a configurada
+    (unban_panel_color) senão cai pro embed_color geral, senão o padrão."""
+    return (settings or {}).get("unban_panel_color") or (settings or {}).get("embed_color", UNBAN_ACCENT)
+
+
 def _ue(settings: dict, key: str, guild, *keywords: str, uni: str = "•") -> str:
     """Emoji do painel/ticket de unban: usa o configurado (unban_emojis[key]);
     senão busca por nome no servidor; senão o unicode de fallback."""
@@ -43523,8 +43606,8 @@ class EntranceLayout(discord.ui.LayoutView):
     def __init__(self, guild: discord.Guild | None = None, settings: dict | None = None):
         super().__init__(timeout=None)
         settings = settings or {}
-        color = settings.get("embed_color", UNBAN_ACCENT)
-        nome  = guild.name if guild else "Servidor"
+        color = _unban_panel_color(settings)
+        nome  = _unban_display_name(guild, settings)
         logo  = settings.get("entrance_logo") or (guild.icon.url if (guild and guild.icon) else None)
         _e_title = str(_guild_emoji(guild, "nata", "logo", "hit", fallback="🏠"))
         text = settings.get("entrance_text") or "Esse é nosso **servidor de utilidades**."
@@ -43550,7 +43633,7 @@ class UnbanPanelLayout(discord.ui.LayoutView):
     def __init__(self, guild: discord.Guild | None = None, settings: dict | None = None):
         super().__init__(timeout=None)
         settings  = settings or {}
-        color     = settings.get("embed_color", UNBAN_ACCENT)
+        color     = _unban_panel_color(settings)
         # título: emoji configurado ("Emojis do Painel") > emoji chamado exatamente
         # "nata" no servidor > por palavra-chave (ban/martelo/cadeado) > 🔨 unicode
         _cfg_title  = (settings or {}).get("unban_emojis", {}).get("title")
@@ -43563,7 +43646,7 @@ class UnbanPanelLayout(discord.ui.LayoutView):
             _e_title = str(_guild_emoji(guild, "banhit", "ban", "martelo", "cadeadohit", fallback="🔨"))
         _e_ticket = _ue(settings, "ticket", guild, "ticket", uni="🎟️")
         _e_id     = _ue(settings, "id", guild, "hitid", "nataid", uni="🆔")
-        _nome     = guild.name if guild else "Servidor"
+        _nome     = _unban_display_name(guild, settings)
         # Logo configurável (URL) → fallback pro ícone do servidor
         icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
 
@@ -43872,7 +43955,7 @@ class UnbanTicketLayout(discord.ui.LayoutView):
         _e_autor  = _ue(settings, "autor", guild, "config", uni="👤")
         _e_motivo = _ue(settings, "motivo", guild, "regra", uni="📝")
         _e_dur    = _ue(settings, "dur", guild, "relogio", uni="⏱️")
-        _nome     = guild.name if guild else "Servidor"
+        _nome     = _unban_display_name(guild, settings)
         icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
         opener_name = getattr(opener, "display_name", str(opener)) if opener else "?"
 
@@ -43903,7 +43986,7 @@ class UnbanTicketLayout(discord.ui.LayoutView):
         ))
         items.append(discord.ui.Separator(visible=True))
         items.append(discord.ui.ActionRow(_TkDesbanirBtn(), _TkFecharBtn()))
-        self.add_item(discord.ui.Container(*items, accent_colour=UNBAN_ACCENT))
+        self.add_item(discord.ui.Container(*items, accent_colour=_unban_panel_color(settings)))
 
 
 class UnbanTicketView(discord.ui.View):
