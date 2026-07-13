@@ -4603,6 +4603,10 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("unban_tickets", {})            # {channel_id: {ban_id, user_id, target_gid, opener_id}}
     settings.setdefault("proxy_recurso_guild", None)    # servidor de recurso vinculado (trava após 1)
     settings.setdefault("proxy_recurso_channel", None)  # canal (no recurso) onde o painel é postado
+    settings.setdefault("entrance_text", None)          # texto/descrição da embed de entrada (recurso)
+    settings.setdefault("entrance_link", None)          # link do servidor principal
+    settings.setdefault("entrance_logo", None)          # logo/imagem do lado (URL)
+    settings.setdefault("entrance_channel", None)       # canal (no recurso) onde a embed de entrada é postada
     settings.setdefault("protecao_cargos_enabled", False)
     settings.setdefault("protecao_cargos_grupos", [])
     settings.setdefault("protecao_cargos_whitelist", [])
@@ -21139,6 +21143,205 @@ def build_proxy_config_embed(author: discord.Member, settings: dict) -> discord.
     return embed
 
 
+# ── Embed de Entrada (Entrance) do servidor de recurso ────────────────────────
+def build_entrance_config_embed(author: discord.Member, settings: dict) -> discord.Embed:
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
+    embed = discord.Embed(
+        color=settings.get("embed_color", 0xE53935),
+        description=(
+            "Configure a **embed de entrada** do servidor de recurso — a mensagem "
+            "de boas-vindas que apresenta o servidor e o link do principal.\n\n"
+            "Defina o **conteúdo** (texto, link, logo) e depois **Configurar Canal** "
+            "para postá-la no servidor de recurso."
+        ),
+    )
+    embed.set_author(name="Embed de Entrada", icon_url=icon_url)
+    if icon_url:
+        embed.set_thumbnail(url=_avatar_url(author))
+
+    txt   = settings.get("entrance_text")
+    link  = settings.get("entrance_link")
+    logo  = settings.get("entrance_logo")
+    rgid  = settings.get("proxy_recurso_guild")
+    ch_id = settings.get("entrance_channel")
+    canal_str = "`Não configurado`"
+    if rgid and ch_id:
+        g = bot.get_guild(rgid)
+        ch = g.get_channel(ch_id) if g else None
+        canal_str = ch.mention if ch else f"`{ch_id}`"
+
+    embed.add_field(
+        name="<:ferramentas_:1518271998613131274>  Conteúdo",
+        value=(
+            f"┃ **Texto:** {('`definido`' if txt else '`padrão`')}\n"
+            f"┃ **Link do principal:** {(f'`{link}`' if link else '`Não definido`')}\n"
+            f"┃ **Logo/imagem:** {('`definida`' if logo else '`ícone do servidor`')}\n"
+            f"┃ **Canal:** {canal_str}"
+        ),
+        inline=False,
+    )
+    embed.set_footer(text=f"Solicitado por {author.name}", icon_url=icon_url)
+    embed.timestamp = datetime.now()
+    return embed
+
+
+class _EntranceContentModal(discord.ui.Modal, title="Conteúdo da Embed de Entrada"):
+    txt = discord.ui.TextInput(
+        label="Texto (descrição)",
+        placeholder="Esse é nosso servidor de utilidades.",
+        required=False, max_length=2000, style=discord.TextStyle.paragraph,
+    )
+    link = discord.ui.TextInput(
+        label="Link do servidor principal",
+        placeholder="https://discord.gg/...",
+        required=False, max_length=200,
+    )
+    logo = discord.ui.TextInput(
+        label="Logo/imagem do lado (URL)",
+        placeholder="https://... .png/.gif (vazio = ícone do servidor)",
+        required=False, max_length=300,
+    )
+
+    def __init__(self, parent_view, settings):
+        super().__init__()
+        self._pv = parent_view
+        self.txt.default  = settings.get("entrance_text") or ""
+        self.link.default = settings.get("entrance_link") or ""
+        self.logo.default = settings.get("entrance_logo") or ""
+
+    async def on_submit(self, interaction: discord.Interaction):
+        s = get_settings(interaction.guild.id)
+        _t  = self.txt.value.strip()
+        _l  = self.link.value.strip()
+        _lg = self.logo.value.strip()
+        for _v, _nome in ((_l, "Link"), (_lg, "URL da logo")):
+            if _v and not _v.startswith(("http://", "https://")):
+                await interaction.response.send_message(
+                    embed=_notif_embed(f"<a:alerta:1518271939460857968> {_nome} inválido (precisa começar com http)."),
+                    ephemeral=True)
+                return
+        s["entrance_text"] = _t or None
+        s["entrance_link"] = _l or None
+        s["entrance_logo"] = _lg or None
+        save_settings_to_disk()
+        await interaction.response.edit_message(
+            embed=build_entrance_config_embed(self._pv.author, s), view=EntranceConfigView(self._pv.author))
+        await interaction.followup.send(
+            embed=_notif_embed("<a:online:1518271945550856295> Conteúdo salvo. Use **Configurar Canal** para postar/atualizar."),
+            ephemeral=True)
+
+
+class _EntranceCanalModal(discord.ui.Modal, title="Configurar Canal da Entrada"):
+    channel_id_input = discord.ui.TextInput(
+        label="ID do canal (no servidor de recurso)",
+        placeholder="Ex: 123456789012345678",
+        required=True, max_length=25,
+    )
+
+    def __init__(self, parent_view):
+        super().__init__()
+        self._pv = parent_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        rgid = settings.get("proxy_recurso_guild")
+        if not rgid:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule um servidor de recurso primeiro (no Proxy)."),
+                ephemeral=True)
+            return
+        g = bot.get_guild(rgid)
+        if g is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> O bot não está no servidor de recurso."),
+                ephemeral=True)
+            return
+        try:
+            cid = int(self.channel_id_input.value.strip("<#> "))
+        except ValueError:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> ID inválido. Informe apenas números."),
+                ephemeral=True)
+            return
+        ch = g.get_channel(cid)
+        if not isinstance(ch, discord.TextChannel):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Canal de texto não encontrado nesse servidor. Verifique o ID."),
+                ephemeral=True)
+            return
+        settings["entrance_channel"] = cid
+        save_settings_to_disk()
+        try:
+            await ch.send(view=EntranceLayout(guild=g, settings=settings))
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Sem permissão para enviar em `#{ch.name}`."),
+                ephemeral=True)
+            return
+        except discord.HTTPException as e:
+            await interaction.response.send_message(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Erro ao postar: `{e}`"),
+                ephemeral=True)
+            return
+        await interaction.response.edit_message(
+            embed=build_entrance_config_embed(self._pv.author, settings), view=EntranceConfigView(self._pv.author))
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> Embed de entrada postada em {ch.mention}!"),
+            ephemeral=True)
+
+
+class EntranceConfigView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=None)
+        self.author = author
+        linked = bool(get_settings(author.guild.id if author.guild else 0).get("proxy_recurso_guild"))
+
+        btn_back = discord.ui.Button(label="Voltar", style=discord.ButtonStyle.primary, emoji=_button_emoji(discord.ButtonStyle.primary), row=0)
+        btn_back.callback = self._back
+        self.add_item(btn_back)
+
+        btn_content = discord.ui.Button(label="Definir Conteúdo", style=discord.ButtonStyle.secondary, emoji="📝", row=0, disabled=not linked)
+        btn_content.callback = self._content
+        self.add_item(btn_content)
+
+        btn_preview = discord.ui.Button(label="Ver Prévia", style=discord.ButtonStyle.secondary, emoji="👁️", row=0)
+        btn_preview.callback = self._preview
+        self.add_item(btn_preview)
+
+        btn_canal = discord.ui.Button(label="Configurar Canal", style=discord.ButtonStyle.success, emoji=discord.PartialEmoji.from_str("<:tickets:1518271952526250155>"), row=1, disabled=not linked)
+        btn_canal.callback = self._canal
+        self.add_item(btn_canal)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
+            await interaction.response.send_message(TRANSLATIONS[lang]["only_author"], ephemeral=True)
+            return False
+        return True
+
+    async def _back(self, interaction: discord.Interaction):
+        s = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(embed=build_proxy_config_embed(self.author, s), view=ProxyView(self.author))
+
+    async def _content(self, interaction: discord.Interaction):
+        s = get_settings(interaction.guild.id)
+        if not s.get("proxy_recurso_guild"):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule o servidor de recurso primeiro (no Proxy)."),
+                ephemeral=True)
+            return
+        await interaction.response.send_modal(_EntranceContentModal(self, s))
+
+    async def _canal(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(_EntranceCanalModal(self))
+
+    async def _preview(self, interaction: discord.Interaction):
+        s = get_settings(interaction.guild.id)
+        rgid = s.get("proxy_recurso_guild")
+        g = bot.get_guild(rgid) if rgid else interaction.guild
+        await interaction.response.send_message(view=EntranceLayout(guild=g, settings=s), ephemeral=True)
+
+
 class _ProxyVincularModal(discord.ui.Modal, title="Vincular Servidor de Recurso"):
     guild_id_input = discord.ui.TextInput(
         label="ID do servidor de recurso",
@@ -21516,10 +21719,25 @@ class ProxyView(discord.ui.View):
         btn_emojis.callback = self._set_emojis
         self.add_item(btn_emojis)
 
+        btn_entrance = discord.ui.Button(
+            label="Embed de Entrada",
+            style=discord.ButtonStyle.secondary,
+            emoji="🏠",
+            row=3,
+            disabled=not linked,
+        )
+        btn_entrance.callback = self._open_entrance
+        self.add_item(btn_entrance)
+
     async def _back(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         embed = build_limite_ban_embed(self.author, settings)
         await interaction.response.edit_message(embed=embed, view=LimiteBanView(self.author))
+
+    async def _open_entrance(self, interaction: discord.Interaction):
+        s = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=build_entrance_config_embed(self.author, s), view=EntranceConfigView(self.author))
 
     async def _set_emojis(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -43284,6 +43502,34 @@ class _UnbanSearchBtn(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(UnbanSearchModal())
+
+
+class EntranceLayout(discord.ui.LayoutView):
+    """Embed de entrada do servidor de utilidades (Components V2), estilo HIT.
+    Display-only (sem botões) — não precisa de add_view."""
+    def __init__(self, guild: discord.Guild | None = None, settings: dict | None = None):
+        super().__init__(timeout=None)
+        settings = settings or {}
+        color = settings.get("embed_color", UNBAN_ACCENT)
+        nome  = guild.name if guild else "Servidor"
+        logo  = settings.get("entrance_logo") or (guild.icon.url if (guild and guild.icon) else None)
+        _e_title = str(_guild_emoji(guild, "nata", "logo", "hit", fallback="🏠"))
+        text = settings.get("entrance_text") or "Esse é nosso **servidor de utilidades**."
+        link = settings.get("entrance_link")
+
+        _title = discord.ui.TextDisplay(f"# {_e_title} {nome}")
+        body = text
+        if link:
+            body += ("\n\n-# Se você estiver procurando pelo **servidor principal**, "
+                     f"entre pelo link:\n{link}")
+        _body = discord.ui.TextDisplay(body)
+
+        items = [_title, discord.ui.Separator(visible=True)]
+        if logo:
+            items.append(discord.ui.Section(_body, accessory=discord.ui.Thumbnail(logo)))
+        else:
+            items.append(_body)
+        self.add_item(discord.ui.Container(*items, accent_colour=color))
 
 
 class UnbanPanelLayout(discord.ui.LayoutView):
