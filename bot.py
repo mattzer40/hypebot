@@ -42504,9 +42504,9 @@ def _fmt_duration(seconds: int) -> str:
 @discord.app_commands.describe(
     usuario="Mencione o membro a ser banido.",
     motivo="Motivo do banimento.",
-    tempo="Duração (ex: 1h, 30m, 1h30m). Digite 0 para ban permanente.",
+    tempo="Duração (ex: 1h, 30m, 1h30m). Deixe vazio ou 0 para ban permanente.",
 )
-async def ban_slash(interaction: discord.Interaction, usuario: discord.Member, motivo: str, tempo: str):
+async def ban_slash(interaction: discord.Interaction, usuario: discord.Member, motivo: str, tempo: str = ""):
     if interaction.guild is None:
         return
     membro   = usuario
@@ -42542,15 +42542,12 @@ async def ban_slash(interaction: discord.Interaction, usuario: discord.Member, m
                 await interaction.response.send_message(embed=_lb_embed, ephemeral=True)
                 return
 
-    # ── Validar duração (0 = permanente) ─────────────────────────────────────
+    # ── Duração: vazio, 0 ou inválido = permanente (nunca bloqueia o ban) ─────
     duracao_seconds = None
-    if tempo.strip() not in ("0", ""):
-        duracao_seconds = _parse_duration(tempo.strip())
-        if duracao_seconds is None:
-            await interaction.response.send_message(
-                "<a:alerta:1518271939460857968> Tempo inválido. Use `1h`, `30m`, `1h30m` ou `0` para permanente.", ephemeral=True
-            )
-            return
+    _t = (tempo or "").strip()
+    if _t not in ("0", ""):
+        # Se o formato for inválido, _parse_duration retorna None → ban permanente.
+        duracao_seconds = _parse_duration(_t)
 
     # Defer antes de qualquer operação assíncrona (DM, ban) — evita timeout de 3s
     await interaction.response.defer()
