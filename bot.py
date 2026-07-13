@@ -21915,6 +21915,10 @@ class _UnbanLogCanalModal(discord.ui.Modal, title="Canal de Logs de Desbanimento
             return
         rs["unban_log_channel"] = cid
         save_settings_to_disk()
+        print(f"[unban_log][SAVE] main_gid={interaction.guild.id} rgid={rgid} "
+              f"dev_ctx={_dev_guild_ctx.get(0)} salvo_id(rs)={id(rs)} "
+              f"rs['unban_log_channel']={rs.get('unban_log_channel')} "
+              f"get_settings(rgid) again={get_settings(rgid).get('unban_log_channel')}", flush=True)
         await interaction.response.edit_message(
             embed=build_proxy_config_embed(self._pv.author, settings), view=ProxyView(self._pv.author))
         await interaction.followup.send(
@@ -44443,6 +44447,11 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
     Usa os emojis já CONFIGURADOS (_ue) — não busca por palavra-chave (_guild_emoji),
     que já pegou emoji errado outras vezes por causa dos muitos emojis 'nata_*'."""
     log_ch_id = settings.get("unban_log_channel")
+    print(f"[unban_log][READ] guild={interaction.guild.id} ({interaction.guild.name}) "
+          f"dev_ctx={_dev_guild_ctx.get(0)} settings_id={id(settings)} "
+          f"log_ch_id={log_ch_id} all_keys_sample={[k for k in settings if 'unban' in k][:10]} "
+          f"reread=get_settings(guild).get(...)={get_settings(interaction.guild.id).get('unban_log_channel')}",
+          flush=True)
     if not log_ch_id:
         return
     log_ch = interaction.guild.get_channel(log_ch_id)
