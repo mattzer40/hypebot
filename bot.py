@@ -43717,9 +43717,21 @@ def _unban_display_name(guild, settings: dict) -> str:
 
 
 def _unban_panel_color(settings: dict) -> int:
-    """Cor da barra lateral do painel/ticket/entrada: usa a configurada
-    (unban_panel_color) senão cai pro embed_color geral, senão o padrão."""
-    return (settings or {}).get("unban_panel_color") or (settings or {}).get("embed_color", UNBAN_ACCENT)
+    """Cor da barra lateral do painel/ticket/entrada. Ordem:
+    1) unban_panel_color (botão 'Cor do Painel', se definido)
+    2) embed_color do servidor PRINCIPAL (Aparência do cliente) — o painel é
+       postado no recurso, mas a cor deve seguir a que o cliente escolheu lá
+    3) embed_color das settings recebidas
+    4) UNBAN_ACCENT padrão"""
+    settings = settings or {}
+    if settings.get("unban_panel_color"):
+        return settings["unban_panel_color"]
+    _main_gid = settings.get("unban_main_guild")
+    if _main_gid:
+        _main = get_settings(_main_gid)
+        if _main.get("embed_color"):
+            return _main["embed_color"]
+    return settings.get("embed_color", UNBAN_ACCENT)
 
 
 def _ue(settings: dict, key: str, guild, *keywords: str, uni: str = "•") -> str:
