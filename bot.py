@@ -4611,6 +4611,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("entrance_text", None)          # texto/descrição da embed de entrada (recurso)
     settings.setdefault("entrance_link", None)          # link do servidor principal
     settings.setdefault("entrance_logo", None)          # logo/imagem do lado (URL)
+    settings.setdefault("entrance_emoji", None)         # emoji do título (ex: <:natacu:id>); None = padrão
     settings.setdefault("entrance_channel", None)       # canal (no recurso) onde a embed de entrada é postada
     settings.setdefault("cargos_title", None)           # título da embed de cargos/benefícios
     settings.setdefault("cargos_text", None)            # texto (benefícios + contatos)
@@ -21183,6 +21184,7 @@ def build_entrance_config_embed(author: discord.Member, settings: dict) -> disco
     txt   = settings.get("entrance_text")
     link  = settings.get("entrance_link")
     logo  = settings.get("entrance_logo")
+    emoji = settings.get("entrance_emoji")
     rgid  = settings.get("proxy_recurso_guild")
     ch_id = settings.get("entrance_channel")
     canal_str = "`Não configurado`"
@@ -21197,6 +21199,7 @@ def build_entrance_config_embed(author: discord.Member, settings: dict) -> disco
             f"┃ **Texto:** {('`definido`' if txt else '`padrão`')}\n"
             f"┃ **Link do principal:** {(f'`{link}`' if link else '`Não definido`')}\n"
             f"┃ **Logo/imagem:** {('`definida`' if logo else '`ícone do servidor`')}\n"
+            f"┃ **Emoji do título:** {(emoji if emoji else '`padrão`')}\n"
             f"┃ **Canal:** {canal_str}"
         ),
         inline=False,
@@ -21222,28 +21225,36 @@ class _EntranceContentModal(discord.ui.Modal, title="Conteúdo da Embed de Entra
         placeholder="https://... .png/.gif (vazio = ícone do servidor)",
         required=False, max_length=300,
     )
+    emoji = discord.ui.TextInput(
+        label="Emoji do título",
+        placeholder="Cole o emoji, ex: <:natacu:id> (vazio = padrão)",
+        required=False, max_length=60,
+    )
 
     def __init__(self, parent_view, settings):
         super().__init__()
         self._pv = parent_view
-        self.txt.default  = settings.get("entrance_text") or ""
-        self.link.default = settings.get("entrance_link") or ""
-        self.logo.default = settings.get("entrance_logo") or ""
+        self.txt.default   = settings.get("entrance_text") or ""
+        self.link.default  = settings.get("entrance_link") or ""
+        self.logo.default  = settings.get("entrance_logo") or ""
+        self.emoji.default = settings.get("entrance_emoji") or ""
 
     async def on_submit(self, interaction: discord.Interaction):
         s = get_settings(interaction.guild.id)
         _t  = self.txt.value.strip()
         _l  = self.link.value.strip()
         _lg = self.logo.value.strip()
+        _em = self.emoji.value.strip()
         for _v, _nome in ((_l, "Link"), (_lg, "URL da logo")):
             if _v and not _v.startswith(("http://", "https://")):
                 await interaction.response.send_message(
                     embed=_notif_embed(f"<a:alerta:1518271939460857968> {_nome} inválido (precisa começar com http)."),
                     ephemeral=True)
                 return
-        s["entrance_text"] = _t or None
-        s["entrance_link"] = _l or None
-        s["entrance_logo"] = _lg or None
+        s["entrance_text"]  = _t or None
+        s["entrance_link"]  = _l or None
+        s["entrance_logo"]  = _lg or None
+        s["entrance_emoji"] = _em or None
         save_settings_to_disk()
         await interaction.response.edit_message(
             embed=build_entrance_config_embed(self._pv.author, s), view=EntranceConfigView(self._pv.author))
@@ -44144,7 +44155,7 @@ class EntranceLayout(discord.ui.LayoutView):
         color = _unban_panel_color(settings)
         nome  = _unban_display_name(guild, settings)
         logo  = settings.get("entrance_logo") or (guild.icon.url if (guild and guild.icon) else None)
-        _e_title = "<:natacu:1526181031965884446>"
+        _e_title = settings.get("entrance_emoji") or "<:natacu:1526181031965884446>"
         text = settings.get("entrance_text") or "Esse é nosso **servidor de utilidades**."
         link = settings.get("entrance_link")
 
