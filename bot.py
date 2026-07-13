@@ -21915,10 +21915,6 @@ class _UnbanLogCanalModal(discord.ui.Modal, title="Canal de Logs de Desbanimento
             return
         rs["unban_log_channel"] = cid
         save_settings_to_disk()
-        print(f"[unban_log][SAVE] main_gid={interaction.guild.id} rgid={rgid} "
-              f"dev_ctx={_dev_guild_ctx.get(0)} salvo_id(rs)={id(rs)} "
-              f"rs['unban_log_channel']={rs.get('unban_log_channel')} "
-              f"get_settings(rgid) again={get_settings(rgid).get('unban_log_channel')}", flush=True)
         await interaction.response.edit_message(
             embed=build_proxy_config_embed(self._pv.author, settings), view=ProxyView(self._pv.author))
         await interaction.followup.send(
@@ -44447,11 +44443,6 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
     Usa os emojis já CONFIGURADOS (_ue) — não busca por palavra-chave (_guild_emoji),
     que já pegou emoji errado outras vezes por causa dos muitos emojis 'nata_*'."""
     log_ch_id = settings.get("unban_log_channel")
-    print(f"[unban_log][READ] guild={interaction.guild.id} ({interaction.guild.name}) "
-          f"dev_ctx={_dev_guild_ctx.get(0)} settings_id={id(settings)} "
-          f"log_ch_id={log_ch_id} all_keys_sample={[k for k in settings if 'unban' in k][:10]} "
-          f"reread=get_settings(guild).get(...)={get_settings(interaction.guild.id).get('unban_log_channel')}",
-          flush=True)
     if not log_ch_id:
         return
     log_ch = interaction.guild.get_channel(log_ch_id)
@@ -44465,8 +44456,15 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
             pass
         return
 
-    _e_id    = _ue(settings, "id", interaction.guild, "hitid", "nataid", uni="🆔")
-    _e_autor = _ue(settings, "autor", interaction.guild, "config", uni="🛡️")
+    # Reaproveita as MESMAS chaves configuráveis do ticket/painel ("Emojis do
+    # Painel") em vez de adivinhar por palavra-chave — se o usuário já tem um
+    # emoji do servidor configurado pra "autor"/"motivo"/"dur", o log usa
+    # automaticamente, sem precisar configurar de novo.
+    _e_title  = _ue(settings, "title", interaction.guild, "cadeado", "martelo", "ban", uni="✅")
+    _e_id     = _ue(settings, "id", interaction.guild, "hitid", "nataid", uni="🆔")
+    _e_autor  = _ue(settings, "autor", interaction.guild, "config", uni="👤")   # quem BANIU originalmente
+    _e_motivo = _ue(settings, "motivo", interaction.guild, "regra", uni="📝")
+    _e_dur    = _ue(settings, "dur", interaction.guild, "relogio", uni="⏱️")
 
     try:
         user = await bot.fetch_user(user_id)
@@ -44474,16 +44472,19 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
     except Exception:
         user_name, user_avatar = f"ID {user_id}", None
 
-    embed = discord.Embed(title="✅ Membro Desbanido", color=_unban_panel_color(settings))
+    embed = discord.Embed(title=f"{_e_title} Membro Desbanido", color=_unban_panel_color(settings))
     if user_avatar:
         embed.set_thumbnail(url=user_avatar)
     embed.add_field(name=f"{_e_id} ID de Banimento", value=f"`{info.get('ban_id', '—')}`", inline=True)
     embed.add_field(name="👤 Usuário", value=f"{user_name}\n<@{user_id}>", inline=True)
-    embed.add_field(name=f"{_e_autor} Desbanido por", value=interaction.user.mention, inline=True)
+    embed.add_field(name="🛡️ Desbanido por", value=interaction.user.mention, inline=True)
     if record:
-        embed.add_field(name="📋 Motivo original", value=record.get("reason") or "Não informado", inline=False)
-        embed.add_field(name="🔨 Banido por", value=record.get("banned_by_name") or "—", inline=True)
+        _dur_val = record.get("duration")
+        _dur_str = _fmt_duration(_dur_val) if _dur_val else "Permanente"
+        embed.add_field(name=f"{_e_motivo} Motivo original", value=record.get("reason") or "Não informado", inline=False)
+        embed.add_field(name=f"{_e_autor} Banido por", value=record.get("banned_by_name") or "—", inline=True)
         embed.add_field(name="📅 Banido em", value=record.get("banned_at") or "—", inline=True)
+        embed.add_field(name=f"{_e_dur} Duração", value=_dur_str, inline=True)
     embed.set_footer(text=f"Desbanido em {date_str}")
     embed.timestamp = datetime.now()
     try:
