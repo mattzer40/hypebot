@@ -1931,6 +1931,8 @@ TRANSLATIONS = {
         "ig_emoji_botao_instagram": "Botão Instagram",
         "ig_emoji_botao_tiktok": "Botão TikTok",
         "ig_emoji_deletar": "Deletar",
+        "ig_emoji_titulo": "Título (topo)",
+        "ig_emoji_usuario": "Usuário (@)",
         "ig_emoji_set": "Emoji **{name}** atualizado!",
         "ig_emojis_reset_done": "Emojis resetados aos padrões!",
         "ig_emoji_modal_title": "Definir Emoji - {name}",
@@ -3652,6 +3654,8 @@ TRANSLATIONS = {
         "ig_emoji_botao_instagram": "Instagram Button",
         "ig_emoji_botao_tiktok": "TikTok Button",
         "ig_emoji_deletar": "Delete",
+        "ig_emoji_titulo": "Title (top)",
+        "ig_emoji_usuario": "User (@)",
         "ig_emoji_set": "Emoji **{name}** updated!",
         "ig_emojis_reset_done": "Emojis reset to defaults!",
         "ig_emoji_modal_title": "Set Emoji - {name}",
@@ -4689,6 +4693,8 @@ def get_settings(guild_id: int) -> dict:
         "botao_instagram": "📷",
         "botao_tiktok": "🎵",
         "deletar": "🗑️",
+        "titulo": "📷",
+        "usuario": "👤",
     })
     settings.setdefault("ig_mensagem", None)
     settings.setdefault("ig_canal_mensagem", None)
@@ -16497,8 +16503,8 @@ def _build_ig_card_components(
     ig_emj = settings.get("ig_emojis", {}) or {}
     # Emoji do TÍTULO (topo) é separado do emoji do BOTÃO de Instagram, para que
     # mudar o botão não altere o título. Fallbacks mantêm compatibilidade.
-    _title_emoji = ig_emj.get("titulo") or ig_emj.get("botao_instagram") or "📷"
-    _user_emoji  = ig_emj.get("usuario") or ig_emj.get("botao_instagram") or "📷"
+    _title_emoji = ig_emj.get("titulo") or "📷"
+    _user_emoji  = ig_emj.get("usuario") or "👤"
     # Título configurável: se "titulo_texto" estiver definido (ex.: emojis do
     # wordmark), usa ele como o título inteiro; senão, "{emoji} Instagram".
     _titulo_txt = ig_emj.get("titulo_texto")
@@ -17149,7 +17155,9 @@ def build_ig_emojis_embed(settings: dict) -> discord.Embed:
             f"{_line('ver_comentarios', 'ig_emoji_ver_comentarios')}\n"
             f"{_line('botao_instagram', 'ig_emoji_botao_ig')}\n"
             f"{_line('botao_tiktok', 'ig_emoji_botao_tiktok')}\n"
-            f"{_line('deletar', 'ig_emoji_deletar')}"
+            f"{_line('deletar', 'ig_emoji_deletar')}\n"
+            f"{_line('titulo', 'ig_emoji_titulo')}\n"
+            f"{_line('usuario', 'ig_emoji_usuario')}"
         ),
         inline=False,
     )
@@ -17200,7 +17208,12 @@ class IgEmojisView(discord.ui.View):
             ("botao_instagram", "ig_emoji_botao_ig", 1),
             ("deletar", "ig_emoji_deletar", 1),
         ]
-        for key, lk, row in row0_items + row1_items:
+        # Emojis do TOPO do card (título e do @usuário) — independentes do botão
+        row2_items = [
+            ("titulo", "ig_emoji_titulo", 2),
+            ("usuario", "ig_emoji_usuario", 2),
+        ]
+        for key, lk, row in row0_items + row1_items + row2_items:
             btn = discord.ui.Button(label=t[lk], style=discord.ButtonStyle.secondary, row=row)
             btn.callback = self._make_cb(key)
             self.add_item(btn)
