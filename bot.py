@@ -4618,6 +4618,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("cargos_logo", None)            # logo/imagem do lado (URL)
     settings.setdefault("cargos_channel", None)         # canal (no recurso) onde a embed de cargos é postada
     settings.setdefault("unban_panel_color", None)      # cor da barra lateral (painel/ticket/entrada); None = padrão
+    settings.setdefault("unban_log_channel", None)      # canal (no recurso) onde o log de desbanimento é postado
     settings.setdefault("protecao_cargos_enabled", False)
     settings.setdefault("protecao_cargos_grupos", [])
     settings.setdefault("protecao_cargos_whitelist", [])
@@ -21838,6 +21839,50 @@ class _ProxyRecursoPickerView(discord.ui.View):
         )
 
 
+class _UnbanLogCanalModal(discord.ui.Modal, title="Canal de Logs de Desbanimento"):
+    channel_id_input = discord.ui.TextInput(
+        label="ID do canal (no servidor de recurso)",
+        placeholder="Ex: 123456789012345678 (vazio = desativa o log)",
+        required=False, max_length=25,
+    )
+
+    def __init__(self, parent_view):
+        super().__init__()
+        self._pv = parent_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        raw = self.channel_id_input.value.strip()
+        if not raw:
+            settings["unban_log_channel"] = None
+            save_settings_to_disk()
+            await interaction.response.edit_message(
+                embed=build_proxy_config_embed(self._pv.author, settings), view=ProxyView(self._pv.author))
+            await interaction.followup.send(
+                embed=_notif_embed("<a:online:1518271945550856295> Canal de logs desativado."), ephemeral=True)
+            return
+        try:
+            cid = int(raw.strip("<#> "))
+        except ValueError:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> ID inválido. Informe apenas números."),
+                ephemeral=True)
+            return
+        ch = interaction.guild.get_channel(cid)
+        if not isinstance(ch, discord.TextChannel):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Canal de texto não encontrado nesse servidor. Verifique o ID."),
+                ephemeral=True)
+            return
+        settings["unban_log_channel"] = cid
+        save_settings_to_disk()
+        await interaction.response.edit_message(
+            embed=build_proxy_config_embed(self._pv.author, settings), view=ProxyView(self._pv.author))
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> Log de desbanimento será postado em {ch.mention}."),
+            ephemeral=True)
+
+
 class ProxyView(discord.ui.View):
     def __init__(self, author: discord.Member):
         super().__init__(timeout=None)
@@ -21973,6 +22018,26 @@ class ProxyView(discord.ui.View):
         )
         btn_cargos.callback = self._open_cargos
         self.add_item(btn_cargos)
+
+        btn_log = discord.ui.Button(
+            label="Canal de Logs (Desbanimento)",
+            style=discord.ButtonStyle.secondary,
+            emoji="📜",
+            row=4,
+            disabled=not linked,
+        )
+        btn_log.callback = self._set_log_channel
+        self.add_item(btn_log)
+
+    async def _set_log_channel(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        if not settings.get("proxy_recurso_guild"):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule o servidor de recurso primeiro."),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.send_modal(_UnbanLogCanalModal(self))
 
     async def _open_cargos(self, interaction: discord.Interaction):
         s = get_settings(interaction.guild.id)
@@ -44338,6 +44403,45 @@ async def _unban_close_channel(interaction: discord.Interaction):
         pass
 
 
+async def _post_unban_log(interaction: discord.Interaction, settings: dict, info: dict,
+                          user_id: int, record: dict | None, date_str: str) -> None:
+    """Posta um log no canal configurado toda vez que um membro é desbanido via ticket.
+    Usa os emojis já CONFIGURADOS (_ue) — não busca por palavra-chave (_guild_emoji),
+    que já pegou emoji errado outras vezes por causa dos muitos emojis 'nata_*'."""
+    log_ch_id = settings.get("unban_log_channel")
+    if not log_ch_id:
+        return
+    log_ch = interaction.guild.get_channel(log_ch_id)
+    if not isinstance(log_ch, discord.TextChannel):
+        return
+
+    _e_id    = _ue(settings, "id", interaction.guild, "hitid", "nataid", uni="🆔")
+    _e_autor = _ue(settings, "autor", interaction.guild, "config", uni="🛡️")
+
+    try:
+        user = await bot.fetch_user(user_id)
+        user_name, user_avatar = str(user), user.display_avatar.url
+    except Exception:
+        user_name, user_avatar = f"ID {user_id}", None
+
+    embed = discord.Embed(title="✅ Membro Desbanido", color=_unban_panel_color(settings))
+    if user_avatar:
+        embed.set_thumbnail(url=user_avatar)
+    embed.add_field(name=f"{_e_id} ID de Banimento", value=f"`{info.get('ban_id', '—')}`", inline=True)
+    embed.add_field(name="👤 Usuário", value=f"{user_name}\n<@{user_id}>", inline=True)
+    embed.add_field(name=f"{_e_autor} Desbanido por", value=interaction.user.mention, inline=True)
+    if record:
+        embed.add_field(name="📋 Motivo original", value=record.get("reason") or "Não informado", inline=False)
+        embed.add_field(name="🔨 Banido por", value=record.get("banned_by_name") or "—", inline=True)
+        embed.add_field(name="📅 Banido em", value=record.get("banned_at") or "—", inline=True)
+    embed.set_footer(text=f"Desbanido em {date_str}")
+    embed.timestamp = datetime.now()
+    try:
+        await log_ch.send(embed=embed)
+    except Exception:
+        pass
+
+
 class _TkDesbanirBtn(discord.ui.Button):
     def __init__(self):
         super().__init__(label="Desbanir Membro", style=discord.ButtonStyle.primary, custom_id="unban_ticket_unban_v1")
@@ -44384,12 +44488,14 @@ class _TkDesbanirBtn(discord.ui.Button):
             return
         date_str = datetime.now().strftime("%d/%m/%Y")
         target_settings = get_settings(target_gid)
+        matched_record: dict | None = None
         for r in reversed(target_settings.get("ban_records", [])):
             if r.get("user_id") == user_id and r.get("active", True):
                 r["active"] = False
                 r["unbanned_by_id"] = interaction.user.id
                 r["unbanned_by_name"] = str(interaction.user)
                 r["unbanned_at"] = date_str
+                matched_record = r
                 break
         save_settings_to_disk()
         if already_unbanned:
@@ -44400,6 +44506,7 @@ class _TkDesbanirBtn(discord.ui.Button):
             await interaction.followup.send(
                 embed=_notif_embed(f"<a:online:1518271945550856295> <@{user_id}> foi **desbanido** por {interaction.user.mention}.")
             )
+            await _post_unban_log(interaction, settings, info, user_id, matched_record, date_str)
         await asyncio.sleep(5)
         await _unban_close_channel(interaction)
 
