@@ -4611,6 +4611,11 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("entrance_link", None)          # link do servidor principal
     settings.setdefault("entrance_logo", None)          # logo/imagem do lado (URL)
     settings.setdefault("entrance_channel", None)       # canal (no recurso) onde a embed de entrada é postada
+    settings.setdefault("cargos_title", None)           # título da embed de cargos/benefícios
+    settings.setdefault("cargos_text", None)            # texto (benefícios + contatos)
+    settings.setdefault("cargos_footer", None)          # rodapé/aviso da embed de cargos
+    settings.setdefault("cargos_logo", None)            # logo/imagem do lado (URL)
+    settings.setdefault("cargos_channel", None)         # canal (no recurso) onde a embed de cargos é postada
     settings.setdefault("unban_panel_color", None)      # cor da barra lateral (painel/ticket/entrada); None = padrão
     settings.setdefault("protecao_cargos_enabled", False)
     settings.setdefault("protecao_cargos_grupos", [])
@@ -21356,6 +21361,211 @@ class EntranceConfigView(discord.ui.View):
         await interaction.response.send_message(view=EntranceLayout(guild=g, settings=s), ephemeral=True)
 
 
+# ── Embed de Cargos (benefícios) do servidor de recurso ───────────────────────
+def build_cargos_config_embed(author: discord.Member, settings: dict) -> discord.Embed:
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
+    embed = discord.Embed(
+        color=settings.get("embed_color", 0xE53935),
+        description=(
+            "Configure a **embed de cargos/benefícios** — apresenta os benefícios "
+            "(antiban, permissões, laterais, etc.) e quem contatar.\n\n"
+            "Defina o **conteúdo** e depois **Configurar Canal** para postá-la no "
+            "servidor de recurso."
+        ),
+    )
+    embed.set_author(name="Embed de Cargos", icon_url=icon_url)
+    if icon_url:
+        embed.set_thumbnail(url=_avatar_url(author))
+
+    titulo = settings.get("cargos_title")
+    txt    = settings.get("cargos_text")
+    footer = settings.get("cargos_footer")
+    logo   = settings.get("cargos_logo")
+    rgid   = settings.get("proxy_recurso_guild")
+    ch_id  = settings.get("cargos_channel")
+    canal_str = "`Não configurado`"
+    if rgid and ch_id:
+        g = bot.get_guild(rgid)
+        ch = g.get_channel(ch_id) if g else None
+        canal_str = ch.mention if ch else f"`{ch_id}`"
+
+    embed.add_field(
+        name="<:ferramentas_:1518271998613131274>  Conteúdo",
+        value=(
+            f"┃ **Título:** {('`definido`' if titulo else '`padrão`')}\n"
+            f"┃ **Texto:** {('`definido`' if txt else '`padrão`')}\n"
+            f"┃ **Rodapé:** {('`definido`' if footer else '`Não definido`')}\n"
+            f"┃ **Logo/imagem:** {('`definida`' if logo else '`ícone do servidor`')}\n"
+            f"┃ **Canal:** {canal_str}"
+        ),
+        inline=False,
+    )
+    embed.set_footer(text=f"Solicitado por {author.name}", icon_url=icon_url)
+    embed.timestamp = datetime.now()
+    return embed
+
+
+class _CargosContentModal(discord.ui.Modal, title="Conteúdo da Embed de Cargos"):
+    titulo = discord.ui.TextInput(
+        label="Título",
+        placeholder="Quer ficar hypado na NATA?",
+        required=False, max_length=200,
+    )
+    txt = discord.ui.TextInput(
+        label="Texto (descrição + contatos)",
+        placeholder="Benefícios... Contate: <@ID1> <@ID2>",
+        required=False, max_length=2000, style=discord.TextStyle.paragraph,
+    )
+    footer = discord.ui.TextInput(
+        label="Rodapé (aviso)",
+        placeholder="E lembre-se: qualquer combinação fora dessas pessoas...",
+        required=False, max_length=500, style=discord.TextStyle.paragraph,
+    )
+    logo = discord.ui.TextInput(
+        label="Logo/imagem do lado (URL)",
+        placeholder="https://... .png/.gif (vazio = ícone do servidor)",
+        required=False, max_length=300,
+    )
+
+    def __init__(self, parent_view, settings):
+        super().__init__()
+        self._pv = parent_view
+        self.titulo.default = settings.get("cargos_title") or ""
+        self.txt.default    = settings.get("cargos_text") or ""
+        self.footer.default = settings.get("cargos_footer") or ""
+        self.logo.default   = settings.get("cargos_logo") or ""
+
+    async def on_submit(self, interaction: discord.Interaction):
+        s = get_settings(interaction.guild.id)
+        _lg = self.logo.value.strip()
+        if _lg and not _lg.startswith(("http://", "https://")):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> URL da logo inválida (precisa começar com http)."),
+                ephemeral=True)
+            return
+        s["cargos_title"]  = self.titulo.value.strip() or None
+        s["cargos_text"]   = self.txt.value.strip() or None
+        s["cargos_footer"] = self.footer.value.strip() or None
+        s["cargos_logo"]   = _lg or None
+        save_settings_to_disk()
+        await interaction.response.edit_message(
+            embed=build_cargos_config_embed(self._pv.author, s), view=CargosConfigView(self._pv.author))
+        await interaction.followup.send(
+            embed=_notif_embed("<a:online:1518271945550856295> Conteúdo salvo. Use **Configurar Canal** para postar/atualizar."),
+            ephemeral=True)
+
+
+class _CargosCanalModal(discord.ui.Modal, title="Configurar Canal dos Cargos"):
+    channel_id_input = discord.ui.TextInput(
+        label="ID do canal (no servidor de recurso)",
+        placeholder="Ex: 123456789012345678",
+        required=True, max_length=25,
+    )
+
+    def __init__(self, parent_view):
+        super().__init__()
+        self._pv = parent_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        rgid = settings.get("proxy_recurso_guild")
+        if not rgid:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule um servidor de recurso primeiro (no Proxy)."),
+                ephemeral=True)
+            return
+        g = bot.get_guild(rgid)
+        if g is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> O bot não está no servidor de recurso."),
+                ephemeral=True)
+            return
+        try:
+            cid = int(self.channel_id_input.value.strip("<#> "))
+        except ValueError:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> ID inválido. Informe apenas números."),
+                ephemeral=True)
+            return
+        ch = g.get_channel(cid)
+        if not isinstance(ch, discord.TextChannel):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Canal de texto não encontrado nesse servidor. Verifique o ID."),
+                ephemeral=True)
+            return
+        settings["cargos_channel"] = cid
+        save_settings_to_disk()
+        try:
+            await ch.send(view=CargosLayout(guild=g, settings=settings))
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Sem permissão para enviar em `#{ch.name}`."),
+                ephemeral=True)
+            return
+        except discord.HTTPException as e:
+            await interaction.response.send_message(
+                embed=_notif_embed(f"<a:alerta:1518271939460857968> Erro ao postar: `{e}`"),
+                ephemeral=True)
+            return
+        await interaction.response.edit_message(
+            embed=build_cargos_config_embed(self._pv.author, settings), view=CargosConfigView(self._pv.author))
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> Embed de cargos postada em {ch.mention}!"),
+            ephemeral=True)
+
+
+class CargosConfigView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=None)
+        self.author = author
+        linked = bool(get_settings(author.guild.id if author.guild else 0).get("proxy_recurso_guild"))
+
+        btn_back = discord.ui.Button(label="Voltar", style=discord.ButtonStyle.primary, emoji=_button_emoji(discord.ButtonStyle.primary), row=0)
+        btn_back.callback = self._back
+        self.add_item(btn_back)
+
+        btn_content = discord.ui.Button(label="Definir Conteúdo", style=discord.ButtonStyle.secondary, emoji="📝", row=0, disabled=not linked)
+        btn_content.callback = self._content
+        self.add_item(btn_content)
+
+        btn_preview = discord.ui.Button(label="Ver Prévia", style=discord.ButtonStyle.secondary, emoji="👁️", row=0)
+        btn_preview.callback = self._preview
+        self.add_item(btn_preview)
+
+        btn_canal = discord.ui.Button(label="Configurar Canal", style=discord.ButtonStyle.success, emoji=discord.PartialEmoji.from_str("<:tickets:1518271952526250155>"), row=1, disabled=not linked)
+        btn_canal.callback = self._canal
+        self.add_item(btn_canal)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
+            await interaction.response.send_message(TRANSLATIONS[lang]["only_author"], ephemeral=True)
+            return False
+        return True
+
+    async def _back(self, interaction: discord.Interaction):
+        s = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(embed=build_proxy_config_embed(self.author, s), view=ProxyView(self.author))
+
+    async def _content(self, interaction: discord.Interaction):
+        s = get_settings(interaction.guild.id)
+        if not s.get("proxy_recurso_guild"):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Vincule o servidor de recurso primeiro (no Proxy)."),
+                ephemeral=True)
+            return
+        await interaction.response.send_modal(_CargosContentModal(self, s))
+
+    async def _canal(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(_CargosCanalModal(self))
+
+    async def _preview(self, interaction: discord.Interaction):
+        s = get_settings(interaction.guild.id)
+        rgid = s.get("proxy_recurso_guild")
+        g = bot.get_guild(rgid) if rgid else interaction.guild
+        await interaction.response.send_message(view=CargosLayout(guild=g, settings=s), ephemeral=True)
+
+
 class _ProxyVincularModal(discord.ui.Modal, title="Vincular Servidor de Recurso"):
     guild_id_input = discord.ui.TextInput(
         label="ID do servidor de recurso",
@@ -21752,6 +21962,21 @@ class ProxyView(discord.ui.View):
         )
         btn_color.callback = self._set_color
         self.add_item(btn_color)
+
+        btn_cargos = discord.ui.Button(
+            label="Embed de Cargos",
+            style=discord.ButtonStyle.secondary,
+            emoji="🏷️",
+            row=3,
+            disabled=not linked,
+        )
+        btn_cargos.callback = self._open_cargos
+        self.add_item(btn_cargos)
+
+    async def _open_cargos(self, interaction: discord.Interaction):
+        s = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=build_cargos_config_embed(self.author, s), view=CargosConfigView(self.author))
 
     async def _set_color(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -43794,6 +44019,35 @@ class EntranceLayout(discord.ui.LayoutView):
             items.append(discord.ui.Section(_body, accessory=discord.ui.Thumbnail(logo)))
         else:
             items.append(_body)
+        self.add_item(discord.ui.Container(*items, accent_colour=color))
+
+
+class CargosLayout(discord.ui.LayoutView):
+    """Embed de cargos/benefícios (Components V2), estilo HIT. Display-only."""
+    def __init__(self, guild: discord.Guild | None = None, settings: dict | None = None):
+        super().__init__(timeout=None)
+        settings = settings or {}
+        color  = _unban_panel_color(settings)
+        logo   = settings.get("cargos_logo") or (guild.icon.url if (guild and guild.icon) else None)
+        _e     = str(_guild_emoji(guild, "nata", "logo", "hit", fallback="🔨"))
+        titulo = settings.get("cargos_title") or "Quer ficar hypado na NATA?"
+        text   = settings.get("cargos_text") or (
+            "Chegou o momento de conseguir agora — de forma simples, tranquila e com "
+            "benefícios exclusivos, como **antiban, permissões, laterais, blacklist e "
+            "muito mais**.\nCaso queira, basta entrar em contato com a equipe."
+        )
+        footer = settings.get("cargos_footer")
+
+        _title = discord.ui.TextDisplay(f"# {_e} {titulo}")
+        _body  = discord.ui.TextDisplay(text)
+        items  = [_title, discord.ui.Separator(visible=True)]
+        if logo:
+            items.append(discord.ui.Section(_body, accessory=discord.ui.Thumbnail(logo)))
+        else:
+            items.append(_body)
+        if footer:
+            items.append(discord.ui.Separator(visible=True))
+            items.append(discord.ui.TextDisplay(f"**{footer}**"))
         self.add_item(discord.ui.Container(*items, accent_colour=color))
 
 
