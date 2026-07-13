@@ -491,7 +491,8 @@ async def _global_guild_check(ctx: commands.Context) -> bool:
             # (o menu dá acesso a mudar o prefixo e configurar o recurso)
             if _cmd_name in ("addemoji", "addemote", "embed", "menu", "roxo", "recolorir",
                              "renomear", "renameemoji", "renomearemoji",
-                             "natatudo", "renomeartudo", "prefixaremoji") and _is_recurso_guild(ctx.guild.id):
+                             "natatudo", "renomeartudo", "prefixaremoji",
+                             "trocarlogos") and _is_recurso_guild(ctx.guild.id):
                 return True
             return False
     return True
