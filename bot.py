@@ -44105,7 +44105,6 @@ class CargosLayout(discord.ui.LayoutView):
         settings = settings or {}
         color  = _unban_panel_color(settings)
         logo   = settings.get("cargos_logo") or (guild.icon.url if (guild and guild.icon) else None)
-        _e     = str(_guild_emoji(guild, "nata", "logo", "hit", fallback="🔨"))
         titulo = settings.get("cargos_title") or "Quer ficar hypado na NATA?"
         text   = settings.get("cargos_text") or (
             "Chegou o momento de conseguir agora — de forma simples, tranquila e com "
@@ -44114,7 +44113,7 @@ class CargosLayout(discord.ui.LayoutView):
         )
         footer = settings.get("cargos_footer")
 
-        _title = discord.ui.TextDisplay(f"# {_e} {titulo}")
+        _title = discord.ui.TextDisplay(f"# {titulo}")
         _body  = discord.ui.TextDisplay(text)
         items  = [_title, discord.ui.Separator(visible=True)]
         if logo:
