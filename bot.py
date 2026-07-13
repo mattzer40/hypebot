@@ -44544,10 +44544,10 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
     _e_title   = _ue(settings, "title", interaction.guild, "cadeado", "martelo", "ban", uni="✅")
     _e_id      = _ue(settings, "id", interaction.guild, "hitid", "nataid", uni="🆔")
     _e_autor   = _ue(settings, "autor", interaction.guild, "config", uni="👤")   # quem BANIU originalmente
-    _e_motivo  = _ue(settings, "motivo", interaction.guild, uni="📝")
+    _e_motivo  = _ue(settings, "motivo", interaction.guild, "regra", "nota", uni="📝")
     _e_dur     = _ue(settings, "dur", interaction.guild, "relogio", uni="⏱️")
-    _e_usuario = _ue(settings, "usuario", interaction.guild, uni="👤")           # quem foi desbanido
-    _e_staff   = _ue(settings, "staff", interaction.guild, uni="🛡️")            # quem desbaniu agora
+    _e_usuario = _ue(settings, "usuario", interaction.guild, "membro", "pessoa", uni="👤")   # quem foi desbanido
+    _e_staff   = _ue(settings, "staff", interaction.guild, "seguranca", "mod", uni="🛡️")     # quem desbaniu agora
 
     try:
         user = await bot.fetch_user(user_id)
@@ -44712,7 +44712,7 @@ class UnbanTicketLayout(discord.ui.LayoutView):
         _e_title  = _ue(settings, "title", guild, "cadeado", "martelo", "ban", uni="🔨")
         _e_id     = _ue(settings, "id", guild, "hitid", "nataid", uni="🆔")
         _e_autor  = _ue(settings, "autor", guild, "config", uni="👤")
-        _e_motivo = _ue(settings, "motivo", guild, uni="📝")
+        _e_motivo = _ue(settings, "motivo", guild, "regra", "nota", uni="📝")
         _e_dur    = _ue(settings, "dur", guild, "relogio", uni="⏱️")
         _nome     = _unban_display_name(guild, settings)
         icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
