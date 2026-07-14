@@ -4957,7 +4957,13 @@ bot_role_actions: dict[tuple[int, int, str], float] = {}
 PROTECAO_PUNIR_APOS = 3            # tentativas (1 cargo por vez) antes de punir
 PROTECAO_TENTATIVAS_JANELA = 300   # janela de contagem, em segundos (5 min)
 PROTECAO_FLOOD_MIN = 2             # nº de cargos numa MESMA ação p/ contar como flood → pune na hora
+PROTECAO_BURST_COUNT = 5           # nº de cargos não autorizados em cliques rápidos separados...
+PROTECAO_BURST_JANELA = 1.0        # ...dentro deste tempo (s) → burst (macro/clique rápido) → pune na hora
 mod_manual_unauth_history: dict[tuple[int, int], list[float]] = {}
+# Contador separado p/ o burst (janela curtíssima). É independente do de cima porque
+# a punição por "3 tentativas" limpa aquele contador — se o burst usasse o mesmo, nunca
+# acumularia até 5. Este só guarda os timestamps dos últimos PROTECAO_BURST_JANELA seg.
+mod_burst_history: dict[tuple[int, int], list[float]] = {}
 
 
 def _register_bot_role_action(member_id: int, role_id: int, action: str) -> None:
@@ -29420,15 +29426,24 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 hist.extend([now_ts] * _n_unauth)
                 hist[:] = [t for t in hist if now_ts - t <= PROTECAO_TENTATIVAS_JANELA]
                 _tentativas = len(hist)
+                # Burst: muitos cargos não autorizados em cliques rápidos separados (macro)
+                # dentro de uma janela curtíssima → pune na hora. Contador PRÓPRIO (o de
+                # cima é zerado ao punir; o burst precisa acumular independentemente).
+                bhist = mod_burst_history.setdefault(key, [])
+                bhist.extend([now_ts] * _n_unauth)
+                bhist[:] = [t for t in bhist if now_ts - t <= PROTECAO_BURST_JANELA]
+                _burst = len(bhist) >= PROTECAO_BURST_COUNT
+                if _burst:
+                    bhist.clear()
                 print(
                     f"[protecao_tentativas] guild={after.guild.id} mod={moderator_member.id} "
-                    f"n={_n_unauth} flood={_is_flood} "
+                    f"n={_n_unauth} flood={_is_flood} burst={_burst} "
                     f"tentativas={_tentativas}/{PROTECAO_PUNIR_APOS} "
                     f"janela={PROTECAO_TENTATIVAS_JANELA}s",
                     flush=True,
                 )
-                if _is_flood or _tentativas >= PROTECAO_PUNIR_APOS:
-                    wipe_all_roles = True   # flood ou limite atingido → punir
+                if _is_flood or _burst or _tentativas >= PROTECAO_PUNIR_APOS:
+                    wipe_all_roles = True   # flood, burst ou limite atingido → punir
                     hist.clear()
 
         print(
