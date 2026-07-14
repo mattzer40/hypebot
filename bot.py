@@ -9312,6 +9312,7 @@ class TicketPainelLeiaView(discord.ui.View):
             await interaction.response.send_message(embed=_notif_embed(t["ticket_painel_missing"]), ephemeral=True)
             return
 
+        await interaction.response.defer(ephemeral=True)
         try:
             menu_view = None
             if panel.get("menus_selecao") and panel.get("menu_opcoes"):
@@ -9340,13 +9341,13 @@ class TicketPainelLeiaView(discord.ui.View):
                 # Merge: if we have both menu and buttons view, prefer menu_view
                 await target.send(embed=embed, view=menu_view or buttons_view)
         except Exception as e:
-            await interaction.response.send_message(f"Erro: {str(e)[:200]}", ephemeral=True)
+            await interaction.followup.send(f"Erro: {str(e)[:200]}", ephemeral=True)
             return
 
         icon_url = bot.user.display_avatar.url if bot.user else None
         sent_embed = discord.Embed(description=f"<a:online:1518271945550856295> {t['ticket_painel_sent']}", color=settings["embed_color"])
         sent_embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        await interaction.response.send_message(embed=sent_embed, ephemeral=True)
+        await interaction.followup.send(embed=sent_embed, ephemeral=True)
 
 
 # View ephemeral pós-delete com botão Voltar ao Menu --------------------------
@@ -38979,17 +38980,18 @@ class PanelV2EnviarChannelSelect(GuildChannelSelect):
         if not self.parent_view.panel.get("blocks"):
             await interaction.response.send_message(embed=_notif_embed(t["panelv2_send_empty"]), ephemeral=True)
             return
+        await interaction.response.defer(ephemeral=True)
         _files, _imgmap = await _panel_v2_attachments(self.parent_view.panel.get("blocks", []))
         layout = build_panel_v2_layout(self.parent_view.panel, settings, image_map=_imgmap)
         try:
             sent_v2 = await ch.send(view=layout, files=_files)
         except (discord.Forbidden, discord.HTTPException) as e:
-            await interaction.response.send_message(f"Erro: {e}", ephemeral=True)
+            await interaction.followup.send(f"Erro: {e}", ephemeral=True)
             return
         # Persiste o panel dict para edição futura via n!painelv2 editar <id>
         _panelv2_data[sent_v2.id] = self.parent_view.panel
         _save_panelv2_data()
-        await interaction.response.send_message(
+        await interaction.followup.send(
             t["panelv2_sent"].format(channel=ch.mention), ephemeral=True
         )
 
@@ -39145,17 +39147,18 @@ class PanelV2BuilderView(discord.ui.LayoutView):
                 "<a:alerta:1518271939460857968> Mensagem original não encontrada.", ephemeral=True
             )
             return
+        await interaction.response.defer(ephemeral=True)
         layout = build_panel_v2_layout(self.panel, settings)
         try:
             msg = await self.edit_channel.fetch_message(self.edit_message_id)
             await msg.edit(view=layout)
         except Exception as e:
-            await interaction.response.send_message(f"<a:alerta:1518271939460857968> Erro ao atualizar: {e}", ephemeral=True)
+            await interaction.followup.send(f"<a:alerta:1518271939460857968> Erro ao atualizar: {e}", ephemeral=True)
             return
         # Persiste o panel dict atualizado
         _panelv2_data[self.edit_message_id] = self.panel
         _save_panelv2_data()
-        await interaction.response.send_message("<a:online:1518271945550856295> Painel atualizado!", ephemeral=True)
+        await interaction.followup.send("<a:online:1518271945550856295> Painel atualizado!", ephemeral=True)
 
 
 class TicketPanelV2View(PanelV2BuilderView):
@@ -39277,6 +39280,7 @@ class IgVerifPanelV2BuilderView(PanelV2BuilderView):
                 ephemeral=True,
             )
             return
+        await interaction.response.defer(ephemeral=True)
         verif_btn = discord.ui.Button(
             label="verificar",
             style=discord.ButtonStyle.secondary,
@@ -39291,11 +39295,11 @@ class IgVerifPanelV2BuilderView(PanelV2BuilderView):
         try:
             await ch.send(view=layout, files=_files)
         except Exception as e:
-            await interaction.response.send_message(f"<a:alerta:1518271939460857968> Erro: {e}", ephemeral=True)
+            await interaction.followup.send(f"<a:alerta:1518271939460857968> Erro: {e}", ephemeral=True)
             return
         settings["ig_verif_panel_v2"] = self.panel
         save_settings_to_disk()
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"<a:online:1518271945550856295> Embed enviado para {ch.mention}!", ephemeral=True,
         )
 
