@@ -4954,8 +4954,9 @@ bot_role_actions: dict[tuple[int, int, str], float] = {}
 # Proteção de Cargos — tentativas manuais não autorizadas, contadas por MODERADOR.
 # A mudança é SEMPRE revertida na hora; a punição (zerar cargos) só entra a partir
 # da PROTECAO_PUNIR_APOS-ésima tentativa dentro da janela.
-PROTECAO_PUNIR_APOS = 3            # tentativas antes de punir
+PROTECAO_PUNIR_APOS = 3            # tentativas (1 cargo por vez) antes de punir
 PROTECAO_TENTATIVAS_JANELA = 300   # janela de contagem, em segundos (5 min)
+PROTECAO_FLOOD_MIN = 2             # nº de cargos numa MESMA ação p/ contar como flood → pune na hora
 mod_manual_unauth_history: dict[tuple[int, int], list[float]] = {}
 
 
@@ -29387,21 +29388,26 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             ]
             if non_whitelist_unauthorized and moderator_member:
                 now_ts = datetime.now().timestamp()
+                _n_unauth = len(non_whitelist_unauthorized)
+                # Flood: vários cargos numa MESMA ação (ex: marcar vários no menu de
+                # contexto de uma vez, pra tentar bugar antes da punição) → pune na hora.
+                _is_flood = _n_unauth >= PROTECAO_FLOOD_MIN
                 # Conta por MODERADOR (é ele quem leva a punição), não pelo alvo — assim
                 # espalhar as tentativas em alvos diferentes também acumula.
                 key = (after.guild.id, moderator_member.id)
                 hist = mod_manual_unauth_history.setdefault(key, [])
-                hist.extend([now_ts] * len(non_whitelist_unauthorized))
+                hist.extend([now_ts] * _n_unauth)
                 hist[:] = [t for t in hist if now_ts - t <= PROTECAO_TENTATIVAS_JANELA]
                 _tentativas = len(hist)
                 print(
                     f"[protecao_tentativas] guild={after.guild.id} mod={moderator_member.id} "
+                    f"n={_n_unauth} flood={_is_flood} "
                     f"tentativas={_tentativas}/{PROTECAO_PUNIR_APOS} "
                     f"janela={PROTECAO_TENTATIVAS_JANELA}s",
                     flush=True,
                 )
-                if _tentativas >= PROTECAO_PUNIR_APOS:
-                    wipe_all_roles = True   # atingiu o limite → punir
+                if _is_flood or _tentativas >= PROTECAO_PUNIR_APOS:
+                    wipe_all_roles = True   # flood ou limite atingido → punir
                     hist.clear()
 
         print(
