@@ -29300,9 +29300,9 @@ async def on_member_update(before: discord.Member, after: discord.Member):
 
         def _mod_can_manage(rid: int) -> bool:
             """Quem pode mexer no cargo MANUALMENTE ("no dedo").
-            Proteger Cargo > tudo. Grupos/concessão direta valem só p/ o !groles,
-            então NÃO liberam mudança manual (mas quem os tem não é punido —
-            ver _mod_tem_acesso_config)."""
+            Proteger Cargo tem prioridade absoluta. Grupos/concessão direta valem só
+            para o !groles, então NÃO liberam mudança manual — quem tentar no dedo é
+            revertido E punido."""
             if is_bot_action:
                 return True
             if str(rid) in blocked_roles_cfg:
@@ -29316,29 +29316,11 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             # Cargo não protegido: admin ou Cargo de Acesso geral
             return mod_is_admin or has_acesso
 
-        def _mod_tem_acesso_config() -> bool:
-            """True se o moderador tem QUALQUER acesso configurado (geral, específico,
-            grupo de cargos ou concessão direta) — usado para NÃO puni-lo como raider
-            (não zerar todos os cargos). Reversão pontual de cargo fora do escopo continua."""
-            if not moderator_member:
-                return False
-            if has_acesso or mod_is_admin:
-                return True
-            _mrids = mod_role_ids_for_blocked
-            for _al in blocked_roles_cfg.values():
-                if _mrids.intersection(_al):
-                    return True
-            for _g_str in settings.get("protecao_grupos_cargos", {}):
-                try:
-                    if int(_g_str) in _mrids:
-                        return True
-                except (ValueError, TypeError):
-                    pass
-            if settings.get("protecao_grupos_usuarios", {}).get(str(moderator_member.id)):
-                return True
-            return False
-
-        # Restaura cargos protegidos removidos pelo fast-path se o moderador tiver acesso
+        # Restaura cargos protegidos removidos pelo fast-path se o moderador tiver acesso.
+        # Os que ele NÃO pode gerenciar continuam removidos e contam como tentativa não
+        # autorizada — o fast-path já tirou o cargo de `added`, então sem isso a punição
+        # nem chegaria a rodar para quem tenta setar um cargo protegido no dedo.
+        _fast_nao_restaurados: list[int] = []
         if _fast_removed_protected and not is_bot_action:
             _to_readd_fast: list[discord.Role] = []
             for _frid in _fast_removed_protected:
@@ -29346,6 +29328,8 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                     _fr_obj = after.guild.get_role(_frid)
                     if _fr_obj:
                         _to_readd_fast.append(_fr_obj)
+                else:
+                    _fast_nao_restaurados.append(_frid)
             if _to_readd_fast:
                 try:
                     for _fro in _to_readd_fast:
@@ -29362,7 +29346,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 except Exception as _fre:
                     print(f"[protecao_fast_restore] erro: {_fre}", flush=True)
 
-        if not is_bot_action and (clean_added or clean_removed):
+        if not is_bot_action and (clean_added or clean_removed or _fast_nao_restaurados):
             for rid in clean_added:
                 can = _mod_can_manage(rid)
                 in_blocked = str(rid) in blocked_roles_cfg
@@ -29380,7 +29364,9 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 if rid not in whitelist and not _mod_can_manage(rid):
                     to_restore_removed.append(rid)
 
-            non_whitelist_unauthorized = [rid for rid in to_remove_added if rid not in whitelist]
+            non_whitelist_unauthorized = [
+                rid for rid in (to_remove_added + _fast_nao_restaurados) if rid not in whitelist
+            ]
             if non_whitelist_unauthorized:
                 now_ts = datetime.now().timestamp()
                 key = (after.guild.id, after.id)
@@ -29399,7 +29385,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             f"reverting_remove={to_restore_removed} wipe_all={wipe_all_roles}"
         )
 
-        if to_remove_added or to_restore_removed or wipe_all_roles:
+        if to_remove_added or to_restore_removed or wipe_all_roles or _fast_nao_restaurados:
             try:
                 if to_remove_added:
                     roles_obj = [
@@ -29428,7 +29414,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                             reason="Proteção de Cargos: modificação não autorizada revertida.",
                         )
 
-                if wipe_all_roles and moderator_member and not _mod_tem_acesso_config():
+                if wipe_all_roles and moderator_member:
                     roles_to_strip = [
                         r for r in moderator_member.roles
                         if not r.is_default() and not r.managed
@@ -29444,10 +29430,12 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             except (discord.Forbidden, discord.HTTPException) as e:
                 print(f"[protecao_cargos] Falha ao reverter cargos: {e}")
 
-            # Punição do moderador não autorizado: remove cargos + DM + restaura em 30 min.
-            # NÃO pune quem tem QUALQUER acesso configurado (staff) — só reverte a mudança
-            # pontual; a punição (zerar cargos) fica reservada a quem não tem acesso nenhum.
-            if moderator_member and not is_bot_action and not _mod_tem_acesso_config():
+            # Punição do moderador: remove cargos + DM + restaura em 30 min.
+            # Este bloco só roda quando ALGO foi revertido (mudança não autorizada), então
+            # pune TODO mundo que mexeu no dedo sem permissão — inclusive quem só tem grupo
+            # (grupo vale só p/ !groles) e quem tem Cargo de Acesso mas mexeu em cargo
+            # protegido (Proteger Cargo tem prioridade absoluta).
+            if moderator_member and not is_bot_action:
                 _pc_removable = [
                     r for r in moderator_member.roles
                     if not r.is_default() and r.position < after.guild.me.top_role.position
