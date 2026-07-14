@@ -29299,23 +29299,21 @@ async def on_member_update(before: discord.Member, after: discord.Member):
         mod_is_admin = bool(moderator_member and moderator_member.guild_permissions.administrator)
 
         def _mod_can_manage(rid: int) -> bool:
+            """Quem pode mexer no cargo MANUALMENTE ("no dedo").
+            Proteger Cargo > tudo. Grupos/concessão direta valem só p/ o !groles,
+            então NÃO liberam mudança manual (mas quem os tem não é punido —
+            ver _mod_tem_acesso_config)."""
             if is_bot_action:
-                return True
-            # Honra TODOS os mecanismos de acesso do /groles (acesso geral, acesso
-            # específico do cargo, grupos de cargos e concessão direta ao usuário) —
-            # assim a mudança manual "no dedo" fica consistente com o menu e quem
-            # foi autorizado por grupo/direto não é revertido injustamente.
-            if moderator_member and _can_manage_role(moderator_member, rid, settings):
                 return True
             if str(rid) in blocked_roles_cfg:
                 access = set(blocked_roles_cfg[str(rid)])
                 if access:
-                    # Acesso específico configurado: SOMENTE quem tem um dos cargos de acesso
-                    # específicos. O cargo de acesso GERAL não libera cargos com proteção específica.
+                    # Proteger Cargo: SOMENTE os Cargos de Acesso configurados para ELE.
+                    # Nem admin, nem Cargo de Acesso geral, nem grupo liberam.
                     return bool(mod_role_ids_for_blocked.intersection(access))
-                # Nenhum acesso específico: admin ou acesso geral
-                return mod_is_admin or has_acesso
-            # Cargo não bloqueado: admin pode, ou quem tem acesso geral
+                # Nenhum acesso específico definido: só admin
+                return mod_is_admin
+            # Cargo não protegido: admin ou Cargo de Acesso geral
             return mod_is_admin or has_acesso
 
         def _mod_tem_acesso_config() -> bool:
@@ -31970,13 +31968,19 @@ def _can_manage_role(member: discord.Member, role_id: int, settings: dict) -> bo
     if role and role.managed:
         return False
     member_role_ids = {r.id for r in member.roles}
-    if member.guild_permissions.administrator:
-        return True
-    # Cargo bloqueado: apenas membros com WL específica do cargo podem gerenciá-lo
+    # ── Proteger Cargo tem prioridade ABSOLUTA ───────────────────────────────
+    # Um cargo protegido só pode ser gerenciado por quem tem um dos Cargos de
+    # Acesso configurados PARA ELE. Nem administrador, nem Cargo de Acesso geral,
+    # nem grupo liberam. Se nenhum acesso específico for definido, só admin.
+    # (Esta checagem vem ANTES do bypass de admin de propósito.)
     blocked = settings.get("protecao_cargo_bloqueado", {})
     if str(role_id) in blocked:
         access = set(blocked[str(role_id)])
-        return bool(access and member_role_ids.intersection(access))
+        if access:
+            return bool(member_role_ids.intersection(access))
+        return bool(member.guild_permissions.administrator)
+    if member.guild_permissions.administrator:
+        return True
     acesso_roles = set(settings.get("protecao_cargos_acesso", []))
     if acesso_roles and member_role_ids.intersection(acesso_roles):
         return True
