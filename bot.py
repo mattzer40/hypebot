@@ -29074,6 +29074,32 @@ async def _log_kick(member: discord.Member, channel_id: int, title: str, descrip
         pass
 
 
+ROLE_HISTORY_RETENTION_DAYS = 30          # mantém registros por 30 dias
+ROLE_HISTORY_MAX = 5000                    # teto de segurança p/ não inchar o bot_settings.json
+
+
+def _trim_role_history(history: list) -> None:
+    """Mantém os registros dos últimos ROLE_HISTORY_RETENTION_DAYS dias.
+    Aplica também um teto absoluto (ROLE_HISTORY_MAX) para evitar que o
+    bot_settings.json cresça sem limite. Entradas antigas sem 'ts' têm a data
+    lida do campo textual 'timestamp'; se não der pra ler, são mantidas."""
+    now_ts = datetime.now().timestamp()
+    cutoff = now_ts - ROLE_HISTORY_RETENTION_DAYS * 86400
+
+    def _entry_ts(e: dict) -> float:
+        t = e.get("ts")
+        if isinstance(t, (int, float)):
+            return t
+        try:
+            return datetime.strptime(e.get("timestamp", ""), "%d/%m/%Y %H:%M").timestamp()
+        except (ValueError, TypeError):
+            return now_ts  # sem data confiável → trata como recente (não perde o registro)
+
+    history[:] = [e for e in history if _entry_ts(e) >= cutoff]
+    if len(history) > ROLE_HISTORY_MAX:
+        del history[:-ROLE_HISTORY_MAX]
+
+
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
     added: set[int] = set()
@@ -29130,6 +29156,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     settings = get_settings(after.guild.id)
     history = settings.setdefault("role_history", [])
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
+    now_ts = datetime.now().timestamp()
 
     # ── Fast-path: cargos bloqueados são revertidos imediatamente sem esperar audit log ──
     _fast_handled: set[int] = set()
@@ -29524,6 +29551,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             continue
         history.append({
             "timestamp": timestamp,
+            "ts": now_ts,
             "action": "add",
             "moderator_id": moderator_id,
             "moderator": moderator_name,
@@ -29538,6 +29566,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             continue
         history.append({
             "timestamp": timestamp,
+            "ts": now_ts,
             "action": "remove",
             "moderator_id": moderator_id,
             "moderator": moderator_name,
@@ -29547,8 +29576,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             "role": role.name,
         })
 
-    if len(history) > 200:
-        del history[:-200]
+    _trim_role_history(history)
 
     # Auto Cargo Booster — when member starts boosting
     if (
@@ -29573,12 +29601,14 @@ async def on_member_remove(member: discord.Member):
     settings = get_settings(member.guild.id)
     history = settings.setdefault("role_history", [])
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
+    now_ts = datetime.now().timestamp()
 
     for role in member.roles:
         if role.is_default():
             continue
         history.append({
             "timestamp": timestamp,
+            "ts": now_ts,
             "action": "remove",
             "moderator_id": None,
             "moderator": "Sistema",
@@ -29589,8 +29619,7 @@ async def on_member_remove(member: discord.Member):
             "reason": "O Membro saiu do servidor",
         })
 
-    if len(history) > 200:
-        del history[:-200]
+    _trim_role_history(history)
 
     # ── Anti-Raid: detecção de kick ───────────────────────────────────────────
     guild = member.guild
