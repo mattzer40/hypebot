@@ -29274,6 +29274,12 @@ async def on_member_update(before: discord.Member, after: discord.Member):
         def _mod_can_manage(rid: int) -> bool:
             if is_bot_action:
                 return True
+            # Honra TODOS os mecanismos de acesso do /groles (acesso geral, acesso
+            # específico do cargo, grupos de cargos e concessão direta ao usuário) —
+            # assim a mudança manual "no dedo" fica consistente com o menu e quem
+            # foi autorizado por grupo/direto não é revertido injustamente.
+            if moderator_member and _can_manage_role(moderator_member, rid, settings):
+                return True
             if str(rid) in blocked_roles_cfg:
                 access = set(blocked_roles_cfg[str(rid)])
                 if access:
@@ -29284,6 +29290,28 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 return mod_is_admin or has_acesso
             # Cargo não bloqueado: admin pode, ou quem tem acesso geral
             return mod_is_admin or has_acesso
+
+        def _mod_tem_acesso_config() -> bool:
+            """True se o moderador tem QUALQUER acesso configurado (geral, específico,
+            grupo de cargos ou concessão direta) — usado para NÃO puni-lo como raider
+            (não zerar todos os cargos). Reversão pontual de cargo fora do escopo continua."""
+            if not moderator_member:
+                return False
+            if has_acesso or mod_is_admin:
+                return True
+            _mrids = mod_role_ids_for_blocked
+            for _al in blocked_roles_cfg.values():
+                if _mrids.intersection(_al):
+                    return True
+            for _g_str in settings.get("protecao_grupos_cargos", {}):
+                try:
+                    if int(_g_str) in _mrids:
+                        return True
+                except (ValueError, TypeError):
+                    pass
+            if settings.get("protecao_grupos_usuarios", {}).get(str(moderator_member.id)):
+                return True
+            return False
 
         # Restaura cargos protegidos removidos pelo fast-path se o moderador tiver acesso
         if _fast_removed_protected and not is_bot_action:
@@ -29375,7 +29403,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                             reason="Proteção de Cargos: modificação não autorizada revertida.",
                         )
 
-                if wipe_all_roles and moderator_member:
+                if wipe_all_roles and moderator_member and not _mod_tem_acesso_config():
                     roles_to_strip = [
                         r for r in moderator_member.roles
                         if not r.is_default() and not r.managed
@@ -29391,8 +29419,10 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             except (discord.Forbidden, discord.HTTPException) as e:
                 print(f"[protecao_cargos] Falha ao reverter cargos: {e}")
 
-            # Punição do moderador não autorizado: remove cargos + DM + restaura em 30 min
-            if moderator_member and not is_bot_action and not has_acesso:
+            # Punição do moderador não autorizado: remove cargos + DM + restaura em 30 min.
+            # NÃO pune quem tem QUALQUER acesso configurado (staff) — só reverte a mudança
+            # pontual; a punição (zerar cargos) fica reservada a quem não tem acesso nenhum.
+            if moderator_member and not is_bot_action and not _mod_tem_acesso_config():
                 _pc_removable = [
                     r for r in moderator_member.roles
                     if not r.is_default() and r.position < after.guild.me.top_role.position
