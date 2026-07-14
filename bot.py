@@ -24068,7 +24068,7 @@ async def _antraid_restore_roles_task(guild_id: int, user_id: int, role_ids: lis
     roles_to_restore = [r for r in roles_to_restore if r is not None]
     if roles_to_restore:
         try:
-            await member.add_roles(*roles_to_restore, reason="Anti-Raid: restauração automática de cargos após 30 min")
+            await member.add_roles(*roles_to_restore, reason="Anti-Raid: restauração automática de cargos após 30 min", atomic=False)
         except Exception as e:
             print(f"[AntiRaid] Erro ao restaurar cargos de {user_id}: {e}", flush=True)
     # DM de confirmação
@@ -29174,7 +29174,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             ]
             if _removable_bl:
                 try:
-                    await after.remove_roles(*_removable_bl, reason="Anti-Raid: blacklist de cargos ativa")
+                    await after.remove_roles(*_removable_bl, reason="Anti-Raid: blacklist de cargos ativa", atomic=False)
                 except Exception:
                     pass
             return
@@ -29215,6 +29215,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                     await after.remove_roles(
                         *_fast_remove_roles,
                         reason="Proteção de Cargos: cargo bloqueado",
+                        atomic=False,   # 1 chamada (PATCH) em vez de 1 por cargo → evita rate limit
                     )
                     print(
                         f"[protecao_fast] guild={after.guild.id} member={after.id} "
@@ -29276,14 +29277,14 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 _bl_rev = [r for r in after.roles if r.id in added and not r.is_default() and r.position < after.guild.me.top_role.position]
                 if _bl_rev:
                     try:
-                        await after.remove_roles(*_bl_rev, reason="Anti-Raid: blacklist de cargos — sem permissão para gerenciar cargos")
+                        await after.remove_roles(*_bl_rev, reason="Anti-Raid: blacklist de cargos — sem permissão para gerenciar cargos", atomic=False)
                     except Exception:
                         pass
             if removed:
                 _bl_rest = [discord.Object(id=rid) for rid in removed]
                 if _bl_rest:
                     try:
-                        await after.add_roles(*_bl_rest, reason="Anti-Raid: blacklist de cargos — restaurando cargos removidos")
+                        await after.add_roles(*_bl_rest, reason="Anti-Raid: blacklist de cargos — restaurando cargos removidos", atomic=False)
                     except Exception:
                         pass
             return
@@ -29375,6 +29376,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                     await after.add_roles(
                         *_to_readd_fast,
                         reason="Proteção de Cargos: acesso verificado — cargo restaurado",
+                        atomic=False,
                     )
                     print(
                         f"[protecao_fast_restore] guild={after.guild.id} member={after.id} "
@@ -29455,6 +29457,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                         await after.remove_roles(
                             *roles_obj,
                             reason="Proteção de Cargos: modificação não autorizada revertida.",
+                            atomic=False,
                         )
                 if to_restore_removed:
                     roles_obj = [
@@ -29468,6 +29471,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                         await after.add_roles(
                             *roles_obj,
                             reason="Proteção de Cargos: modificação não autorizada revertida.",
+                            atomic=False,
                         )
 
                 if wipe_all_roles and moderator_member:
@@ -29484,6 +29488,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                         await moderator_member.remove_roles(
                             *roles_to_strip,
                             reason="Proteção de Cargos: limite de tentativas atingido — cargos do moderador zerados.",
+                            atomic=False,
                         )
             except (discord.Forbidden, discord.HTTPException) as e:
                 print(f"[protecao_cargos] Falha ao reverter cargos: {e}")
