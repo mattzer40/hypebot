@@ -4950,7 +4950,13 @@ def _rebuild_overwrites(
 antspam_history: dict[tuple[int, int], list[float]] = {}
 mod_role_history: dict[tuple[int, int], list[float]] = {}
 bot_role_actions: dict[tuple[int, int, str], float] = {}
-target_manual_add_history: dict[tuple[int, int], list[float]] = {}
+
+# Proteção de Cargos — tentativas manuais não autorizadas, contadas por MODERADOR.
+# A mudança é SEMPRE revertida na hora; a punição (zerar cargos) só entra a partir
+# da PROTECAO_PUNIR_APOS-ésima tentativa dentro da janela.
+PROTECAO_PUNIR_APOS = 3            # tentativas antes de punir
+PROTECAO_TENTATIVAS_JANELA = 300   # janela de contagem, em segundos (5 min)
+mod_manual_unauth_history: dict[tuple[int, int], list[float]] = {}
 
 
 def _register_bot_role_action(member_id: int, role_id: int, action: str) -> None:
@@ -29367,14 +29373,23 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             non_whitelist_unauthorized = [
                 rid for rid in (to_remove_added + _fast_nao_restaurados) if rid not in whitelist
             ]
-            if non_whitelist_unauthorized:
+            if non_whitelist_unauthorized and moderator_member:
                 now_ts = datetime.now().timestamp()
-                key = (after.guild.id, after.id)
-                hist = target_manual_add_history.setdefault(key, [])
+                # Conta por MODERADOR (é ele quem leva a punição), não pelo alvo — assim
+                # espalhar as tentativas em alvos diferentes também acumula.
+                key = (after.guild.id, moderator_member.id)
+                hist = mod_manual_unauth_history.setdefault(key, [])
                 hist.extend([now_ts] * len(non_whitelist_unauthorized))
-                hist[:] = [t for t in hist if now_ts - t <= 60]
-                if len(hist) >= 3:
-                    wipe_all_roles = True
+                hist[:] = [t for t in hist if now_ts - t <= PROTECAO_TENTATIVAS_JANELA]
+                _tentativas = len(hist)
+                print(
+                    f"[protecao_tentativas] guild={after.guild.id} mod={moderator_member.id} "
+                    f"tentativas={_tentativas}/{PROTECAO_PUNIR_APOS} "
+                    f"janela={PROTECAO_TENTATIVAS_JANELA}s",
+                    flush=True,
+                )
+                if _tentativas >= PROTECAO_PUNIR_APOS:
+                    wipe_all_roles = True   # atingiu o limite → punir
                     hist.clear()
 
         print(
@@ -29386,6 +29401,10 @@ async def on_member_update(before: discord.Member, after: discord.Member):
         )
 
         if to_remove_added or to_restore_removed or wipe_all_roles or _fast_nao_restaurados:
+            # IDs capturados ANTES de remover: o cache do discord.py só atualiza quando
+            # chega o evento do gateway, então ler moderator_member.roles depois do
+            # remove_roles é uma corrida (podia sair vazio e não restaurar/avisar).
+            _wiped_role_ids: list[int] = []
             try:
                 if to_remove_added:
                     roles_obj = [
@@ -29419,8 +29438,10 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                         r for r in moderator_member.roles
                         if not r.is_default() and not r.managed
                         and r.id not in whitelist
+                        and r.position < after.guild.me.top_role.position
                     ]
                     if roles_to_strip:
+                        _wiped_role_ids = [r.id for r in roles_to_strip]
                         for r in roles_to_strip:
                             _register_bot_role_action(moderator_member.id, r.id, "remove")
                         await moderator_member.remove_roles(
@@ -29431,27 +29452,14 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 print(f"[protecao_cargos] Falha ao reverter cargos: {e}")
 
             # Punição do moderador: remove cargos + DM + restaura em 30 min.
-            # Este bloco só roda quando ALGO foi revertido (mudança não autorizada), então
-            # pune TODO mundo que mexeu no dedo sem permissão — inclusive quem só tem grupo
-            # (grupo vale só p/ !groles) e quem tem Cargo de Acesso mas mexeu em cargo
-            # protegido (Proteger Cargo tem prioridade absoluta).
-            if moderator_member and not is_bot_action:
-                _pc_removable = [
-                    r for r in moderator_member.roles
-                    if not r.is_default() and r.position < after.guild.me.top_role.position
-                ]
-                _pc_role_ids = [r.id for r in _pc_removable]
-                if _pc_removable and not wipe_all_roles:
-                    try:
-                        for _r in _pc_removable:
-                            _register_bot_role_action(moderator_member.id, _r.id, "remove")
-                        await moderator_member.remove_roles(*_pc_removable, reason="Proteção de Cargos: modificação não autorizada")
-                    except Exception:
-                        pass
-                elif wipe_all_roles:
-                    # wipe_all_roles já removeu — coleta os ids que foram removidos
-                    _pc_role_ids = [r.id for r in moderator_member.roles if not r.is_default()] + _pc_role_ids
-                    _pc_role_ids = list(set(_pc_role_ids))
+            # SÓ entra depois de PROTECAO_PUNIR_APOS tentativas não autorizadas na janela
+            # (wipe_all_roles é o sinal de "limite atingido"). Abaixo disso a mudança é
+            # apenas revertida, sem punir. Vale para todo mundo que mexe no dedo sem
+            # permissão: quem só tem grupo (grupo é só p/ !groles) e quem tem Cargo de
+            # Acesso mas encostou em cargo protegido (Proteger Cargo > tudo).
+            if moderator_member and not is_bot_action and wipe_all_roles:
+                # O bloco de wipe acima já removeu os cargos e guardou os ids.
+                _pc_role_ids = _wiped_role_ids
                 if _pc_role_ids:
                     _pc_key = (after.guild.id, moderator_member.id)
                     if _pc_key in _ANTRAID_PENDING_RESTORE:
