@@ -29185,6 +29185,13 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 _fast_handled.add(_rid)
             if _fast_remove_roles:
                 try:
+                    # Registrar ANTES de remover é obrigatório: esta remoção dispara um novo
+                    # on_member_update e, sem o registro, o slow-path acha o humano que
+                    # adicionou (o audit log pula as entradas do bot), conclui "removeu um
+                    # cargo protegido sem permissão" e RESTAURA o cargo — o Proteger Cargo
+                    # rebocava e o cargo voltava sozinho.
+                    for _fr in _fast_remove_roles:
+                        _register_bot_role_action(after.id, _fr.id, "remove")
                     await after.remove_roles(
                         *_fast_remove_roles,
                         reason="Proteção de Cargos: cargo bloqueado",
@@ -29195,6 +29202,11 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                         flush=True,
                     )
                 except Exception as _fe:
+                    # Falhou: desfaz os registros, senão uma remoção humana legítima
+                    # depois seria confundida com ação do bot e não seria revertida.
+                    for _fr in _fast_remove_roles:
+                        bot_role_actions.pop((after.id, _fr.id, "remove"), None)
+                    _fast_removed_protected.clear()
                     print(f"[protecao_fast] erro ao remover: {_fe}", flush=True)
         added -= _fast_handled  # retira do added para o slow-path não reprocessar
 
