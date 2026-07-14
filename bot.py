@@ -4977,6 +4977,12 @@ def _consume_bot_role_action(member_id: int, role_id: int, action: str) -> bool:
     return True
 
 
+def _peek_bot_role_action(member_id: int, role_id: int, action: str) -> bool:
+    """Igual ao consume, mas NÃO remove o marcador — só verifica se existe e é válido."""
+    ts = bot_role_actions.get((member_id, role_id, action))
+    return ts is not None and (datetime.now().timestamp() - ts) <= 30
+
+
 LINK_REGEX = re.compile(r"https?://\S+", re.IGNORECASE)
 
 EMOJI_HOUSE = "<:servidor_:1518271981189992638>"
@@ -29143,6 +29149,19 @@ async def on_member_update(before: discord.Member, after: discord.Member):
         removed = before_ids - after_ids
         if not added and not removed:
             return
+
+    # ── Early-exit: mudança feita 100% pelo próprio bot ───────────────────────
+    # Cada add_roles/remove_roles do bot dispara um novo on_member_update. Se TODA a
+    # mudança tem marcador de ação do bot, consome os marcadores e sai já — sem o
+    # sleep de 0.3s nem a chamada de audit log. Sem isso, um flood de cargos vira uma
+    # fila de eventos caros (cada cascata esperando audit) e a reversão fica lenta.
+    if (all(_peek_bot_role_action(after.id, _r, "add") for _r in added)
+            and all(_peek_bot_role_action(after.id, _r, "remove") for _r in removed)):
+        for _r in added:
+            _consume_bot_role_action(after.id, _r, "add")
+        for _r in removed:
+            _consume_bot_role_action(after.id, _r, "remove")
+        return
 
     # ── Blacklist de cargos permanente ────────────────────────────────────────
     if added:
