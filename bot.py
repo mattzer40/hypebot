@@ -4954,15 +4954,16 @@ bot_role_actions: dict[tuple[int, int, str], float] = {}
 # Proteção de Cargos — tentativas manuais não autorizadas, contadas por MODERADOR.
 # A mudança é SEMPRE revertida na hora; a punição (zerar cargos) só entra a partir
 # da PROTECAO_PUNIR_APOS-ésima tentativa dentro da janela.
-PROTECAO_PUNIR_APOS = 3            # tentativas (1 cargo por vez) antes de punir
-PROTECAO_TENTATIVAS_JANELA = 300   # janela de contagem, em segundos (5 min)
-PROTECAO_FLOOD_MIN = 2             # nº de cargos numa MESMA ação p/ contar como flood → pune na hora
-PROTECAO_BURST_COUNT = 5           # nº de cargos não autorizados em cliques rápidos separados...
-PROTECAO_BURST_JANELA = 1.0        # ...dentro deste tempo (s) → burst (macro/clique rápido) → pune na hora
+# Política de punição da Proteção de Cargos. Ataque rápido = estrito; engano isolado = folga.
+PROTECAO_PUNIR_APOS = 5            # cliques LENTOS/isolados: nº de tentativas na janela antes de punir
+PROTECAO_TENTATIVAS_JANELA = 300   # janela do contador lento, em segundos (5 min)
+PROTECAO_FLOOD_MIN = 2             # nº de cargos numa MESMA ação (multi-select) → pune na hora
+PROTECAO_BURST_COUNT = 3           # cliques RÁPIDOS separados: nº de cargos não autorizados...
+PROTECAO_BURST_JANELA = 2.0        # ...dentro deste tempo (s) → burst (macro) → pune na hora
 mod_manual_unauth_history: dict[tuple[int, int], list[float]] = {}
 # Contador separado p/ o burst (janela curtíssima). É independente do de cima porque
-# a punição por "3 tentativas" limpa aquele contador — se o burst usasse o mesmo, nunca
-# acumularia até 5. Este só guarda os timestamps dos últimos PROTECAO_BURST_JANELA seg.
+# a punição por tentativas limpa aquele contador — se o burst usasse o mesmo, poderia
+# nunca acumular. Este só guarda os timestamps dos últimos PROTECAO_BURST_JANELA seg.
 mod_burst_history: dict[tuple[int, int], list[float]] = {}
 
 
