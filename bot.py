@@ -18723,6 +18723,12 @@ class CentralLogsView(discord.ui.View):
             btn = discord.ui.Button(label=cat["label"][:80], style=discord.ButtonStyle.secondary, row=i // 5)
             btn.callback = self._make_cb(cat["id"])
             self.add_item(btn)
+        set_all = discord.ui.Button(label="Definir tudo num canal", style=discord.ButtonStyle.success, row=2)
+        set_all.callback = self._set_all
+        self.add_item(set_all)
+        clear_all = discord.ui.Button(label="Limpar tudo", style=discord.ButtonStyle.danger, row=2)
+        clear_all.callback = self._clear_all
+        self.add_item(clear_all)
         back = discord.ui.Button(label="Voltar", style=discord.ButtonStyle.primary, row=2)
         back.callback = self._back
         self.add_item(back)
@@ -18735,11 +18741,64 @@ class CentralLogsView(discord.ui.View):
             await interaction.response.edit_message(embed=embed, view=view)
         return cb
 
+    async def _set_all(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_central_logs_embed(self.author, settings)
+        view = LogSetAllView(self.author)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    async def _clear_all(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["audit_logs"] = {}
+        save_settings_to_disk()
+        embed = build_central_logs_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=CentralLogsView(self.author))
+        await interaction.followup.send(embed=_notif_embed("Todos os logs foram desativados."), ephemeral=True)
+
     async def _back(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         embed = build_security_embed(interaction.user, settings)
         view = SecurityView(interaction.user)
         await interaction.response.edit_message(embed=embed, view=view)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            settings = get_settings(interaction.guild.id if interaction.guild else 0)
+            await interaction.response.send_message(TRANSLATIONS[settings["language"]]["only_author"], ephemeral=True)
+            return False
+        return True
+
+
+class LogSetAllView(discord.ui.View):
+    """Aplica UM canal a TODOS os eventos de log de uma vez."""
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=300)
+        self.author = author
+        self.ch_select = GuildChannelSelect(
+            placeholder="Canal que receberá TODOS os logs...",
+            channel_types=[discord.ChannelType.text], row=0,
+            guild=getattr(author, "guild", None),
+        )
+        self.ch_select.callback = self._on_channel
+        self.add_item(self.ch_select)
+        back = discord.ui.Button(label="Voltar", style=discord.ButtonStyle.primary, row=1)
+        back.callback = self._back
+        self.add_item(back)
+
+    async def _on_channel(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        ch = self.ch_select.values[0]
+        settings["audit_logs"] = {ev: ch.id for cat in AUDIT_LOG_CATEGORIES for ev, _ in cat["events"]}
+        save_settings_to_disk()
+        embed = build_central_logs_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=CentralLogsView(self.author))
+        await interaction.followup.send(
+            embed=_notif_embed(f"Todos os logs foram definidos em {ch.mention}."), ephemeral=True)
+
+    async def _back(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_central_logs_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=CentralLogsView(self.author))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
