@@ -32594,6 +32594,13 @@ class GrolesRoleButton(discord.ui.Button):
             return
         target = interaction.guild.get_member(self.target_id)
         if target is None:
+            # Não está no cache (comum ao gerenciar outro usuário) — busca da API,
+            # com o alvo original do painel como último recurso.
+            try:
+                target = await interaction.guild.fetch_member(self.target_id)
+            except Exception:
+                target = getattr(self.parent_view, "target", None)
+        if target is None:
             await interaction.response.send_message("Membro alvo não encontrado.", ephemeral=True)
             return
 
