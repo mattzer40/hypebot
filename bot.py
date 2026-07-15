@@ -6515,6 +6515,12 @@ class ServidorMenuOne(discord.ui.Select):
             await interaction.response.edit_message(embed=embed, view=view)
             return
 
+        if selected == "logs_servidor":
+            embed = build_central_logs_embed(interaction.user, settings)
+            view = CentralLogsView(interaction.user)
+            await interaction.response.edit_message(embed=embed, view=view)
+            return
+
         labels = {opt.value: opt.label for opt in self.options}
         await interaction.response.send_message(
             f"{TRANSLATIONS[settings['language']]['coming_soon']} (**{labels[selected]}**)",
@@ -44977,21 +44983,30 @@ class UnbanPanelView(discord.ui.View):
 
 
 class UnbanSearchModal(discord.ui.Modal, title="Procurar banimento ativo"):
-    ban_id = discord.ui.TextInput(
-        label="ID do banimento",
-        placeholder="Ex: HBY16E40W",
+    user_id_input = discord.ui.TextInput(
+        label="ID do usuário",
+        placeholder="Ex: 123456789012345678",
         required=True,
-        max_length=20,
+        max_length=25,
     )
 
     async def on_submit(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         target_gid = _unban_target_gid(interaction.guild, settings)
         target_settings = get_settings(target_gid)
-        rec = _unban_find_record(target_settings, self.ban_id.value)
-        if rec is None or not rec.get("active", True):
+        raw = (self.user_id_input.value or "").strip().strip("<@!>").strip()
+        try:
+            uid = int(raw)
+        except ValueError:
             await interaction.response.send_message(
-                embed=_notif_embed("<a:alerta:1518271939460857968> ID de banimento inválido."),
+                embed=_notif_embed("<a:alerta:1518271939460857968> ID de usuário inválido (use só números)."),
+                ephemeral=True,
+            )
+            return
+        rec = _unban_active_record_for_user(target_settings, uid)
+        if rec is None:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Nenhum banimento ativo encontrado para esse usuário."),
                 ephemeral=True,
             )
             return
@@ -45061,7 +45076,15 @@ async def _unban_open_ticket(interaction: discord.Interaction, rec: dict, target
 
     target_settings = get_settings(target_gid)
     records_count   = len(_banrec_user(target_settings, rec.get("user_id")))
-    _tk_layout = UnbanTicketLayout(guild=guild, opener=opener, rec=rec, records_count=records_count, settings=settings)
+    # Avatar do usuário banido para exibir no ticket (thumbnail "ali do lado")
+    _banned_avatar = None
+    try:
+        _bu = await bot.fetch_user(int(rec.get("user_id")))
+        _banned_avatar = _bu.display_avatar.url
+    except Exception:
+        pass
+    _tk_layout = UnbanTicketLayout(guild=guild, opener=opener, rec=rec, records_count=records_count,
+                                   settings=settings, banned_avatar=_banned_avatar)
 
     ping = opener.mention + (f" {staff_role.mention}" if staff_role else "")
     try:
@@ -45071,7 +45094,8 @@ async def _unban_open_ticket(interaction: discord.Interaction, rec: dict, target
             allowed_mentions=discord.AllowedMentions(users=True, roles=True),
         )
     except Exception:
-        await canal.send(view=UnbanTicketLayout(guild=guild, opener=opener, rec=rec, records_count=records_count, settings=settings))
+        await canal.send(view=UnbanTicketLayout(guild=guild, opener=opener, rec=rec, records_count=records_count,
+                                                settings=settings, banned_avatar=_banned_avatar))
 
     await interaction.response.send_message(
         embed=_notif_embed(f"<a:online:1518271945550856295> *unban aqui:* {canal.mention}"),
@@ -45290,7 +45314,7 @@ class _TkFecharBtn(discord.ui.Button):
 
 class UnbanTicketLayout(discord.ui.LayoutView):
     """Ticket de unban (Components V2) — botões nas seções, igual ao HIT."""
-    def __init__(self, guild=None, opener=None, rec=None, records_count=0, settings=None):
+    def __init__(self, guild=None, opener=None, rec=None, records_count=0, settings=None, banned_avatar=None):
         super().__init__(timeout=None)
         settings = settings if settings is not None else (get_settings(guild.id) if guild else {})
         rec = rec or {}
@@ -45302,14 +45326,18 @@ class UnbanTicketLayout(discord.ui.LayoutView):
         _nome     = _unban_display_name(guild, settings)
         icon_url  = settings.get("unban_panel_logo") or (guild.icon.url if (guild and guild.icon) else None)
         opener_name = getattr(opener, "display_name", str(opener)) if opener else "?"
+        # Thumbnail "ali do lado" = avatar do usuário BANIDO (mostra de quem é o ticket),
+        # com fallback pro logo/ícone do servidor.
+        _thumb = banned_avatar or icon_url
 
         items = [discord.ui.TextDisplay(f"# {_e_title} Unban - {_nome}"), discord.ui.Separator(visible=True)]
         _top = discord.ui.TextDisplay(
             f"**Ticket aberto por: {opener_name}**\n"
+            f"**Usuário banido:** <@{rec.get('user_id',0)}> `{rec.get('user_name','?')}`\n"
             "-# Aguarde o atendimento de um suporte."
         )
-        if icon_url:
-            items.append(discord.ui.Section(_top, accessory=discord.ui.Thumbnail(icon_url)))
+        if _thumb:
+            items.append(discord.ui.Section(_top, accessory=discord.ui.Thumbnail(_thumb)))
         else:
             items.append(_top)
         items.append(discord.ui.Separator(visible=True))
