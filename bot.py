@@ -39020,11 +39020,28 @@ def _panel_v2_image_urls(blocks: list) -> list:
     return urls
 
 
+_PANEL_IMG_CACHE_DIR = os.path.join(_CLIENT_DIR, "panel_img_cache")
+
+
+def _panel_img_cache_path(url: str) -> str:
+    import hashlib as _hl
+    from urllib.parse import urlparse as _up2
+    _base = url.split("?", 1)[0]
+    _ext = _base.rsplit(".", 1)[-1].lower() if "." in _base.rsplit("/", 1)[-1] else "png"
+    if len(_ext) > 5 or "/" in _ext:
+        _ext = "png"
+    h = _hl.sha1(_base.encode("utf-8")).hexdigest()[:24]
+    return os.path.join(_PANEL_IMG_CACHE_DIR, f"{h}.{_ext}")
+
+
 async def _panel_v2_attachments(blocks: list) -> tuple[list, dict]:
     """Baixa as imagens (galerias e thumbnails) dos blocos do painel e devolve
     (files, url_map) onde url_map mapeia a URL original → 'attachment://arquivo'.
-    Assim o painel é enviado com a imagem anexada, sem depender do link do CDN
-    do Discord que agora expira."""
+    Assim o painel é enviado com a imagem anexada, sem depender do link do CDN.
+
+    Os bytes são CACHEADOS em disco (volume /data) na PRIMEIRA vez que a URL ainda
+    é válida. Depois disso a imagem é lida do cache — mesmo que a URL do CDN já
+    tenha expirado. Isso resolve a imagem "expirando toda hora"."""
     import aiohttp as _ah_pv
     from urllib.parse import urlparse as _uparse
     files: list = []
@@ -39032,15 +39049,38 @@ async def _panel_v2_attachments(blocks: list) -> tuple[list, dict]:
     _urls = _panel_v2_image_urls(blocks)
     if not _urls:
         return files, url_map
+    try:
+        os.makedirs(_PANEL_IMG_CACHE_DIR, exist_ok=True)
+    except Exception:
+        pass
     idx = 0
     async with _ah_pv.ClientSession() as _s:
         for u in _urls:
+            _data = None
+            _cache = _panel_img_cache_path(u)
+            # 1) tenta o cache em disco (permanente)
             try:
-                async with _s.get(u) as _r:
-                    if _r.status != 200:
-                        continue
-                    _data = await _r.read()
+                if os.path.exists(_cache) and os.path.getsize(_cache) > 100:
+                    with open(_cache, "rb") as _cf:
+                        _data = _cf.read()
             except Exception:
+                _data = None
+            # 2) senão, baixa da URL e cacheia
+            if _data is None:
+                try:
+                    async with _s.get(u) as _r:
+                        if _r.status != 200:
+                            continue
+                        _data = await _r.read()
+                    if _data and len(_data) > 100:
+                        try:
+                            with open(_cache, "wb") as _cf:
+                                _cf.write(_data)
+                        except Exception:
+                            pass
+                except Exception:
+                    continue
+            if not _data:
                 continue
             _name = (_uparse(u).path.rsplit("/", 1)[-1] or f"img{idx}")
             if "." not in _name:
