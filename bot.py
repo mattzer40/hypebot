@@ -32493,11 +32493,16 @@ def _can_manage_role(member: discord.Member, role_id: int, settings: dict) -> bo
     if role and role.managed:
         return False
     member_role_ids = {r.id for r in member.roles}
-    # ── Proteger Cargo tem prioridade ABSOLUTA ───────────────────────────────
+    # ── Grupo de Usuários (concessão direta) FURA o Proteger Cargo ────────────
+    # Se o cargo está explicitamente na lista daquele usuário, ele pode gerenciá-lo
+    # mesmo que seja um cargo protegido — foi liberado de propósito para ELE.
+    _direct = settings.get("protecao_grupos_usuarios", {}).get(str(member.id))
+    if _direct and role_id in _direct:
+        return True
+    # ── Proteger Cargo tem prioridade (exceto concessão direta acima) ─────────
     # Um cargo protegido só pode ser gerenciado por quem tem um dos Cargos de
     # Acesso configurados PARA ELE. Nem administrador, nem Cargo de Acesso geral,
-    # nem grupo liberam. Se nenhum acesso específico for definido, só admin.
-    # (Esta checagem vem ANTES do bypass de admin de propósito.)
+    # nem Grupo de Cargos liberam. Se nenhum acesso específico for definido, só admin.
     blocked = settings.get("protecao_cargo_bloqueado", {})
     if str(role_id) in blocked:
         access = set(blocked[str(role_id)])
@@ -32516,9 +32521,6 @@ def _can_manage_role(member: discord.Member, role_id: int, settings: dict) -> bo
             continue
         if grupo_rid in member_role_ids and role_id in managed:
             return True
-    direct = settings.get("protecao_grupos_usuarios", {}).get(str(member.id))
-    if direct and role_id in direct:
-        return True
     return False
 
 
