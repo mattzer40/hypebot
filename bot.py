@@ -4626,6 +4626,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("protecao_cargos_whitelist", [])
     settings.setdefault("protecao_cargos_acesso", [])
     settings.setdefault("protecao_cargos_log_channel", None)
+    settings.setdefault("audit_logs", {})   # Central de Logs: event_key -> channel_id
     settings.setdefault("protecao_grupos_cargos", {})
     settings.setdefault("protecao_grupos_usuarios", {})
     settings.setdefault("protecao_cargo_bloqueado", {})
@@ -18517,6 +18518,7 @@ SECURITY_MENU_1_OPTIONS = [
 
 SECURITY_MENU_2_OPTIONS = [
     ("Pagina Inicial", EMOJI_HOUSE, "home2"),
+    ("Central de Logs", "<:seguranca:1518271987393232936>", "central_logs"),
     ("Bloqueio de Permissões", EMOJI_SHIELD, "bloqueio_perm"),
     ("Banimento por Aprovação", EMOJI_SHIELD, "ban_aprovacao"),
 ]
@@ -18526,6 +18528,295 @@ def _make_select_emoji(emoji_str: str):
     if emoji_str.startswith("<") and emoji_str.endswith(">"):
         return discord.PartialEmoji.from_str(emoji_str)
     return emoji_str
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Central de Logs (auditoria) — cada evento loga num canal configurável.
+# INERTE por padrão: sem canal configurado, nenhum evento é enviado.
+# ══════════════════════════════════════════════════════════════════════════════
+AUDIT_LOG_CATEGORIES = [
+    {"id": "banimentos", "label": "Banimentos e expulsões", "emoji": "<:seguranca:1518271987393232936>", "events": [
+        ("ban", "Banimentos"), ("unban", "Desbanimentos"), ("kick", "Expulsões")]},
+    {"id": "cargos", "label": "Cargos", "emoji": "<:seguranca:1518271987393232936>", "events": [
+        ("role_create", "Criar cargos"), ("role_delete", "Deletar cargos"), ("role_update", "Editar cargos"),
+        ("member_role_add", "Adicionar cargos"), ("member_role_remove", "Remover cargos")]},
+    {"id": "canais", "label": "Canais", "emoji": "<:servidor_:1518271981189992638>", "events": [
+        ("channel_create", "Criar canais"), ("channel_delete", "Deletar canais"), ("channel_update", "Atualizar canais")]},
+    {"id": "silenciados", "label": "Membros silenciados", "emoji": "<:bot_v3:1506343470242074785>", "events": [
+        ("timeout", "Silenciados chat"), ("voice_mute", "Silenciados voz")]},
+    {"id": "bots", "label": "Bots adicionados", "emoji": "<:Bot:1518272060860928072>", "events": [
+        ("bot_add", "Bots adicionados")]},
+    {"id": "entrada_saida", "label": "Entrada e Saída", "emoji": "<:comunidade_:1518272016971595807>", "events": [
+        ("join", "Entrada de membros"), ("leave", "Saída de membros")]},
+    {"id": "mensagens", "label": "Mensagens", "emoji": "<:Mov_chat:1518271970008105031>", "events": [
+        ("msg_delete", "Mensagens apagadas"), ("msg_edit", "Mensagens atualizadas")]},
+    {"id": "voz", "label": "Tráfego de voz", "emoji": "<:mov_call:1518271964077232150>", "events": [
+        ("voice", "Tráfego de voz")]},
+    {"id": "seguranca", "label": "Segurança", "emoji": "<:seguranca:1518271987393232936>", "events": [
+        ("sec_cargos", "Proteção de Cargos"), ("sec_antiraid", "Anti-Raid / Anti-Bot"),
+        ("sec_url", "Proteção de URL")]},
+]
+_AUDIT_EVENT_LABELS = {ev: lbl for cat in AUDIT_LOG_CATEGORIES for ev, lbl in cat["events"]}
+
+
+async def _audit_log(guild, event_key, *, title=None, description=None, color=None,
+                     fields=None, author_name=None, author_icon=None, thumbnail=None, embed=None):
+    """Envia um embed de log no canal configurado para `event_key`. No-op se não houver
+    canal configurado. Nunca levanta exceção (protege os handlers de evento)."""
+    try:
+        if guild is None:
+            return
+        settings = get_settings(guild.id)
+        chan_id = (settings.get("audit_logs") or {}).get(event_key)
+        if not chan_id:
+            return
+        ch = guild.get_channel(chan_id)
+        if ch is None or not hasattr(ch, "send"):
+            return
+        if embed is None:
+            embed = discord.Embed(
+                title=title, description=description,
+                color=color if color is not None else settings.get("embed_color", 0x2B2D31),
+            )
+            if author_name:
+                embed.set_author(name=author_name, icon_url=author_icon)
+            if thumbnail:
+                embed.set_thumbnail(url=thumbnail)
+            for f in (fields or []):
+                embed.add_field(name=f[0], value=f[1], inline=(f[2] if len(f) > 2 else False))
+            embed.set_footer(text=_footer_name(guild, settings))
+            embed.timestamp = datetime.now()
+        await ch.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+    except Exception as _e:
+        print(f"[audit_log] {event_key}: {_e}", flush=True)
+
+
+def _audit_is_on(guild, event_key) -> bool:
+    """Cheap: True se há canal configurado para o evento (evita chamadas de API à toa)."""
+    try:
+        return bool(guild and (get_settings(guild.id).get("audit_logs") or {}).get(event_key))
+    except Exception:
+        return False
+
+
+async def _audit_responsible_mention(guild, action) -> str:
+    try:
+        await asyncio.sleep(0.6)  # deixa o audit log do Discord propagar
+        rid = await _antraid_get_responsible(guild, action)
+        return f"<@{rid}>" if rid else "`Desconhecido`"
+    except Exception:
+        return "`Desconhecido`"
+
+
+async def _log_entity_event(guild, event_key, action, title, desc):
+    """Log genérico p/ eventos de cargo/canal: descrição + responsável via audit log."""
+    try:
+        resp = await _audit_responsible_mention(guild, action)
+        await _audit_log(guild, event_key, title=title, description=f"{desc}\n**Responsável:** {resp}")
+    except Exception as _e:
+        print(f"[audit_log] {event_key}: {_e}", flush=True)
+
+
+async def _log_member_roles(guild, member, added, removed):
+    """Log de cargos adicionados/removidos de um membro (mudança manual ou por outro bot)."""
+    try:
+        resp = await _audit_responsible_mention(guild, discord.AuditLogAction.member_role_update)
+        if added and _audit_is_on(guild, "member_role_add"):
+            names = ", ".join(f"<@&{r}>" for r in added)
+            await _audit_log(guild, "member_role_add", title="Cargo(s) adicionado(s)",
+                description=f"**Membro:** {member.mention}\n**Cargos:** {names}\n**Responsável:** {resp}")
+        if removed and _audit_is_on(guild, "member_role_remove"):
+            names = ", ".join(f"<@&{r}>" for r in removed)
+            await _audit_log(guild, "member_role_remove", title="Cargo(s) removido(s)",
+                description=f"**Membro:** {member.mention}\n**Cargos:** {names}\n**Responsável:** {resp}")
+    except Exception as _e:
+        print(f"[audit_log] member_roles: {_e}", flush=True)
+
+
+async def _log_timeout(guild, member, until):
+    try:
+        resp = await _audit_responsible_mention(guild, discord.AuditLogAction.member_update)
+        if until is not None:
+            await _audit_log(guild, "timeout", title="Membro silenciado (timeout)",
+                description=f"**Membro:** {member.mention}\n**Expira:** <t:{int(until.timestamp())}:R>\n**Responsável:** {resp}")
+        else:
+            await _audit_log(guild, "timeout", title="Timeout removido",
+                description=f"**Membro:** {member.mention}\n**Responsável:** {resp}")
+    except Exception as _e:
+        print(f"[audit_log] timeout: {_e}", flush=True)
+
+
+async def _log_voice(guild, member, before, after):
+    """Tráfego de voz (entrar/sair/mudar de call) + silenciados de voz (server mute/deafen)."""
+    try:
+        if before.channel != after.channel:
+            if before.channel is None and after.channel is not None:
+                await _audit_log(guild, "voice", title="Entrou em call",
+                    description=f"**Usuário:** {member.mention}\n**Canal:** {after.channel.mention}")
+            elif after.channel is None and before.channel is not None:
+                await _audit_log(guild, "voice", title="Saiu da call",
+                    description=f"**Usuário:** {member.mention}\n**Canal:** {before.channel.mention}")
+            else:
+                await _audit_log(guild, "voice", title="Mudou de call",
+                    description=f"**Usuário:** {member.mention}\n{before.channel.mention} → {after.channel.mention}")
+        if before.mute != after.mute:
+            await _audit_log(guild, "voice_mute",
+                title="Membro mutado (voz)" if after.mute else "Membro desmutado (voz)",
+                description=f"**Usuário:** {member.mention}\n**Ação:** {'Mutado' if after.mute else 'Desmutado'} no servidor")
+        if before.deaf != after.deaf:
+            await _audit_log(guild, "voice_mute",
+                title="Membro ensurdecido (voz)" if after.deaf else "Membro des-ensurdecido (voz)",
+                description=f"**Usuário:** {member.mention}\n**Ação:** {'Ensurdecido' if after.deaf else 'Des-ensurdecido'} no servidor")
+    except Exception as _e:
+        print(f"[audit_log] voice: {_e}", flush=True)
+
+
+async def _log_member_removal(guild, member):
+    """Distingue expulsão (kick) de saída via audit log e loga no canal certo."""
+    try:
+        await asyncio.sleep(0.6)
+        import datetime as _dt
+        kicker = None
+        try:
+            async for e in guild.audit_logs(limit=3, action=discord.AuditLogAction.kick):
+                if e.target and e.target.id == member.id and \
+                        (_dt.datetime.now(_dt.timezone.utc) - e.created_at).total_seconds() < 8:
+                    kicker = e.user
+                    break
+        except Exception:
+            pass
+        if kicker is not None:
+            await _audit_log(guild, "kick", title="Membro expulso",
+                description=f"**Usuário:** {member.mention} · `{member}`\n**Responsável:** {kicker.mention}")
+        else:
+            await _audit_log(guild, "leave", title="Membro saiu",
+                description=f"**Usuário:** {member.mention} · `{member}`")
+    except Exception as _e:
+        print(f"[audit_log] leave/kick: {_e}", flush=True)
+
+
+def build_central_logs_embed(author: discord.Member, settings: dict) -> discord.Embed:
+    logs = settings.get("audit_logs") or {}
+    guild = getattr(author, "guild", None)
+    embed = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
+    icon_url = (guild.icon.url if guild and guild.icon else None) or _avatar_url(author)
+    embed.set_author(name=f"Central de Logs — {guild.name if guild else ''}", icon_url=icon_url)
+    embed.set_thumbnail(url=_avatar_url(author))
+    for cat in AUDIT_LOG_CATEGORIES:
+        lines = []
+        for ev, lbl in cat["events"]:
+            cid = logs.get(ev)
+            ch = guild.get_channel(cid) if (guild and cid) else None
+            val = ch.mention if ch else "`Nenhum canal`"
+            lines.append(f"{lbl} » {val}")
+        embed.add_field(name=f"{cat['emoji']}  {cat['label']}", value="\n".join(lines), inline=False)
+    embed.set_footer(text=f"Central de Logs — {_footer_name(guild, settings)}", icon_url=icon_url)
+    embed.timestamp = datetime.now()
+    return embed
+
+
+class CentralLogsView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=300)
+        self.author = author
+        for i, cat in enumerate(AUDIT_LOG_CATEGORIES):
+            btn = discord.ui.Button(label=cat["label"][:80], style=discord.ButtonStyle.secondary, row=i // 5)
+            btn.callback = self._make_cb(cat["id"])
+            self.add_item(btn)
+        back = discord.ui.Button(label="Voltar", style=discord.ButtonStyle.primary, row=2)
+        back.callback = self._back
+        self.add_item(back)
+
+    def _make_cb(self, cat_id: str):
+        async def cb(interaction: discord.Interaction):
+            settings = get_settings(interaction.guild.id)
+            embed = build_central_logs_embed(self.author, settings)
+            view = LogCategoryView(self.author, cat_id)
+            await interaction.response.edit_message(embed=embed, view=view)
+        return cb
+
+    async def _back(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_security_embed(interaction.user, settings)
+        view = SecurityView(interaction.user)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            settings = get_settings(interaction.guild.id if interaction.guild else 0)
+            await interaction.response.send_message(TRANSLATIONS[settings["language"]]["only_author"], ephemeral=True)
+            return False
+        return True
+
+
+class LogCategoryView(discord.ui.View):
+    def __init__(self, author: discord.Member, cat_id: str):
+        super().__init__(timeout=300)
+        self.author = author
+        self.cat = next(c for c in AUDIT_LOG_CATEGORIES if c["id"] == cat_id)
+        self.sel_event = self.cat["events"][0][0]
+        self.ev_select = discord.ui.Select(
+            placeholder="Selecione o evento a configurar...", row=0,
+            options=[discord.SelectOption(label=lbl, value=ev, default=(ev == self.sel_event))
+                     for ev, lbl in self.cat["events"]],
+        )
+        self.ev_select.callback = self._on_event
+        self.add_item(self.ev_select)
+        self.ch_select = GuildChannelSelect(
+            placeholder="Canal para o evento selecionado...",
+            channel_types=[discord.ChannelType.text], row=1,
+            guild=getattr(author, "guild", None),
+        )
+        self.ch_select.callback = self._on_channel
+        self.add_item(self.ch_select)
+        rm = discord.ui.Button(label="Remover canal do evento", style=discord.ButtonStyle.danger, row=2)
+        rm.callback = self._remove
+        self.add_item(rm)
+        back = discord.ui.Button(label="Voltar", style=discord.ButtonStyle.primary, row=2)
+        back.callback = self._back
+        self.add_item(back)
+
+    async def _on_event(self, interaction: discord.Interaction):
+        self.sel_event = self.ev_select.values[0]
+        for o in self.ev_select.options:
+            o.default = (o.value == self.sel_event)
+        await interaction.response.edit_message(view=self)
+
+    async def _on_channel(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        logs = settings.setdefault("audit_logs", {})
+        ch = self.ch_select.values[0]
+        logs[self.sel_event] = ch.id
+        save_settings_to_disk()
+        embed = build_central_logs_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=self)
+        lbl = _AUDIT_EVENT_LABELS.get(self.sel_event, self.sel_event)
+        await interaction.followup.send(
+            embed=_notif_embed(f"Log de **{lbl}** definido em {ch.mention}."), ephemeral=True)
+
+    async def _remove(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        logs = settings.setdefault("audit_logs", {})
+        lbl = _AUDIT_EVENT_LABELS.get(self.sel_event, self.sel_event)
+        if self.sel_event in logs:
+            del logs[self.sel_event]
+            save_settings_to_disk()
+        embed = build_central_logs_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=self)
+        await interaction.followup.send(embed=_notif_embed(f"Log de **{lbl}** removido."), ephemeral=True)
+
+    async def _back(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_central_logs_embed(self.author, settings)
+        view = CentralLogsView(self.author)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            settings = get_settings(interaction.guild.id if interaction.guild else 0)
+            await interaction.response.send_message(TRANSLATIONS[settings["language"]]["only_author"], ephemeral=True)
+            return False
+        return True
 
 
 class SecurityMenuOne(discord.ui.Select):
@@ -18674,6 +18965,12 @@ class SecurityMenuTwo(discord.ui.Select):
         if selected == "home2":
             embed = build_main_embed(interaction.user, settings["language"])
             view = MenuView(interaction.user.id, lang=settings["language"])
+            await interaction.response.edit_message(embed=embed, view=view)
+            return
+
+        if selected == "central_logs":
+            embed = build_central_logs_embed(interaction.user, settings)
+            view = CentralLogsView(interaction.user)
             await interaction.response.edit_message(embed=embed, view=view)
             return
 
@@ -23904,6 +24201,10 @@ async def _antraid_apply(
         if reverse_victims:
             await _antraid_reverse_bans(guild, reverse_victims, reason)
         return
+    if _audit_is_on(guild, "sec_antiraid"):
+        bot.loop.create_task(_audit_log(guild, "sec_antiraid", title="Anti-Raid",
+            description=f"**Membro:** {member.mention}\n**Ação:** `{action}`\n"
+                        f"**Sistema:** {prot_name}\n**Motivo:** {reason}"))
     action_taken = ""
     punish_failed = False
     try:
@@ -24882,6 +25183,10 @@ async def _protecao_url_alert(before: discord.Guild, after: discord.Guild) -> No
         embed.set_thumbnail(url=guild_icon)
     embed.timestamp = datetime.now()
 
+    if _audit_is_on(after, "sec_url"):
+        bot.loop.create_task(_audit_log(after, "sec_url", title="Proteção de URL",
+            description=f"**Vanity alterada:** `{old_link}` → `{new_link}`\n**Por:** <@{culprit_id}>"))
+
     # Envia no canal de logs; se não houver/falhar, manda DM ao dono do servidor
     sent = False
     log_id = settings.get("protecao_url_log_channel")
@@ -24975,6 +25280,9 @@ async def on_guild_update(before: discord.Guild, after: discord.Guild):
 
 @bot.event
 async def on_guild_role_create(role: discord.Role):
+    if _audit_is_on(role.guild, "role_create"):
+        bot.loop.create_task(_log_entity_event(role.guild, "role_create", discord.AuditLogAction.role_create,
+            "Cargo criado", f"**Cargo:** {role.mention} · `{role.name}`"))
     triggered = await _antraid_handle(role.guild, discord.AuditLogAction.role_create, "criacao_cargos")
     if triggered:
         try:
@@ -24985,6 +25293,9 @@ async def on_guild_role_create(role: discord.Role):
 
 @bot.event
 async def on_guild_role_delete(role: discord.Role):
+    if _audit_is_on(role.guild, "role_delete"):
+        bot.loop.create_task(_log_entity_event(role.guild, "role_delete", discord.AuditLogAction.role_delete,
+            "Cargo deletado", f"**Cargo:** `{role.name}`"))
     triggered = await _antraid_handle(role.guild, discord.AuditLogAction.role_delete, "exclusao_cargos")
     if triggered:
         try:
@@ -25002,6 +25313,9 @@ async def on_guild_role_delete(role: discord.Role):
 
 @bot.event
 async def on_guild_role_update(before: discord.Role, after: discord.Role):
+    if _audit_is_on(before.guild, "role_update"):
+        bot.loop.create_task(_log_entity_event(before.guild, "role_update", discord.AuditLogAction.role_update,
+            "Cargo editado", f"**Cargo:** {after.mention} · `{after.name}`"))
     triggered = await _antraid_handle(before.guild, discord.AuditLogAction.role_update, "edicao_cargos")
     if triggered:
         # Reverte a edição restaurando o estado anterior do cargo
@@ -25027,6 +25341,9 @@ async def on_guild_channel_create(channel: discord.abc.GuildChannel):
         print(f"[AR-canal] CREATE ignorado (bot criando) nome={channel.name}", flush=True)
         return
     print(f"[AR-canal] CREATE id={channel.id} nome={channel.name} guild={channel.guild.id}", flush=True)
+    if _audit_is_on(channel.guild, "channel_create"):
+        bot.loop.create_task(_log_entity_event(channel.guild, "channel_create", discord.AuditLogAction.channel_create,
+            "Canal criado", f"**Canal:** {getattr(channel, 'mention', '`'+channel.name+'`')}"))
     triggered = await _antraid_handle(channel.guild, discord.AuditLogAction.channel_create, "criacao_canais")
     print(f"[AR-canal] CREATE triggered={triggered} id={channel.id} nome={channel.name}", flush=True)
     if triggered:
@@ -25045,6 +25362,9 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
         print(f"[AR-canal] DELETE ignorado (bot deletando) nome={channel.name}", flush=True)
         return
     print(f"[AR-canal] DELETE id={channel.id} nome={channel.name} guild={channel.guild.id}", flush=True)
+    if _audit_is_on(channel.guild, "channel_delete"):
+        bot.loop.create_task(_log_entity_event(channel.guild, "channel_delete", discord.AuditLogAction.channel_delete,
+            "Canal deletado", f"**Canal:** `{channel.name}`"))
     triggered = await _antraid_handle(channel.guild, discord.AuditLogAction.channel_delete, "exclusao_canais")
     print(f"[AR-canal] DELETE triggered={triggered} id={channel.id} nome={channel.name}", flush=True)
     if triggered:
@@ -25059,12 +25379,60 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
 
 @bot.event
 async def on_guild_channel_update(before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
+    if _audit_is_on(before.guild, "channel_update"):
+        bot.loop.create_task(_log_entity_event(before.guild, "channel_update", discord.AuditLogAction.channel_update,
+            "Canal atualizado", f"**Canal:** {getattr(after, 'mention', '`'+after.name+'`')}"))
     triggered = await _antraid_handle(before.guild, discord.AuditLogAction.channel_update, "edicao_canais")
     if triggered:
         try:
             await _antraid_revert_channel(before, after)
         except Exception:
             pass
+
+
+@bot.event
+async def on_member_unban(guild: discord.Guild, user: discord.User):
+    if _audit_is_on(guild, "unban"):
+        bot.loop.create_task(_log_entity_event(guild, "unban", discord.AuditLogAction.unban,
+            "Membro desbanido", f"**Usuário:** {user.mention} · `{user}`"))
+
+
+@bot.event
+async def on_message_delete(message: discord.Message):
+    try:
+        if not message.guild or (message.author and message.author.bot):
+            return
+        if not _audit_is_on(message.guild, "msg_delete"):
+            return
+        content = message.content or "*(sem texto — embed/anexo)*"
+        if len(content) > 1000:
+            content = content[:1000] + "…"
+        await _audit_log(
+            message.guild, "msg_delete", title="Mensagem apagada",
+            description=(f"**Autor:** {message.author.mention if message.author else '—'}\n"
+                        f"**Canal:** {message.channel.mention}\n**Conteúdo:**\n{content}"))
+    except Exception as _e:
+        print(f"[audit_log] msg_delete: {_e}", flush=True)
+
+
+@bot.event
+async def on_message_edit(before: discord.Message, after: discord.Message):
+    try:
+        if not after.guild or (after.author and after.author.bot):
+            return
+        if before.content == after.content:
+            return
+        if not _audit_is_on(after.guild, "msg_edit"):
+            return
+        _b = (before.content or "*(vazio)*")[:500]
+        _a = (after.content or "*(vazio)*")[:500]
+        await _audit_log(
+            after.guild, "msg_edit", title="Mensagem editada",
+            description=(f"**Autor:** {after.author.mention if after.author else '—'}\n"
+                        f"**Canal:** {after.channel.mention}\n**Antes:**\n{_b}\n**Depois:**\n{_a}\n"
+                        f"[Ir à mensagem]({after.jump_url})"))
+    except Exception as _e:
+        print(f"[audit_log] msg_edit: {_e}", flush=True)
 
 
 async def _check_admin_massban(guild: discord.Guild) -> None:
@@ -25165,6 +25533,9 @@ async def _check_admin_massban(guild: discord.Guild) -> None:
 
 @bot.event
 async def on_member_ban(guild: discord.Guild, user: discord.User):
+    if _audit_is_on(guild, "ban"):
+        bot.loop.create_task(_log_entity_event(guild, "ban", discord.AuditLogAction.ban,
+            "Membro banido", f"**Usuário:** {user.mention} · `{user}`"))
     await asyncio.sleep(0.3)  # mínimo para audit log propagar
     _resp_id = await _antraid_get_responsible(guild, discord.AuditLogAction.ban)
     if _resp_id and _resp_id != guild.owner_id:
@@ -29122,6 +29493,11 @@ def _trim_role_history(history: list) -> None:
 
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
+    # Log de timeout (silenciado no chat) — feito antes dos early-returns de cargo,
+    # porque uma mudança só de timeout não altera cargos e sairia cedo.
+    if before.timed_out_until != after.timed_out_until and _audit_is_on(after.guild, "timeout"):
+        bot.loop.create_task(_log_timeout(after.guild, after, after.timed_out_until))
+
     added: set[int] = set()
     removed: set[int] = set()
     if before.roles == after.roles:
@@ -29169,6 +29545,12 @@ async def on_member_update(before: discord.Member, after: discord.Member):
         for _r in removed:
             _consume_bot_role_action(after.id, _r, "remove")
         return
+
+    # Log de cargos adicionados/removidos (Central de Logs). Fire-and-forget, com
+    # cópias dos sets porque o fast-path abaixo muta `added`.
+    if (added or removed) and (_audit_is_on(after.guild, "member_role_add")
+                               or _audit_is_on(after.guild, "member_role_remove")):
+        bot.loop.create_task(_log_member_roles(after.guild, after, set(added), set(removed)))
 
     # ── Blacklist de cargos permanente ────────────────────────────────────────
     if added:
@@ -29526,6 +29908,17 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                     _ANTRAID_PENDING_RESTORE[_pc_key] = _pc_task
                     asyncio.create_task(_antraid_dm_punido(after.guild, moderator_member, "Proteção de Cargos"))
 
+            if _audit_is_on(after.guild, "sec_cargos"):
+                _sec_add = ", ".join(f"<@&{r}>" for r in (to_remove_added + _fast_nao_restaurados)) or "—"
+                _sec_rem = ", ".join(f"<@&{r}>" for r in to_restore_removed) or "—"
+                bot.loop.create_task(_audit_log(
+                    after.guild, "sec_cargos", title="Proteção de Cargos",
+                    description=(f"**Alvo:** {after.mention}\n"
+                                f"**Moderador:** {moderator_member.mention if moderator_member else moderator_name}\n"
+                                f"**Cargos revertidos:** {_sec_add}\n"
+                                f"**Cargos restaurados:** {_sec_rem}\n"
+                                f"**Punido (cargos zerados):** {'Sim' if wipe_all_roles else 'Não'}")))
+
             log_channel_id = settings.get("protecao_cargos_log_channel")
             if log_channel_id:
                 log_channel = after.guild.get_channel(log_channel_id)
@@ -29648,6 +30041,8 @@ async def on_member_update(before: discord.Member, after: discord.Member):
 
 @bot.event
 async def on_member_remove(member: discord.Member):
+    if _audit_is_on(member.guild, "kick") or _audit_is_on(member.guild, "leave"):
+        bot.loop.create_task(_log_member_removal(member.guild, member))
     if member.bot:
         return
     settings = get_settings(member.guild.id)
@@ -29774,6 +30169,8 @@ async def _dm_kicked_from_call(
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
     if member.guild is None:
         return
+    if _audit_is_on(member.guild, "voice") or _audit_is_on(member.guild, "voice_mute"):
+        bot.loop.create_task(_log_voice(member.guild, member, before, after))
     settings = get_settings(member.guild.id)
 
     # Desmute Automático
@@ -29979,6 +30376,15 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
 async def on_member_join(member: discord.Member):
     settings = get_settings(member.guild.id)
     t = TRANSLATIONS[settings["language"]]
+
+    if member.bot:
+        if _audit_is_on(member.guild, "bot_add"):
+            bot.loop.create_task(_log_entity_event(member.guild, "bot_add", discord.AuditLogAction.bot_add,
+                "Bot adicionado", f"**Bot:** {member.mention} · `{member}`"))
+    elif _audit_is_on(member.guild, "join"):
+        _cr = f"<t:{int(member.created_at.timestamp())}:R>"
+        bot.loop.create_task(_audit_log(member.guild, "join", title="Membro entrou",
+            description=f"**Usuário:** {member.mention} · `{member}`\n**Conta criada:** {_cr}"))
 
     if settings.get("blacklist_enabled") and member.id in settings.get("blacklist_users", []):
         action = settings.get("blacklist_action", "expulsar")
