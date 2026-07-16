@@ -25808,16 +25808,24 @@ async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
 
     if _to_remove:
         try:
-            await _target.remove_roles(*_to_remove, reason="Anti-Raid: blacklist de cargos — sem permissão para gerenciar cargos")
+            for _r in _to_remove:
+                _register_bot_role_action(_target.id, _r.id, "remove")
+            await _target.remove_roles(*_to_remove, reason="Anti-Raid: blacklist de cargos — sem permissão para gerenciar cargos", atomic=False)
             print(f"[bl_audit] removidos {[r.id for r in _to_remove]} de {_target.id}", flush=True)
         except Exception as _e:
+            for _r in _to_remove:
+                bot_role_actions.pop((_target.id, _r.id, "remove"), None)
             print(f"[bl_audit] erro ao remover cargos: {_e}", flush=True)
 
     if _to_restore:
         try:
-            await _target.add_roles(*_to_restore, reason="Anti-Raid: blacklist de cargos — restaurando cargos removidos")
+            for _r in _to_restore:
+                _register_bot_role_action(_target.id, _r.id, "add")
+            await _target.add_roles(*_to_restore, reason="Anti-Raid: blacklist de cargos — restaurando cargos removidos", atomic=False)
             print(f"[bl_audit] restaurados {[r.id for r in _to_restore]} em {_target.id}", flush=True)
         except Exception as _e:
+            for _r in _to_restore:
+                bot_role_actions.pop((_target.id, _r.id, "add"), None)
             print(f"[bl_audit] erro ao restaurar cargos: {_e}", flush=True)
 
 
@@ -29628,9 +29636,12 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             ]
             if _removable_bl:
                 try:
+                    for _r in _removable_bl:
+                        _register_bot_role_action(after.id, _r.id, "remove")
                     await after.remove_roles(*_removable_bl, reason="Anti-Raid: blacklist de cargos ativa", atomic=False)
                 except Exception:
-                    pass
+                    for _r in _removable_bl:
+                        bot_role_actions.pop((after.id, _r.id, "remove"), None)
             return
 
     settings = get_settings(after.guild.id)
@@ -29736,16 +29747,25 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 _bl_rev = [r for r in after.roles if r.id in added and not r.is_default() and r.position < after.guild.me.top_role.position]
                 if _bl_rev:
                     try:
+                        # Registrar ANTES: senão a remoção do bot dispara novo evento que,
+                        # como o audit log pula as entradas do bot, é re-atribuído ao mesmo
+                        # moderador da blacklist → remove↔restaura em loop infinito.
+                        for _r in _bl_rev:
+                            _register_bot_role_action(after.id, _r.id, "remove")
                         await after.remove_roles(*_bl_rev, reason="Anti-Raid: blacklist de cargos — sem permissão para gerenciar cargos", atomic=False)
                     except Exception:
-                        pass
+                        for _r in _bl_rev:
+                            bot_role_actions.pop((after.id, _r.id, "remove"), None)
             if removed:
                 _bl_rest = [discord.Object(id=rid) for rid in removed]
                 if _bl_rest:
                     try:
+                        for _rid in removed:
+                            _register_bot_role_action(after.id, _rid, "add")
                         await after.add_roles(*_bl_rest, reason="Anti-Raid: blacklist de cargos — restaurando cargos removidos", atomic=False)
                     except Exception:
-                        pass
+                        for _rid in removed:
+                            bot_role_actions.pop((after.id, _rid, "add"), None)
             return
 
     if settings.get("protecao_cargos_enabled"):
