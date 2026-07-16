@@ -45228,16 +45228,16 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
             pass
         return
 
-    # Emojis do servidor NATA - Entrance, IDs confirmados via n!listaremojis.
-    # Fixos DIRETO (sem passar por _ue/config) — o usuário pediu "só coloque",
-    # e assim não há risco de uma config antiga sobrescrever com emoji genérico.
-    _e_title   = "<:corretonata:1525607974419304588>"     # check (desbanido com sucesso)
-    _e_id      = "<:nataid:1525607862590771260>"          # ID
-    _e_usuario = "<:natapai:1526181140996689972>"         # usuário desbanido
-    _e_staff   = "<:nata_staff_StorM:1525605069205012561>"  # quem desbaniu (staff)
-    _e_motivo  = "<:regrasnata2:1525607918580535377>"     # motivo (regras)
-    _e_autor   = "<:confignata:1525607930232307812>"      # quem baniu originalmente
-    _e_dur     = "<:nata_relogio:1525607873814728705>"    # duração (relógio)
+    # Emojis do servidor: usa o configurado (unban_emojis[key]), senão busca por nome
+    # no próprio servidor, senão o unicode de fallback (sempre renderiza).
+    _guild = interaction.guild
+    _e_title   = _ue(settings, "title",   _guild, "correto", "check", "certo",   uni="✅")
+    _e_id      = _ue(settings, "id",      _guild, "id", "nataid",                uni="🆔")
+    _e_usuario = _ue(settings, "usuario", _guild, "user", "usuario", "membro", "pai", uni="👤")
+    _e_staff   = _ue(settings, "staff",   _guild, "staff", "shield", "escudo",   uni="🛡️")
+    _e_motivo  = _ue(settings, "motivo",  _guild, "motivo", "regras",            uni="📋")
+    _e_autor   = _ue(settings, "autor",   _guild, "autor", "config",             uni="👤")
+    _e_dur     = _ue(settings, "dur",     _guild, "relogio", "tempo", "duracao", uni="⏱️")
 
     try:
         user = await bot.fetch_user(user_id)
@@ -45248,7 +45248,7 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
     embed = discord.Embed(title=f"{_e_title} Membro Desbanido", color=_unban_panel_color(settings))
     if user_avatar:
         embed.set_thumbnail(url=user_avatar)
-    embed.add_field(name=f"{_e_id} ID de Banimento", value=f"`{info.get('ban_id', '—')}`", inline=True)
+    embed.add_field(name=f"{_e_id} ID do usuário", value=f"`{user_id}`", inline=True)
     embed.add_field(name=f"{_e_usuario} Usuário", value=f"{user_name}\n<@{user_id}>", inline=True)
     embed.add_field(name=f"{_e_staff} Desbanido por", value=interaction.user.mention, inline=True)
     if record:
