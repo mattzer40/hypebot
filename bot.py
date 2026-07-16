@@ -32814,7 +32814,7 @@ class GrolesLayoutView(discord.ui.LayoutView):
         author_avatar = self.author.display_avatar.url
         header_text = (
             "## Gerenciamento de Cargos | NATA®\n"
-            f"**Olá, {self.author.display_name}!**\n"
+            f"**Olá, {self.author.mention}!**\n"
             f"**Você está gerenciando {self.target.mention}**"
         )
         header_section = discord.ui.Section(
