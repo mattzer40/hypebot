@@ -45228,16 +45228,18 @@ async def _post_unban_log(interaction: discord.Interaction, settings: dict, info
             pass
         return
 
-    # Emojis do servidor: usa o configurado (unban_emojis[key]), senão busca por nome
-    # no próprio servidor, senão o unicode de fallback (sempre renderiza).
+    # Emojis: configurado (unban_emojis[key]) → busca por nome no servidor → emoji
+    # CUSTOM do servidor como fallback final. O fallback NÃO é unicode de propósito:
+    # os emojis custom vivem no servidor de origem (NATA), então a busca por nome no
+    # servidor onde o log é postado falha e cairia num emoji genérico.
     _guild = interaction.guild
-    _e_title   = _ue(settings, "title",   _guild, "correto", "check", "certo",   uni="✅")
-    _e_id      = _ue(settings, "id",      _guild, "id", "nataid",                uni="🆔")
-    _e_usuario = _ue(settings, "usuario", _guild, "user", "usuario", "membro", "pai", uni="👤")
-    _e_staff   = _ue(settings, "staff",   _guild, "staff", "shield", "escudo",   uni="🛡️")
-    _e_motivo  = _ue(settings, "motivo",  _guild, "motivo", "regras",            uni="📋")
-    _e_autor   = _ue(settings, "autor",   _guild, "autor", "config",             uni="👤")
-    _e_dur     = _ue(settings, "dur",     _guild, "relogio", "tempo", "duracao", uni="⏱️")
+    _e_title   = _ue(settings, "title",   _guild, "correto", "check", "certo",   uni="<:corretonata:1525607974419304588>")
+    _e_id      = _ue(settings, "id",      _guild, "id", "nataid",                uni="<:nataid:1525607862590771260>")
+    _e_usuario = _ue(settings, "usuario", _guild, "user", "usuario", "membro", "pai", uni="<:natapai:1526181140996689972>")
+    _e_staff   = _ue(settings, "staff",   _guild, "staff", "shield", "escudo",   uni="<:nata_staff_StorM:1525605069205012561>")
+    _e_motivo  = _ue(settings, "motivo",  _guild, "motivo", "regras",            uni="<:regrasnata2:1525607918580535377>")
+    _e_autor   = _ue(settings, "autor",   _guild, "autor", "config",             uni="<:confignata:1525607930232307812>")
+    _e_dur     = _ue(settings, "dur",     _guild, "relogio", "tempo", "duracao", uni="<:nata_relogio:1525607873814728705>")
 
     try:
         user = await bot.fetch_user(user_id)
