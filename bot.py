@@ -29689,32 +29689,37 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     moderator_name = "Sistema"
     moderator_obj = None
     _only_bot_entries = False  # True se só houver entradas do próprio bot p/ esta mudança (sem humano por trás)
-    await asyncio.sleep(0.3)  # reduzido de 2s — Discord regista audit log em <300ms
-    try:
-        from datetime import timezone as _tz
-        _bot_id = bot.user.id if bot.user else 0
-        _saw_bot_entry = False
-        async for entry in after.guild.audit_logs(limit=15, action=discord.AuditLogAction.member_role_update):
-            if entry.target and entry.target.id == after.id:
-                age = (datetime.now(_tz.utc) - entry.created_at).total_seconds()
-                if age > 20:
-                    break  # entrada muito antiga — ignorar para evitar falso-positivo
-                # Pular ações do próprio bot (ex: remoção feita pelo fast-path)
-                # para encontrar o moderador que ORIGINOU a mudança
-                if entry.user and entry.user.id == _bot_id:
-                    _saw_bot_entry = True
-                    continue
-                if entry.user:
-                    moderator_id = entry.user.id
-                    moderator_name = entry.user.name
-                    moderator_obj = entry.user
-                break
-        else:
-            # Loop esgotou sem encontrar um humano: se só havia entradas do próprio bot,
-            # a mudança não tem autor humano por trás — não deve ser tratada como não autorizada.
-            _only_bot_entries = _saw_bot_entry and moderator_obj is None
-    except (discord.Forbidden, discord.HTTPException) as e:
-        print(f"[protecao_cargos] Falha ao ler audit log: {e}")
+    from datetime import timezone as _tz
+    _bot_id = bot.user.id if bot.user else 0
+    _saw_bot_entry = False
+    # Identifica o moderador com RETRY. O audit log do Discord às vezes demora mais
+    # que 0.3s pra registrar; desistir cedo dava mod=None e o bot revertia mudanças
+    # LEGÍTIMAS achando que eram não autorizadas (loop de reversão). Tenta ~4x.
+    for _try_i in range(4):
+        await asyncio.sleep(0.35)
+        try:
+            async for entry in after.guild.audit_logs(limit=15, action=discord.AuditLogAction.member_role_update):
+                if entry.target and entry.target.id == after.id:
+                    age = (datetime.now(_tz.utc) - entry.created_at).total_seconds()
+                    if age > 20:
+                        break  # entrada muito antiga — ignorar para evitar falso-positivo
+                    # Pular ações do próprio bot (ex: remoção feita pelo fast-path)
+                    # para encontrar o moderador que ORIGINOU a mudança
+                    if entry.user and entry.user.id == _bot_id:
+                        _saw_bot_entry = True
+                        continue
+                    if entry.user:
+                        moderator_id = entry.user.id
+                        moderator_name = entry.user.name
+                        moderator_obj = entry.user
+                    break
+        except (discord.Forbidden, discord.HTTPException) as e:
+            print(f"[protecao_cargos] Falha ao ler audit log: {e}")
+            break
+        if moderator_obj is not None:
+            break
+    # Se só havia entradas do próprio bot, a mudança não tem autor humano por trás.
+    _only_bot_entries = _saw_bot_entry and moderator_obj is None
 
     print(
         f"[bl_check] member={after.id} mod={moderator_id} "
@@ -29840,7 +29845,14 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 except Exception as _fre:
                     print(f"[protecao_fast_restore] erro: {_fre}", flush=True)
 
-        if not is_bot_action and (clean_added or clean_removed or _fast_nao_restaurados):
+        # Só reverte/pune se IDENTIFICOU quem fez. Sem moderador (mod=None mesmo
+        # após o retry), não dá pra afirmar que foi não autorizado — reverter às cegas
+        # gerava loop de reversão de mudanças legítimas. Cargo bloqueado já foi
+        # rebocado na hora pelo fast-path (proteção mantida), independente disso.
+        if not is_bot_action and moderator_id is None:
+            print(f"[protecao_cargos] mod nao identificado (mod=None) — NAO revertendo "
+                  f"member={after.id} added={added} removed={removed}", flush=True)
+        if not is_bot_action and moderator_id is not None and (clean_added or clean_removed or _fast_nao_restaurados):
             for rid in clean_added:
                 can = _mod_can_manage(rid)
                 in_blocked = str(rid) in blocked_roles_cfg
