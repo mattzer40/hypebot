@@ -39590,8 +39590,12 @@ class PanelV2TopSelect(discord.ui.Select):
         t = TRANSLATIONS[settings["language"]]
         v = self.values[0]
         if v == "preview":
-            layout = build_panel_v2_layout(self.parent_view.panel, settings)
-            await interaction.response.send_message(view=layout, ephemeral=True)
+            # Re-anexa as imagens (não usar a URL crua do CDN, que expira) — e de quebra
+            # cacheia os bytes em disco enquanto a URL ainda é válida.
+            await interaction.response.defer(ephemeral=True)
+            _files, _imgmap = await _panel_v2_attachments(self.parent_view.panel.get("blocks", []))
+            layout = build_panel_v2_layout(self.parent_view.panel, settings, image_map=_imgmap)
+            await interaction.followup.send(view=layout, files=_files, ephemeral=True)
             return
         if v == "tpl_welcome":
             self.parent_view.panel = {
@@ -39817,10 +39821,13 @@ class PanelV2BuilderView(discord.ui.LayoutView):
             )
             return
         await interaction.response.defer(ephemeral=True)
-        layout = build_panel_v2_layout(self.panel, settings)
+        # Re-anexa as imagens: sem isso o layout usava a URL crua do CDN e a foto do
+        # painel expirava (~24h) toda vez que alguém clicava em Atualizar.
+        _files, _imgmap = await _panel_v2_attachments(self.panel.get("blocks", []))
+        layout = build_panel_v2_layout(self.panel, settings, image_map=_imgmap)
         try:
             msg = await self.edit_channel.fetch_message(self.edit_message_id)
-            await msg.edit(view=layout)
+            await msg.edit(view=layout, attachments=_files)
         except Exception as e:
             await interaction.followup.send(f"<a:alerta:1518271939460857968> Erro ao atualizar: {e}", ephemeral=True)
             return
