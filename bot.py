@@ -32597,6 +32597,13 @@ def _format_role_perms_short(role: discord.Role) -> str:
     return ", ".join(perms)
 
 
+async def _groles_notify(interaction: discord.Interaction, text: str) -> None:
+    try:
+        await interaction.followup.send(text, ephemeral=True)
+    except discord.HTTPException:
+        pass
+
+
 class GrolesRoleButton(discord.ui.Button):
     def __init__(
         self,
@@ -32613,16 +32620,27 @@ class GrolesRoleButton(discord.ui.Button):
         self.parent_view = parent_view
 
     async def callback(self, interaction: discord.Interaction):
+        # Ack imediato, ANTES de qualquer HTTP (fetch_member/add_roles/remove_roles).
+        # Sem isso o _fallback() do on_interaction acorda em 0.8s, vê a interação sem
+        # resposta, manda "Painel Expirado" e rouba a resposta — aí o edit abaixo
+        # quebra com InteractionResponded (mesma corrida já documentada nos botões
+        # de unban). Deferir marca response.is_done() na hora e desarma o fallback.
+        try:
+            await interaction.response.defer()
+        except discord.HTTPException:
+            return
+
         settings = get_settings(interaction.guild.id)
         if not _can_manage_role(interaction.user, self.role_id, settings):
-            await interaction.response.send_message(
-                "<a:alerta:1518271939460857968> Sem permissão para gerenciar esse cargo.", ephemeral=True
+            await _groles_notify(
+                interaction,
+                "<a:alerta:1518271939460857968> Sem permissão para gerenciar esse cargo.",
             )
             return
 
         role = interaction.guild.get_role(self.role_id)
         if role is None:
-            await interaction.response.send_message("Cargo não encontrado.", ephemeral=True)
+            await _groles_notify(interaction, "Cargo não encontrado.")
             return
         target = interaction.guild.get_member(self.target_id)
         if target is None:
@@ -32633,49 +32651,48 @@ class GrolesRoleButton(discord.ui.Button):
             except Exception:
                 target = getattr(self.parent_view, "target", None)
         if target is None:
-            await interaction.response.send_message("Membro alvo não encontrado.", ephemeral=True)
+            await _groles_notify(interaction, "Membro alvo não encontrado.")
             return
 
         if role in target.roles:
             _register_bot_role_action(target.id, role.id, "remove")
             try:
                 await target.remove_roles(role, reason=f"groles por {interaction.user}")
-            except (discord.Forbidden, discord.HTTPException):
+            except discord.HTTPException:
                 bot_role_actions.pop((target.id, role.id, "remove"), None)
-                await interaction.response.send_message(
-                    "Não consegui remover esse cargo.", ephemeral=True
-                )
+                await _groles_notify(interaction, "Não consegui remover esse cargo.")
                 return
             # Atualiza cache local imediatamente (MEMBER_UPDATE chega assíncrono depois)
             try:
-                self.parent_view.target._roles.remove(role.id)
-            except (ValueError, Exception):
+                target._roles.remove(role.id)
+            except Exception:
                 pass
             action_text = f"**Cargo Removido!**\nCargo: {role.mention}"
         else:
             _register_bot_role_action(target.id, role.id, "add")
             try:
                 await target.add_roles(role, reason=f"groles por {interaction.user}")
-            except (discord.Forbidden, discord.HTTPException):
+            except discord.HTTPException:
                 bot_role_actions.pop((target.id, role.id, "add"), None)
-                await interaction.response.send_message(
-                    "Não consegui adicionar esse cargo.", ephemeral=True
-                )
+                await _groles_notify(interaction, "Não consegui adicionar esse cargo.")
                 return
             # Atualiza cache local imediatamente (MEMBER_UPDATE chega assíncrono depois)
             try:
-                self.parent_view.target._roles.add(role.id)
+                target._roles.add(role.id)
             except Exception:
                 pass
             action_text = f"**Cargo Adicionado!**\nCargo: {role.mention}"
 
+        # O painel lê self.target.roles — aponta pro objeto que acabamos de atualizar
+        # (com fetch_member, target não é o mesmo objeto do parent_view).
+        self.parent_view.target = target
         self.parent_view._compute_filtered()
         self.parent_view._build()
         try:
-            await interaction.response.edit_message(view=self.parent_view)
+            await interaction.edit_original_response(view=self.parent_view)
         except discord.HTTPException:
             pass
-        await interaction.followup.send(action_text, ephemeral=True)
+        await _groles_notify(interaction, action_text)
 
 
 def _get_managed_role_ids(member: discord.Member, settings: dict) -> list[int]:
