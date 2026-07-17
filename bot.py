@@ -5347,15 +5347,39 @@ def _avatar_url(author):
         return None
 
 async def _warm_avatar(user, guild=None) -> None:
-    try:
-        if guild is not None:
-            _m = await guild.fetch_member(user.id)
-            _avatar_cache[user.id] = _m.display_avatar.url
-        else:
+    """Atualiza o cache com o avatar ATUAL do usuário.
+
+    Pegadinha do discord.py: o avatar GLOBAL de um Member sai de
+    state.store_user(data['user']), e store_user devolve o User que já está em
+    cache descartando o payload novo. Como o bot roda sem intent de presence,
+    esse User nunca é atualizado e fica com o hash da foto antiga — URL que
+    passa a dar 404 quando a pessoa troca de foto. Nem guild.fetch_member()
+    resolve: passa pelo mesmo store_user. Só bot.fetch_user() constrói um User
+    novo, com o avatar atual.
+    """
+    url = None
+
+    # Avatar DE SERVIDOR tem prioridade (é o que o Discord exibe) e já vem
+    # fresco: sai de data['avatar'], não passa pelo store_user, e é atualizado
+    # por GUILD_MEMBER_UPDATE (intent members ligada). Não precisa de HTTP.
+    ga = getattr(user, "guild_avatar", None)
+    if ga is None and guild is not None:
+        try:
+            ga = getattr(guild.get_member(user.id), "guild_avatar", None)
+        except Exception:
+            ga = None
+    if ga is not None:
+        url = ga.url
+
+    if url is None:
+        try:
             _u = await bot.fetch_user(user.id)
-            _avatar_cache[user.id] = _u.display_avatar.url
-    except Exception:
-        pass
+            url = _u.display_avatar.url
+        except Exception:
+            pass
+
+    if url:
+        _avatar_cache[user.id] = url
 
 
 def build_main_embed(author: discord.Member, lang: str) -> discord.Embed:
@@ -32828,7 +32852,9 @@ class GrolesLayoutView(discord.ui.LayoutView):
         self.clear_items()
         container = discord.ui.Container(accent_colour=self.accent_color)
 
-        author_avatar = self.author.display_avatar.url
+        # Lê do cache (_warm_avatar) — display_avatar direto traz o hash antigo
+        # quando o usuário troca de foto (User em cache, sem intent de presence).
+        author_avatar = _avatar_url(self.author) or self.author.display_avatar.url
         header_text = (
             "## Gerenciamento de Cargos | NATA®\n"
             f"**Olá, {self.author.mention}!**\n"
@@ -33920,6 +33946,7 @@ async def groles_slash(interaction: discord.Interaction, membro: discord.Member 
         await interaction.response.send_message("Nenhum cargo disponível neste servidor.", ephemeral=True)
         return
 
+    await _warm_avatar(interaction.user, interaction.guild)
     view = GrolesLayoutView(
         author=interaction.user,
         target=membro,
@@ -33982,6 +34009,7 @@ async def groles_cmd(ctx: commands.Context, target: discord.Member = None):
         await ctx.reply("Nenhum cargo disponível neste servidor.", delete_after=10)
         return
 
+    await _warm_avatar(ctx.author, ctx.guild)
     view = GrolesLayoutView(
         author=ctx.author,
         target=target,
