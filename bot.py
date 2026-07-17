@@ -169,15 +169,27 @@ class GuildChannelSelect(discord.ui.Select):
     self.values[0].id / .mention / .name funcionam exatamente como no ChannelSelect.
     """
 
+    # Sentinelas de navegação (páginas). Não são IDs de canal — o callback os
+    # consome antes de repassar a seleção real.
+    _NAV_PREV = "__gcs_prev__"
+    _NAV_NEXT = "__gcs_next__"
+
     def __init__(self, placeholder: str = "Selecione um canal...",
                  min_values: int = 1, max_values: int = 1,
                  channel_types=None, row: int | None = None,
                  guild: "discord.Guild | None" = None, **kw):
         self._raw_values: list[str] = []          # inicializa ANTES do super()
+        self._page = 0
         # Determina o guild alvo: explícito → dev override → guild da interação → None
         if not guild:
             guild_id = _dev_guild_ctx.get(0) or _interaction_guild_ctx.get(0)
             guild    = bot.get_guild(guild_id) if guild_id else None
+
+        # Monta a lista COMPLETA de opções de canal (sem cortar em 25). O corte
+        # por página acontece em _page_options() — o select do Discord aceita no
+        # máximo 25 opções, então > 25 canais viram páginas com setas ⬅️/➡️.
+        self._all_opts: list[dict] = []
+        self._is_placeholder = False               # opção única "nenhum/sem guild"
         if guild:
             want_voice    = channel_types and discord.ChannelType.voice    in channel_types
             want_category = channel_types and discord.ChannelType.category in channel_types
@@ -191,21 +203,32 @@ class GuildChannelSelect(discord.ui.Select):
                                  key=lambda c: (c.category.position if c.category else 0, c.position))
             if raw_chs:
                 _icon = "📁" if want_category else ("🔊" if want_voice else "#")
-                options = [
-                    discord.SelectOption(
+                self._all_opts = [
+                    dict(
                         label=f"{_icon} {ch.name}"[:100],
                         value=str(ch.id),
                         description=(None if want_category
                                      else (ch.category.name[:50] if ch.category else None)),
                     )
-                    for ch in raw_chs[:25]
+                    for ch in raw_chs
                 ]
             else:
                 tipo = "categoria" if want_category else ("voz" if want_voice else "texto")
                 _lbl = f"Nenhuma {tipo} encontrada" if want_category else f"Nenhum canal de {tipo} encontrado"
-                options = [discord.SelectOption(label=_lbl, value="0")]
+                self._all_opts = [dict(label=_lbl, value="0", description=None)]
+                self._is_placeholder = True
         else:
-            options = [discord.SelectOption(label="Sem servidor alvo — abra o painel do cliente", value="0")]
+            self._all_opts = [dict(label="Sem servidor alvo — abra o painel do cliente",
+                                   value="0", description=None)]
+            self._is_placeholder = True
+
+        # Paginação só faz sentido com seleção única (max_values==1): com as setas
+        # como opções, multi-seleção ficaria ambígua. Multi mantém o corte em 25.
+        self._paginate = (max_values == 1 and not self._is_placeholder
+                          and len(self._all_opts) > 25)
+        self._page_size = 23 if self._paginate else 25   # reserva 2 slots p/ setas
+
+        options = self._page_options()
         # max_values não pode exceder o número de opções disponíveis
         effective_max = min(max_values, max(1, len(options)))
         init_kw: dict = dict(placeholder=placeholder, min_values=min_values,
@@ -214,6 +237,55 @@ class GuildChannelSelect(discord.ui.Select):
             init_kw["row"] = row
         init_kw.update(kw)
         super().__init__(**init_kw)
+
+    # ── Paginação ────────────────────────────────────────────────────────────
+    def _total_pages(self) -> int:
+        if not self._paginate:
+            return 1
+        return (len(self._all_opts) + self._page_size - 1) // self._page_size
+
+    def _page_options(self) -> list:
+        """Opções do select para a página atual (com setas quando pagina)."""
+        if not self._paginate:
+            return [discord.SelectOption(**o) for o in self._all_opts[:25]]
+        total = self._total_pages()
+        self._page %= total
+        start = self._page * self._page_size
+        chunk = self._all_opts[start:start + self._page_size]
+        opts = [discord.SelectOption(**o) for o in chunk]
+        if self._page > 0:
+            opts.insert(0, discord.SelectOption(
+                label="⬅️ Página anterior", value=self._NAV_PREV,
+                description=f"Página {self._page}/{total}"))
+        if self._page < total - 1:
+            opts.append(discord.SelectOption(
+                label="➡️ Próxima página", value=self._NAV_NEXT,
+                description=f"Página {self._page + 2}/{total}"))
+        return opts
+
+    def _selected_raw(self):
+        from discord.ui.select import selected_values as _disc_sv
+        raw = (_disc_sv.get({}).get(self.custom_id)
+               or getattr(self, "_values", None) or self._raw_values)
+        return raw[0] if raw else None
+
+    async def _maybe_paginate(self, interaction: discord.Interaction) -> bool:
+        """Se o usuário clicou numa seta, troca de página e re-renderiza.
+        Retorna True se consumiu a interação (o callback real não deve rodar).
+        Chamado centralmente em _patched_view_task, ANTES do callback — assim
+        vale para GuildChannelSelect e TODAS as subclasses sem tocar em cada uma."""
+        if not self._paginate:
+            return False
+        raw = self._selected_raw()
+        if raw not in (self._NAV_PREV, self._NAV_NEXT):
+            return False
+        self._page += -1 if raw == self._NAV_PREV else 1
+        self.options = self._page_options()
+        try:
+            await interaction.response.edit_message(view=self.view)
+        except discord.HTTPException:
+            pass
+        return True
 
     # ── Intercepta leitura de values ─────────────────────────────────────────
     @property
@@ -245,6 +317,19 @@ _dev_guild_override: dict[int, int] = {}  # user_id → target_guild_id
 _orig_view_task = discord.ui.View._scheduled_task
 
 
+async def _channel_select_paginated(item, interaction) -> bool:
+    """Se o item é um GuildChannelSelect paginado e o usuário clicou numa seta,
+    troca de página e re-renderiza — ANTES do callback real. Vale para a classe
+    e TODAS as subclasses de uma vez, sem depender do callback de cada uma."""
+    if not (isinstance(item, GuildChannelSelect) and getattr(item, "_paginate", False)):
+        return False
+    try:
+        item._refresh_state(interaction, interaction.data)  # popula os valores
+        return await item._maybe_paginate(interaction)
+    except Exception:
+        return False
+
+
 async def _patched_view_task(self, item, interaction):  # type: ignore[override]
     """Monkey-patch: injeta guild context antes de cada callback de View/Select."""
     uid  = getattr(getattr(interaction, "user", None), "id", 0)
@@ -253,6 +338,8 @@ async def _patched_view_task(self, item, interaction):  # type: ignore[override]
     _cur_gid = getattr(getattr(interaction, "guild", None), "id", 0)
     ig_token = _interaction_guild_ctx.set(_cur_gid) if _cur_gid else None
     try:
+        if await _channel_select_paginated(item, interaction):
+            return
         if tgid:
             # Renova TTL da sessão a cada interação (mantém viva enquanto o dev usa o painel)
             _s = _dev_sessions.get(uid)
@@ -322,6 +409,8 @@ if hasattr(discord.ui, "LayoutView") and hasattr(discord.ui.LayoutView, "_schedu
         uid  = getattr(getattr(interaction, "user", None), "id", 0)
         tgid = _dev_guild_override.get(uid, 0)
         try:
+            if await _channel_select_paginated(item, interaction):
+                return
             if tgid:
                 _s = _dev_sessions.get(uid)
                 if _s:
