@@ -18677,45 +18677,61 @@ AUDIT_LOG_CATEGORIES = [
 ]
 _AUDIT_EVENT_LABELS = {ev: lbl for cat in AUDIT_LOG_CATEGORIES for ev, lbl in cat["events"]}
 
-# Estilo por tipo de evento: (emoji no título, cor da barra lateral).
+# Emojis CUSTOMIZADOS do bot (regra do usuário: nunca unicode genérico).
+# Todos os IDs abaixo já são usados em outros pontos do bot.py (Application Emojis válidos).
+_E_SEG    = "<:seguranca:1518271987393232936>"
+_E_OK     = "<a:verificadoverde:1518272098290892810>"
+_E_ALERT  = "<a:alerta:1518271939460857968>"
+_E_RED    = "<a:redalert:1518272086018097352>"
+_E_STAR   = "<:estrela:1518272022093877309>"
+_E_TOOL   = "<:ferramentas_:1518271998613131274>"
+_E_DIS    = "<:disslike:1518272066506330232>"
+_E_SERVER = "<:servidor_:1518271981189992638>"
+_E_BOT    = "<:Bot:1518272060860928072>"
+_E_COMUN  = "<:comunidade_:1518272016971595807>"
+_E_CHAT   = "<:Mov_chat:1518271970008105031>"
+_E_CALL   = "<:mov_call:1518271964077232150>"
+_E_CLOCK  = "<:nata_relogio:1525607873814728705>"
+_E_ONLINE = "<a:online:1518271945550856295>"
+_E_URLS   = "<:urls:1518272078921339011>"
+
+# Estilo por tipo de evento: (emoji customizado no título, cor da barra lateral).
 # Cores padrão do Discord: verde=57F287, vermelho=ED4245, amarelo=FEE75C, azul=5865F2.
 _C_GREEN, _C_RED, _C_YELLOW, _C_BLUE = 0x57F287, 0xED4245, 0xFEE75C, 0x5865F2
 _AUDIT_STYLE = {
-    "ban":                ("🔨", _C_RED),
-    "unban":              ("🕊️", _C_GREEN),
-    "kick":               ("👢", _C_RED),
-    "role_create":        ("✨", _C_GREEN),
-    "role_delete":        ("🗑️", _C_RED),
-    "role_update":        ("🛠️", _C_YELLOW),
-    "member_role_add":    ("➕", _C_GREEN),
-    "member_role_remove": ("➖", _C_RED),
-    "channel_create":     ("📁", _C_GREEN),
-    "channel_delete":     ("🗑️", _C_RED),
-    "channel_update":     ("✏️", _C_YELLOW),
-    "timeout":            ("🔇", _C_YELLOW),
-    "voice_mute":         ("🎙️", _C_YELLOW),
-    "bot_add":            ("🤖", _C_BLUE),
-    "join":               ("📥", _C_GREEN),
-    "leave":              ("📤", _C_RED),
-    "msg_delete":         ("🗑️", _C_RED),
-    "msg_edit":           ("✏️", _C_YELLOW),
-    "voice":              ("🔊", _C_BLUE),
-    "sec_cargos":         ("🛡️", _C_RED),
-    "sec_antiraid":       ("🚨", _C_RED),
-    "sec_url":            ("🔗", _C_RED),
+    "ban":                (_E_SEG,    _C_RED),
+    "unban":              (_E_OK,     _C_GREEN),
+    "kick":               (_E_ALERT,  _C_RED),
+    "role_create":        (_E_STAR,   _C_GREEN),
+    "role_delete":        (_E_RED,    _C_RED),
+    "role_update":        (_E_TOOL,   _C_YELLOW),
+    "member_role_add":    (_E_OK,     _C_GREEN),
+    "member_role_remove": (_E_DIS,    _C_RED),
+    "channel_create":     (_E_SERVER, _C_GREEN),
+    "channel_delete":     (_E_RED,    _C_RED),
+    "channel_update":     (_E_TOOL,   _C_YELLOW),
+    "timeout":            (_E_ALERT,  _C_YELLOW),
+    "voice_mute":         (_E_CALL,   _C_YELLOW),
+    "bot_add":            (_E_BOT,    _C_BLUE),
+    "join":               (_E_COMUN,  _C_GREEN),
+    "leave":              (_E_COMUN,  _C_RED),
+    "msg_delete":         (_E_CHAT,   _C_RED),
+    "msg_edit":           (_E_CHAT,   _C_YELLOW),
+    "voice":              (_E_CALL,   _C_BLUE),
+    "sec_cargos":         (_E_SEG,    _C_RED),
+    "sec_antiraid":       (_E_RED,    _C_RED),
+    "sec_url":            (_E_URLS,   _C_RED),
 }
 
 
 def _channel_type_emoji(channel) -> str:
-    """Emoji do tipo de canal, para as frases de log."""
+    """Emoji customizado do tipo de canal, para as frases de log."""
     t = getattr(channel, "type", None)
     return {
-        discord.ChannelType.voice:            "🔊",
-        discord.ChannelType.stage_voice:      "🎙️",
-        discord.ChannelType.category:         "📂",
-        discord.ChannelType.news:             "📢",
-        discord.ChannelType.forum:            "🗂️",
-    }.get(t, "💬")
+        discord.ChannelType.voice:       _E_CALL,
+        discord.ChannelType.stage_voice: _E_CALL,
+        discord.ChannelType.category:    _E_SERVER,
+    }.get(t, _E_CHAT)
 
 
 async def _audit_log(guild, event_key, *, title=None, description=None, color=None,
@@ -18881,34 +18897,34 @@ async def _log_voice(guild, member, before, after):
                 total, lista = _membros_na_call(after.channel)
                 ts = int(now)
                 await _audit_log(guild, "voice", color=_C_GREEN,
-                    description=f"🟢 {member.mention} entrou em uma chamada de voz.",
+                    description=f"{_E_ONLINE} {member.mention} entrou em uma chamada de voz.",
                     fields=[
-                        ("📞 Chamada", after.channel.mention),
-                        ("🕐 Data e Hora", f"<t:{ts}:F> (<t:{ts}:R>)"),
-                        (f"👥 Membros na chamada ({total})", lista),
+                        (f"{_E_CALL} Chamada", after.channel.mention),
+                        (f"{_E_CLOCK} Data e Hora", f"<t:{ts}:F> (<t:{ts}:R>)"),
+                        (f"{_E_COMUN} Membros na chamada ({total})", lista),
                     ])
             elif after.channel is None and before.channel is not None:
                 # Saiu
                 entrou_em = _voice_join_ts.pop(key, None)
                 total, lista = _membros_na_call(before.channel)
-                campos = [("📞 Chamada", before.channel.mention)]
+                campos = [(f"{_E_CALL} Chamada", before.channel.mention)]
                 if entrou_em:
-                    campos.append(("🕐 Duração", _fmt_duracao_ptbr(now - entrou_em)))
-                campos.append((f"👥 Membros na chamada ({total})", lista))
+                    campos.append((f"{_E_CLOCK} Duração", _fmt_duracao_ptbr(now - entrou_em)))
+                campos.append((f"{_E_COMUN} Membros na chamada ({total})", lista))
                 await _audit_log(guild, "voice", color=_C_RED,
-                    description=f"🔴 {member.mention} saiu de uma chamada de voz.",
+                    description=f"{_E_RED} {member.mention} saiu de uma chamada de voz.",
                     fields=campos)
             else:
                 # Mudou de call
                 entrou_em = _voice_join_ts.get(key)
                 _voice_join_ts[key] = now  # reinicia a contagem na nova call
                 total, lista = _membros_na_call(after.channel)
-                campos = [("📞 Chamada", f"{before.channel.mention} → {after.channel.mention}")]
+                campos = [(f"{_E_CALL} Chamada", f"{before.channel.mention} → {after.channel.mention}")]
                 if entrou_em:
-                    campos.append(("🕐 Duração", _fmt_duracao_ptbr(now - entrou_em)))
-                campos.append((f"👥 Membros na chamada ({total})", lista))
+                    campos.append((f"{_E_CLOCK} Duração", _fmt_duracao_ptbr(now - entrou_em)))
+                campos.append((f"{_E_COMUN} Membros na chamada ({total})", lista))
                 await _audit_log(guild, "voice", color=_C_YELLOW,
-                    description=f"🟡 {member.mention} mudou de chamada de voz.",
+                    description=f"{_E_ALERT} {member.mention} mudou de chamada de voz.",
                     fields=campos)
         if before.mute != after.mute:
             await _audit_log(guild, "voice_mute",
