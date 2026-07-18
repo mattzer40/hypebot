@@ -5057,8 +5057,34 @@ mod_manual_unauth_history: dict[tuple[int, int], list[float]] = {}
 mod_burst_history: dict[tuple[int, int], list[float]] = {}
 
 
-def _register_bot_role_action(member_id: int, role_id: int, action: str) -> None:
-    bot_role_actions[(member_id, role_id, action)] = datetime.now().timestamp()
+# Quem PEDIU a ação de cargo que o bot executou (p/ o log mostrar o humano, não o bot).
+# (member_id, role_id, action) -> (requester_id, timestamp)
+bot_role_requester: dict[tuple[int, int, str], tuple[int, float]] = {}
+
+
+def _register_bot_role_action(member_id: int, role_id: int, action: str,
+                              requester_id: int | None = None) -> None:
+    now = datetime.now().timestamp()
+    bot_role_actions[(member_id, role_id, action)] = now
+    if requester_id is not None:
+        bot_role_requester[(member_id, role_id, action)] = (requester_id, now)
+        # limpeza leve de entradas velhas (evita crescer sem limite)
+        if len(bot_role_requester) > 500:
+            for k, (_, t) in list(bot_role_requester.items()):
+                if now - t > 120:
+                    bot_role_requester.pop(k, None)
+
+
+def _get_role_action_requester(member_id: int, role_id: int, action: str) -> int | None:
+    """Quem pediu a ação (se o bot a fez a pedido de um humano), dentro de 60s."""
+    v = bot_role_requester.get((member_id, role_id, action))
+    if not v:
+        return None
+    rid, ts = v
+    if datetime.now().timestamp() - ts > 60:
+        bot_role_requester.pop((member_id, role_id, action), None)
+        return None
+    return rid
 
 
 def _consume_bot_role_action(member_id: int, role_id: int, action: str) -> bool:
@@ -10897,7 +10923,7 @@ class IgVerifTicketView(discord.ui.LayoutView):
             try:
                 # Registra ANTES de conceder — evita que a Proteção de Cargos reverta
                 # esta concessão legítima do bot caso o cargo esteja protegido/bloqueado.
-                _register_bot_role_action(target.id, role.id, "add")
+                _register_bot_role_action(target.id, role.id, "add", interaction.user.id)
                 await target.add_roles(role, reason=f"Verificação Instagram — aprovado por {interaction.user}")
             except Exception:
                 pass
@@ -11191,7 +11217,7 @@ async def _handle_verif_check(interaction: discord.Interaction) -> None:
             if _to_add:
                 try:
                     for _r in _to_add:
-                        _register_bot_role_action(member.id, _r.id, "add")
+                        _register_bot_role_action(member.id, _r.id, "add", member.id)
                     await member.add_roles(*_to_add, reason="Verificação de URL")
                 except Exception as _e:
                     print(f"[verif] Erro ao adicionar cargos: {_e}", flush=True)
@@ -11219,7 +11245,7 @@ async def _handle_verif_check(interaction: discord.Interaction) -> None:
                     _removed_role_objs = _to_rm
                     try:
                         for _r in _to_rm:
-                            _register_bot_role_action(member.id, _r.id, "remove")
+                            _register_bot_role_action(member.id, _r.id, "remove", member.id)
                         await member.remove_roles(*_to_rm, reason="Verificação de URL — URL não encontrada")
                     except Exception as _e:
                         print(f"[verif] Erro ao remover cargos: {_e}", flush=True)
@@ -11432,7 +11458,7 @@ async def _varredura_verif(guild: discord.Guild, settings: dict) -> None:
                     if _to_re_rm:
                         try:
                             for _r in _to_re_rm:
-                                _register_bot_role_action(_member.id, _r.id, "remove")
+                                _register_bot_role_action(_member.id, _r.id, "remove", _member.id)
                             await _member.remove_roles(*_to_re_rm, reason="Verificação de URL — cargo re-atribuído sem URL")
                             _re_removed_objs = _to_re_rm
                             print(f"[varredura] re-removeu cargo de {_member.id} (já estava pending)", flush=True)
@@ -11466,7 +11492,7 @@ async def _varredura_verif(guild: discord.Guild, settings: dict) -> None:
                     if _to_rm:
                         try:
                             for _r in _to_rm:
-                                _register_bot_role_action(_member.id, _r.id, "remove")
+                                _register_bot_role_action(_member.id, _r.id, "remove", _member.id)
                             await _member.remove_roles(*_to_rm, reason="Verificação de URL — URL não encontrada")
                             _removed_objs = _to_rm
                         except Exception as _e:
@@ -11518,7 +11544,7 @@ async def _varredura_verif(guild: discord.Guild, settings: dict) -> None:
                 if _to_restore:
                     try:
                         for _r in _to_restore:
-                            _register_bot_role_action(_member.id, _r.id, "add")
+                            _register_bot_role_action(_member.id, _r.id, "add", _member.id)
                         await _member.add_roles(*_to_restore, reason="Verificação de URL — URL encontrada, cargos restaurados automaticamente")
                         _restored = _to_restore
                         print(f"[varredura] restaurou cargos de {_member.id}", flush=True)
@@ -11607,7 +11633,7 @@ async def _varredura_verif(guild: discord.Guild, settings: dict) -> None:
                     if _to_restore2:
                         try:
                             for _r2x in _to_restore2:
-                                _register_bot_role_action(_pmember.id, _r2x.id, "add")
+                                _register_bot_role_action(_pmember.id, _r2x.id, "add", _pmember.id)
                             await _pmember.add_roles(*_to_restore2, reason="Verificação de URL — URL encontrada, cargos restaurados automaticamente")
                             _restored2 = _to_restore2
                             print(f"[varredura-extra] restaurou cargos de {_uid_int}", flush=True)
@@ -18860,10 +18886,29 @@ async def _log_channel_natural(guild, event_key, action, verbo, channel, *,
         print(f"[audit_log] {event_key}: {_e}", flush=True)
 
 
+def _roles_responsible_requester(member_id, added, removed) -> int | None:
+    """Se o bot fez a mudança a pedido de um humano (groles, castigo, verificação…),
+    devolve o id desse humano; senão None (aí cai no audit log)."""
+    for rid in added:
+        req = _get_role_action_requester(member_id, rid, "add")
+        if req:
+            return req
+    for rid in removed:
+        req = _get_role_action_requester(member_id, rid, "remove")
+        if req:
+            return req
+    return None
+
+
 async def _log_member_roles(guild, member, added, removed):
     """Log de cargos adicionados/removidos de um membro (mudança manual ou por outro bot)."""
     try:
-        resp = await _audit_responsible_mention(guild, discord.AuditLogAction.member_role_update)
+        # Prefere o humano que PEDIU a ação (o bot é só o executor); senão, audit log.
+        req_id = _roles_responsible_requester(member.id, added, removed)
+        if req_id:
+            resp = f"<@{req_id}>"
+        else:
+            resp = await _audit_responsible_mention(guild, discord.AuditLogAction.member_role_update)
         if added and _audit_is_on(guild, "member_role_add"):
             names = ", ".join(f"<@&{r}>" for r in added)
             await _audit_log(guild, "member_role_add", title="Cargo(s) adicionado(s)", subject=member,
@@ -33053,7 +33098,7 @@ class GrolesRoleButton(discord.ui.Button):
             return
 
         if role in target.roles:
-            _register_bot_role_action(target.id, role.id, "remove")
+            _register_bot_role_action(target.id, role.id, "remove", interaction.user.id)
             try:
                 await target.remove_roles(role, reason=f"groles por {interaction.user}")
             except discord.HTTPException:
@@ -33067,7 +33112,7 @@ class GrolesRoleButton(discord.ui.Button):
                 pass
             action_text = f"**Cargo Removido!**\nCargo: {role.mention}"
         else:
-            _register_bot_role_action(target.id, role.id, "add")
+            _register_bot_role_action(target.id, role.id, "add", interaction.user.id)
             try:
                 await target.add_roles(role, reason=f"groles por {interaction.user}")
             except discord.HTTPException:
@@ -34437,7 +34482,7 @@ async def castigo_cmd(ctx: commands.Context, member: discord.Member = None, *, r
 
     try:
         for r in roles_to_add:
-            _register_bot_role_action(member.id, r.id, "add")
+            _register_bot_role_action(member.id, r.id, "add", ctx.author.id)
         await member.add_roles(*roles_to_add, reason=f"Castigo aplicado por {ctx.author}: {reason or 'sem motivo'}")
     except (discord.Forbidden, discord.HTTPException):
         await ctx.reply("Não consegui aplicar os cargos.", delete_after=8)
