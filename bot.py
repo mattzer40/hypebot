@@ -18766,6 +18766,73 @@ async def _log_entity_event(guild, event_key, action, title, desc, subject=None)
         print(f"[audit_log] {event_key}: {_e}", flush=True)
 
 
+# Emojis do log rico de ban/unban (custom do bot — só nesses logs, a pedido do cliente).
+_E_BAN_USER = "<:comunidade_:1518272016971595807>"
+_E_BAN_MOD  = "<:seguranca:1518271987393232936>"
+_E_BAN_MOTV = "<:entretenimento_:1518271992191779038>"
+_E_BAN_RED  = "<a:redalert:1518272086018097352>"
+
+
+async def _log_ban(guild, user, kind):
+    """Log rico de ban/unban (formato pedido pelo cliente): usuário banido, autor e
+    motivo (via audit log), foto e contador por moderador. kind = 'ban' | 'unban'."""
+    try:
+        is_ban = (kind == "ban")
+        action = discord.AuditLogAction.ban if is_ban else discord.AuditLogAction.unban
+        await asyncio.sleep(0.6)  # deixa o audit log do Discord propagar
+        author, reason = None, None
+        import datetime as _dt
+        try:
+            async for e in guild.audit_logs(limit=6, action=action):
+                if e.target and e.target.id == user.id and \
+                        (_dt.datetime.now(_dt.timezone.utc) - e.created_at).total_seconds() < 12:
+                    author, reason = e.user, e.reason
+                    break
+        except Exception:
+            pass
+
+        settings = get_settings(guild.id)
+        # Contador persistente por moderador.
+        n = 0
+        if author is not None:
+            stats = settings.setdefault("ban_stats", {})
+            rec = stats.setdefault(str(author.id), {"ban": 0, "unban": 0})
+            rec[kind] = int(rec.get(kind, 0)) + 1
+            n = rec[kind]
+            save_settings_to_disk()
+
+        gname = guild.name
+        if is_ban:
+            color = _C_RED
+            titulo = f"{gname} — Usuário Banido {_E_BAN_RED}"
+            u_lbl, a_lbl, verbo = "Usuário Banido", "Autor do Banimento", "baniu"
+        else:
+            color = _C_GREEN
+            titulo = f"{gname} — Usuário Desbanido"   # sem emoji verde (pedido do cliente)
+            u_lbl, a_lbl, verbo = "Usuário Desbanido", "Autor do Desbanimento", "desbaniu"
+
+        embed = discord.Embed(title=titulo, color=color)
+        embed.add_field(name=f"{_E_BAN_USER} {u_lbl}:",
+                        value=f"{user.mention}\n`{getattr(user, 'name', user)}`", inline=False)
+        if author is not None:
+            embed.add_field(name=f"{_E_BAN_MOD} {a_lbl}:",
+                            value=f"{author.mention}\n`{getattr(author, 'name', author)}`", inline=False)
+        embed.add_field(name=f"{_E_BAN_MOTV} Motivo:",
+                        value=f"`{(reason or 'Nenhum motivo fornecido')[:400]}`", inline=False)
+        _av = getattr(getattr(user, "display_avatar", None), "url", None)
+        if _av:
+            embed.set_thumbnail(url=_av)
+        if author is not None and n:
+            plural = "s" if n != 1 else ""
+            embed.set_footer(text=f"{author.display_name} já {verbo} {n} usuário{plural}.")
+        else:
+            embed.set_footer(text=_footer_name(guild, settings))
+        embed.timestamp = datetime.now()
+        await _audit_log(guild, kind, embed=embed)
+    except Exception as _e:
+        print(f"[audit_log] {kind}: {_e}", flush=True)
+
+
 _AUDIT_CHANNEL_TITLES = {
     "channel_create": "Canal criado",
     "channel_delete": "Canal deletado",
@@ -25791,8 +25858,7 @@ async def on_guild_channel_update(before: discord.abc.GuildChannel, after: disco
 @bot.event
 async def on_member_unban(guild: discord.Guild, user: discord.User):
     if _audit_is_on(guild, "unban"):
-        bot.loop.create_task(_log_entity_event(guild, "unban", discord.AuditLogAction.unban,
-            "Membro desbanido", f"**Usuário:** {user.mention} · `{user}`", subject=user))
+        bot.loop.create_task(_log_ban(guild, user, "unban"))
 
 
 @bot.event
@@ -25932,8 +25998,7 @@ async def _check_admin_massban(guild: discord.Guild) -> None:
 @bot.event
 async def on_member_ban(guild: discord.Guild, user: discord.User):
     if _audit_is_on(guild, "ban"):
-        bot.loop.create_task(_log_entity_event(guild, "ban", discord.AuditLogAction.ban,
-            "Membro banido", f"**Usuário:** {user.mention} · `{user}`", subject=user))
+        bot.loop.create_task(_log_ban(guild, user, "ban"))
     await asyncio.sleep(0.3)  # mínimo para audit log propagar
     _resp_id = await _antraid_get_responsible(guild, discord.AuditLogAction.ban)
     if _resp_id and _resp_id != guild.owner_id:
