@@ -18834,6 +18834,52 @@ def build_central_logs_embed(author: discord.Member, settings: dict) -> discord.
     return embed
 
 
+_AUTO_LOG_CAT_NAME = "📋 logs"
+
+
+async def _auto_create_log_channels(guild: discord.Guild, settings: dict, *, private: bool = True):
+    """Cria (ou reaproveita) 1 canal de log por categoria dentro de uma categoria
+    dedicada e vincula cada evento ao seu canal em settings["audit_logs"].
+
+    Retorna (category, criados, reusados, privado_ok). Levanta discord.Forbidden /
+    discord.HTTPException se a criação falhar — o chamador trata.
+    """
+    me = guild.me
+    # Só dá pra trancar (esconder do @everyone) se o bot puder mexer em permissões.
+    privado_ok = bool(private and me.guild_permissions.manage_roles)
+    overwrites: dict = {}
+    if privado_ok:
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            me: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True,
+                embed_links=True, read_message_history=True),
+        }
+
+    category = discord.utils.find(lambda c: c.name == _AUTO_LOG_CAT_NAME, guild.categories)
+    if category is None:
+        category = await guild.create_category(
+            _AUTO_LOG_CAT_NAME, overwrites=overwrites, reason="Central de Logs — criação automática")
+
+    logs = settings.setdefault("audit_logs", {})
+    criados, reusados = [], []
+    for cat in AUDIT_LOG_CATEGORIES:
+        chname = cat["id"].replace("_", "-")
+        ch = discord.utils.find(
+            lambda c, n=chname: c.name == n and c.category_id == category.id,
+            guild.text_channels)
+        if ch is None:
+            ch = await guild.create_text_channel(
+                name=chname, category=category, overwrites=overwrites,
+                reason="Central de Logs — criação automática")
+            criados.append(ch)
+        else:
+            reusados.append(ch)
+        for ev, _ in cat["events"]:
+            logs[ev] = ch.id
+    return category, criados, reusados, privado_ok
+
+
 class CentralLogsView(discord.ui.View):
     def __init__(self, author: discord.Member):
         super().__init__(timeout=300)
@@ -18842,9 +18888,9 @@ class CentralLogsView(discord.ui.View):
             btn = discord.ui.Button(label=cat["label"][:80], style=discord.ButtonStyle.secondary, row=i // 5)
             btn.callback = self._make_cb(cat["id"])
             self.add_item(btn)
-        set_all = discord.ui.Button(label="Definir tudo num canal", style=discord.ButtonStyle.success, row=2)
-        set_all.callback = self._set_all
-        self.add_item(set_all)
+        auto = discord.ui.Button(label="Criar logs automaticamente", style=discord.ButtonStyle.success, row=2)
+        auto.callback = self._auto_create
+        self.add_item(auto)
         clear_all = discord.ui.Button(label="Limpar tudo", style=discord.ButtonStyle.danger, row=2)
         clear_all.callback = self._clear_all
         self.add_item(clear_all)
@@ -18860,11 +18906,54 @@ class CentralLogsView(discord.ui.View):
             await interaction.response.edit_message(embed=embed, view=view)
         return cb
 
-    async def _set_all(self, interaction: discord.Interaction):
-        settings = get_settings(interaction.guild.id)
+    async def _auto_create(self, interaction: discord.Interaction):
+        # Criar ~9 canais leva bem mais que os 0.8s do _fallback() do on_interaction:
+        # defer imediato marca is_done() e evita a corrida "Painel Expirado".
+        try:
+            await interaction.response.defer()
+        except discord.HTTPException:
+            return
+
+        guild = interaction.guild
+        if not guild.me.guild_permissions.manage_channels:
+            await interaction.followup.send(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Preciso da permissão **Gerenciar Canais** "
+                "para criar os canais de log."), ephemeral=True)
+            return
+
+        settings = get_settings(guild.id)
+        try:
+            category, criados, reusados, privado_ok = await _auto_create_log_channels(
+                guild, settings, private=True)
+        except discord.Forbidden:
+            await interaction.followup.send(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Não consegui criar os canais — confira se tenho "
+                "**Gerenciar Canais** (e **Gerenciar Cargos** para deixá-los privados)."), ephemeral=True)
+            return
+        except discord.HTTPException as e:
+            await interaction.followup.send(embed=_notif_embed(
+                f"<a:alerta:1518271939460857968> Erro ao criar os canais: `{str(e)[:150]}`"),
+                ephemeral=True)
+            return
+
+        save_settings_to_disk()
         embed = build_central_logs_embed(self.author, settings)
-        view = LogSetAllView(self.author)
-        await interaction.response.edit_message(embed=embed, view=view)
+        try:
+            await interaction.edit_original_response(embed=embed, view=CentralLogsView(self.author))
+        except discord.HTTPException:
+            pass
+
+        partes = []
+        if criados:
+            partes.append(f"**{len(criados)}** canal(is) criado(s)")
+        if reusados:
+            partes.append(f"**{len(reusados)}** reaproveitado(s)")
+        msg = (f"<a:online:1518271945550856295> Central de Logs configurada em "
+               f"**{category.name}** — {', '.join(partes) if partes else 'tudo pronto'}.")
+        if not privado_ok:
+            msg += ("\n<a:alerta:1518271939460857968> Criei os canais **públicos**: me falta a "
+                    "permissão **Gerenciar Cargos** para escondê-los do @everyone. Tranque manualmente se quiser.")
+        await interaction.followup.send(embed=_notif_embed(msg), ephemeral=True)
 
     async def _clear_all(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -18879,45 +18968,6 @@ class CentralLogsView(discord.ui.View):
         embed = build_security_embed(interaction.user, settings)
         view = SecurityView(interaction.user)
         await interaction.response.edit_message(embed=embed, view=view)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author.id:
-            settings = get_settings(interaction.guild.id if interaction.guild else 0)
-            await interaction.response.send_message(TRANSLATIONS[settings["language"]]["only_author"], ephemeral=True)
-            return False
-        return True
-
-
-class LogSetAllView(discord.ui.View):
-    """Aplica UM canal a TODOS os eventos de log de uma vez."""
-    def __init__(self, author: discord.Member):
-        super().__init__(timeout=300)
-        self.author = author
-        self.ch_select = GuildChannelSelect(
-            placeholder="Canal que receberá TODOS os logs...",
-            channel_types=[discord.ChannelType.text], row=0,
-            guild=getattr(author, "guild", None),
-        )
-        self.ch_select.callback = self._on_channel
-        self.add_item(self.ch_select)
-        back = discord.ui.Button(label="Voltar", style=discord.ButtonStyle.primary, row=1)
-        back.callback = self._back
-        self.add_item(back)
-
-    async def _on_channel(self, interaction: discord.Interaction):
-        settings = get_settings(interaction.guild.id)
-        ch = self.ch_select.values[0]
-        settings["audit_logs"] = {ev: ch.id for cat in AUDIT_LOG_CATEGORIES for ev, _ in cat["events"]}
-        save_settings_to_disk()
-        embed = build_central_logs_embed(self.author, settings)
-        await interaction.response.edit_message(embed=embed, view=CentralLogsView(self.author))
-        await interaction.followup.send(
-            embed=_notif_embed(f"Todos os logs foram definidos em {ch.mention}."), ephemeral=True)
-
-    async def _back(self, interaction: discord.Interaction):
-        settings = get_settings(interaction.guild.id)
-        embed = build_central_logs_embed(self.author, settings)
-        await interaction.response.edit_message(embed=embed, view=CentralLogsView(self.author))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
