@@ -18800,31 +18800,60 @@ _E_BAN_RED  = "<a:redalert:1518272086018097352>"
 
 
 async def _log_ban(guild, user, kind):
-    """Log rico de ban/unban (formato pedido pelo cliente): usuário banido, autor e
-    motivo (via audit log), foto e contador por moderador. kind = 'ban' | 'unban'."""
+    """Log rico de ban/unban: usuário, autor REAL (não o bot) e motivo, foto e
+    contador por moderador. kind = 'ban' | 'unban'.
+
+    O autor sai dos registros do bot (settings['ban_records'], que guardam quem
+    baniu/desbaniu de verdade), porque o audit log do Discord aponta o BOT quando
+    a ação foi feita pelo comando/painel. Cai no audit log só quando não há
+    registro (ban/unban feito direto pelo Discord)."""
     try:
         is_ban = (kind == "ban")
-        action = discord.AuditLogAction.ban if is_ban else discord.AuditLogAction.unban
-        await asyncio.sleep(0.6)  # deixa o audit log do Discord propagar
-        author, reason = None, None
-        import datetime as _dt
-        try:
-            async for e in guild.audit_logs(limit=6, action=action):
-                if e.target and e.target.id == user.id and \
-                        (_dt.datetime.now(_dt.timezone.utc) - e.created_at).total_seconds() < 12:
-                    author, reason = e.user, e.reason
-                    break
-        except Exception:
-            pass
-
         settings = get_settings(guild.id)
+        author_id = author_name = author_mention = None
+        reason = None
+
+        # 1) Registro do bot — autor real e (no ban) motivo limpo.
+        rec = next((r for r in reversed(settings.get("ban_records", []))
+                    if r.get("user_id") == user.id), None)
+        if rec is not None:
+            if is_ban:
+                author_id, author_name, reason = (
+                    rec.get("banned_by_id"), rec.get("banned_by_name"), rec.get("reason"))
+            else:
+                author_id, author_name, reason = (
+                    rec.get("unbanned_by_id"), rec.get("unbanned_by_name"), rec.get("unban_reason"))
+
+        # 2) Audit log — fallback p/ autor (ação direta no Discord) e/ou motivo.
+        if author_id is None or reason is None:
+            action = discord.AuditLogAction.ban if is_ban else discord.AuditLogAction.unban
+            await asyncio.sleep(0.6)  # deixa o audit log propagar
+            import datetime as _dt
+            try:
+                async for e in guild.audit_logs(limit=6, action=action):
+                    if e.target and e.target.id == user.id and \
+                            (_dt.datetime.now(_dt.timezone.utc) - e.created_at).total_seconds() < 12:
+                        if author_id is None and e.user is not None:
+                            author_id, author_name, author_mention = e.user.id, e.user.name, e.user.mention
+                        if reason is None:
+                            reason = e.reason
+                        break
+            except Exception:
+                pass
+
+        if author_id is not None and author_mention is None:
+            author_mention = f"<@{author_id}>"
+        # Limpa o prefixo "mod — " / "[id] mod — " que os comandos do bot embutem no motivo.
+        if reason and author_name and f"{author_name} — " in reason:
+            reason = reason.split(f"{author_name} — ", 1)[-1]
+
         # Contador persistente por moderador.
         n = 0
-        if author is not None:
+        if author_id is not None:
             stats = settings.setdefault("ban_stats", {})
-            rec = stats.setdefault(str(author.id), {"ban": 0, "unban": 0})
-            rec[kind] = int(rec.get(kind, 0)) + 1
-            n = rec[kind]
+            recc = stats.setdefault(str(author_id), {"ban": 0, "unban": 0})
+            recc[kind] = int(recc.get(kind, 0)) + 1
+            n = recc[kind]
             save_settings_to_disk()
 
         gname = guild.name
@@ -18840,17 +18869,17 @@ async def _log_ban(guild, user, kind):
         embed = discord.Embed(title=titulo, color=color)
         embed.add_field(name=f"{_E_BAN_USER} {u_lbl}:",
                         value=f"{user.mention}\n`{getattr(user, 'name', user)}`", inline=False)
-        if author is not None:
+        if author_mention:
             embed.add_field(name=f"{_E_BAN_MOD} {a_lbl}:",
-                            value=f"{author.mention}\n`{getattr(author, 'name', author)}`", inline=False)
+                            value=f"{author_mention}\n`{author_name or author_id}`", inline=False)
         embed.add_field(name=f"{_E_BAN_MOTV} Motivo:",
                         value=f"`{(reason or 'Nenhum motivo fornecido')[:400]}`", inline=False)
         _av = getattr(getattr(user, "display_avatar", None), "url", None)
         if _av:
             embed.set_thumbnail(url=_av)
-        if author is not None and n:
+        if author_id is not None and n:
             plural = "s" if n != 1 else ""
-            embed.set_footer(text=f"{author.display_name} já {verbo} {n} usuário{plural}.")
+            embed.set_footer(text=f"{author_name or ('ID ' + str(author_id))} já {verbo} {n} usuário{plural}.")
         else:
             embed.set_footer(text=_footer_name(guild, settings))
         embed.timestamp = datetime.now()
@@ -44560,6 +44589,7 @@ async def unban_slash(interaction: discord.Interaction, usuario_id: str, motivo:
                 r["unbanned_by_id"]   = user.id
                 r["unbanned_by_name"] = str(user)
                 r["unbanned_at"]      = date_str
+                r["unban_reason"]     = motivo
             break
     save_settings_to_disk()
 
@@ -44861,6 +44891,7 @@ async def unban_cmd(ctx: commands.Context, usuario_id: str = None, *, motivo: st
                 r["unbanned_by_id"]   = user.id
                 r["unbanned_by_name"] = str(user)
                 r["unbanned_at"]      = date_str
+                r["unban_reason"]     = motivo
             break
     save_settings_to_disk()
 
