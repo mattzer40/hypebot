@@ -18834,7 +18834,7 @@ def build_central_logs_embed(author: discord.Member, settings: dict) -> discord.
     return embed
 
 
-_AUTO_LOG_CAT_NAME = "📋 logs"
+_AUTO_LOG_CAT_NAME = "logs"
 
 
 async def _auto_create_log_channels(guild: discord.Guild, settings: dict, *, private: bool = True):
