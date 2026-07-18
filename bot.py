@@ -18677,67 +18677,29 @@ AUDIT_LOG_CATEGORIES = [
 ]
 _AUDIT_EVENT_LABELS = {ev: lbl for cat in AUDIT_LOG_CATEGORIES for ev, lbl in cat["events"]}
 
-# Emojis CUSTOMIZADOS do bot (regra do usuário: nunca unicode genérico).
-# Todos os IDs abaixo já são usados em outros pontos do bot.py (Application Emojis válidos).
-_E_SEG    = "<:seguranca:1518271987393232936>"
-_E_OK     = "<a:verificadoverde:1518272098290892810>"
-_E_ALERT  = "<a:alerta:1518271939460857968>"
-_E_RED    = "<a:redalert:1518272086018097352>"
-_E_STAR   = "<:estrela:1518272022093877309>"
-_E_TOOL   = "<:ferramentas_:1518271998613131274>"
-_E_DIS    = "<:disslike:1518272066506330232>"
-_E_SERVER = "<:servidor_:1518271981189992638>"
-_E_BOT    = "<:Bot:1518272060860928072>"
-_E_COMUN  = "<:comunidade_:1518272016971595807>"
-_E_CHAT   = "<:Mov_chat:1518271970008105031>"
-_E_CALL   = "<:mov_call:1518271964077232150>"
-_E_CLOCK  = "<:nata_relogio:1525607873814728705>"
-_E_ONLINE = "<a:online:1518271945550856295>"
-_E_URLS   = "<:urls:1518272078921339011>"
-
-# Estilo por tipo de evento: (emoji customizado no título, cor da barra lateral).
+# Cor da barra lateral por tipo de evento. Logs SEM emoji (a pedido do cliente):
+# o "zika" vem do cabeçalho (autor: nome+foto) + thumbnail + cor por tipo.
 # Cores padrão do Discord: verde=57F287, vermelho=ED4245, amarelo=FEE75C, azul=5865F2.
 _C_GREEN, _C_RED, _C_YELLOW, _C_BLUE = 0x57F287, 0xED4245, 0xFEE75C, 0x5865F2
 _AUDIT_STYLE = {
-    "ban":                (_E_SEG,    _C_RED),
-    "unban":              (_E_OK,     _C_GREEN),
-    "kick":               (_E_ALERT,  _C_RED),
-    "role_create":        (_E_STAR,   _C_GREEN),
-    "role_delete":        (_E_RED,    _C_RED),
-    "role_update":        (_E_TOOL,   _C_YELLOW),
-    "member_role_add":    (_E_OK,     _C_GREEN),
-    "member_role_remove": (_E_DIS,    _C_RED),
-    "channel_create":     (_E_SERVER, _C_GREEN),
-    "channel_delete":     (_E_RED,    _C_RED),
-    "channel_update":     (_E_TOOL,   _C_YELLOW),
-    "timeout":            (_E_ALERT,  _C_YELLOW),
-    "voice_mute":         (_E_CALL,   _C_YELLOW),
-    "bot_add":            (_E_BOT,    _C_BLUE),
-    "join":               (_E_COMUN,  _C_GREEN),
-    "leave":              (_E_COMUN,  _C_RED),
-    "msg_delete":         (_E_CHAT,   _C_RED),
-    "msg_edit":           (_E_CHAT,   _C_YELLOW),
-    "voice":              (_E_CALL,   _C_BLUE),
-    "sec_cargos":         (_E_SEG,    _C_RED),
-    "sec_antiraid":       (_E_RED,    _C_RED),
-    "sec_url":            (_E_URLS,   _C_RED),
+    "ban": _C_RED, "unban": _C_GREEN, "kick": _C_RED,
+    "role_create": _C_GREEN, "role_delete": _C_RED, "role_update": _C_YELLOW,
+    "member_role_add": _C_GREEN, "member_role_remove": _C_RED,
+    "channel_create": _C_GREEN, "channel_delete": _C_RED, "channel_update": _C_YELLOW,
+    "timeout": _C_YELLOW, "voice_mute": _C_YELLOW, "bot_add": _C_BLUE,
+    "join": _C_GREEN, "leave": _C_RED, "msg_delete": _C_RED, "msg_edit": _C_YELLOW,
+    "voice": _C_BLUE, "sec_cargos": _C_RED, "sec_antiraid": _C_RED, "sec_url": _C_RED,
 }
 
 
-def _channel_type_emoji(channel) -> str:
-    """Emoji customizado do tipo de canal, para as frases de log."""
-    t = getattr(channel, "type", None)
-    return {
-        discord.ChannelType.voice:       _E_CALL,
-        discord.ChannelType.stage_voice: _E_CALL,
-        discord.ChannelType.category:    _E_SERVER,
-    }.get(t, _E_CHAT)
-
-
 async def _audit_log(guild, event_key, *, title=None, description=None, color=None,
-                     fields=None, author_name=None, author_icon=None, thumbnail=None, embed=None):
+                     fields=None, author_name=None, author_icon=None, thumbnail=None,
+                     subject=None, embed=None):
     """Envia um embed de log no canal configurado para `event_key`. No-op se não houver
-    canal configurado. Nunca levanta exceção (protege os handlers de evento)."""
+    canal configurado. Nunca levanta exceção (protege os handlers de evento).
+
+    `subject` (Member/User): quando passado, vira o cabeçalho (autor: nome + foto)
+    e a foto grande (thumbnail) do embed — o visual dos logs sem emoji."""
     try:
         if guild is None:
             return
@@ -18749,15 +18711,20 @@ async def _audit_log(guild, event_key, *, title=None, description=None, color=No
         if ch is None or not hasattr(ch, "send"):
             return
         if embed is None:
-            # Estilo por tipo: emoji no título + cor da barra (só quando o chamador
-            # não passou uma cor explícita). Mantém as descrições que cada handler monta.
-            _emoji, _style_color = _AUDIT_STYLE.get(event_key, ("", None))
-            _title = f"{_emoji} {title}" if (_emoji and title) else title
+            # Cor da barra por tipo (só quando o chamador não passou cor explícita).
             if color is None:
-                color = _style_color if _style_color is not None else settings.get("embed_color", 0x2B2D31)
-            embed = discord.Embed(
-                title=_title, description=description, color=color,
-            )
+                _sc = _AUDIT_STYLE.get(event_key)
+                color = _sc if _sc is not None else settings.get("embed_color", 0x2B2D31)
+            # subject → autor (nome + foto) no topo e foto grande no canto.
+            if subject is not None:
+                _av = getattr(getattr(subject, "display_avatar", None), "url", None)
+                if author_name is None:
+                    author_name = getattr(subject, "display_name", None) or str(subject)
+                if author_icon is None:
+                    author_icon = _av
+                if thumbnail is None:
+                    thumbnail = _av
+            embed = discord.Embed(title=title, description=description, color=color)
             if author_name:
                 embed.set_author(name=author_name, icon_url=author_icon)
             if thumbnail:
@@ -18788,11 +18755,13 @@ async def _audit_responsible_mention(guild, action) -> str:
         return "`Desconhecido`"
 
 
-async def _log_entity_event(guild, event_key, action, title, desc):
-    """Log genérico p/ eventos de cargo/canal: descrição + responsável via audit log."""
+async def _log_entity_event(guild, event_key, action, title, desc, subject=None):
+    """Log genérico p/ eventos de cargo/canal: descrição + responsável via audit log.
+    `subject` (opcional): usuário que vira o cabeçalho (autor + foto) do log."""
     try:
         resp = await _audit_responsible_mention(guild, action)
-        await _audit_log(guild, event_key, title=title, description=f"{desc}\n**Responsável:** {resp}")
+        await _audit_log(guild, event_key, title=title,
+                         description=f"{desc}\n**Responsável:** {resp}", subject=subject)
     except Exception as _e:
         print(f"[audit_log] {event_key}: {_e}", flush=True)
 
@@ -18812,8 +18781,8 @@ async def _log_channel_natural(guild, event_key, action, verbo, channel, *,
         if mention:
             ref = getattr(channel, "mention", None) or f"`{channel.name}`"
         else:
-            # Canal deletado não tem menção clicável — mostra o ícone do tipo + nome.
-            ref = f"{_channel_type_emoji(channel)} `{channel.name}`"
+            # Canal deletado não tem menção clicável — mostra só o nome (logs sem emoji).
+            ref = f"`{channel.name}`"
         resp = await _audit_responsible_mention(guild, action)
         desc = f"O canal {ref} foi {verbo} por {resp}."
         if before is not None and after is not None and before.name != after.name:
@@ -18830,11 +18799,11 @@ async def _log_member_roles(guild, member, added, removed):
         resp = await _audit_responsible_mention(guild, discord.AuditLogAction.member_role_update)
         if added and _audit_is_on(guild, "member_role_add"):
             names = ", ".join(f"<@&{r}>" for r in added)
-            await _audit_log(guild, "member_role_add", title="Cargo(s) adicionado(s)",
+            await _audit_log(guild, "member_role_add", title="Cargo(s) adicionado(s)", subject=member,
                 description=f"**Membro:** {member.mention}\n**Cargos:** {names}\n**Responsável:** {resp}")
         if removed and _audit_is_on(guild, "member_role_remove"):
             names = ", ".join(f"<@&{r}>" for r in removed)
-            await _audit_log(guild, "member_role_remove", title="Cargo(s) removido(s)",
+            await _audit_log(guild, "member_role_remove", title="Cargo(s) removido(s)", subject=member,
                 description=f"**Membro:** {member.mention}\n**Cargos:** {names}\n**Responsável:** {resp}")
     except Exception as _e:
         print(f"[audit_log] member_roles: {_e}", flush=True)
@@ -18844,10 +18813,10 @@ async def _log_timeout(guild, member, until):
     try:
         resp = await _audit_responsible_mention(guild, discord.AuditLogAction.member_update)
         if until is not None:
-            await _audit_log(guild, "timeout", title="Membro silenciado (timeout)",
+            await _audit_log(guild, "timeout", title="Membro silenciado (timeout)", subject=member,
                 description=f"**Membro:** {member.mention}\n**Expira:** <t:{int(until.timestamp())}:R>\n**Responsável:** {resp}")
         else:
-            await _audit_log(guild, "timeout", title="Timeout removido",
+            await _audit_log(guild, "timeout", title="Timeout removido", subject=member,
                 description=f"**Membro:** {member.mention}\n**Responsável:** {resp}")
     except Exception as _e:
         print(f"[audit_log] timeout: {_e}", flush=True)
@@ -18896,42 +18865,42 @@ async def _log_voice(guild, member, before, after):
                 _voice_join_ts[key] = now
                 total, lista = _membros_na_call(after.channel)
                 ts = int(now)
-                await _audit_log(guild, "voice", color=_C_GREEN,
-                    description=f"{_E_ONLINE} {member.mention} entrou em uma chamada de voz.",
+                await _audit_log(guild, "voice", color=_C_GREEN, subject=member,
+                    description=f"{member.mention} entrou em uma chamada de voz.",
                     fields=[
-                        (f"{_E_CALL} Chamada", after.channel.mention),
-                        (f"{_E_CLOCK} Data e Hora", f"<t:{ts}:F> (<t:{ts}:R>)"),
-                        (f"{_E_COMUN} Membros na chamada ({total})", lista),
+                        ("Chamada", after.channel.mention),
+                        ("Data e Hora", f"<t:{ts}:F> (<t:{ts}:R>)"),
+                        (f"Membros na chamada ({total})", lista),
                     ])
             elif after.channel is None and before.channel is not None:
                 # Saiu
                 entrou_em = _voice_join_ts.pop(key, None)
                 total, lista = _membros_na_call(before.channel)
-                campos = [(f"{_E_CALL} Chamada", before.channel.mention)]
+                campos = [("Chamada", before.channel.mention)]
                 if entrou_em:
-                    campos.append((f"{_E_CLOCK} Duração", _fmt_duracao_ptbr(now - entrou_em)))
-                campos.append((f"{_E_COMUN} Membros na chamada ({total})", lista))
-                await _audit_log(guild, "voice", color=_C_RED,
-                    description=f"{_E_RED} {member.mention} saiu de uma chamada de voz.",
+                    campos.append(("Duração", _fmt_duracao_ptbr(now - entrou_em)))
+                campos.append((f"Membros na chamada ({total})", lista))
+                await _audit_log(guild, "voice", color=_C_RED, subject=member,
+                    description=f"{member.mention} saiu de uma chamada de voz.",
                     fields=campos)
             else:
                 # Mudou de call
                 entrou_em = _voice_join_ts.get(key)
                 _voice_join_ts[key] = now  # reinicia a contagem na nova call
                 total, lista = _membros_na_call(after.channel)
-                campos = [(f"{_E_CALL} Chamada", f"{before.channel.mention} → {after.channel.mention}")]
+                campos = [("Chamada", f"{before.channel.mention} → {after.channel.mention}")]
                 if entrou_em:
-                    campos.append((f"{_E_CLOCK} Duração", _fmt_duracao_ptbr(now - entrou_em)))
-                campos.append((f"{_E_COMUN} Membros na chamada ({total})", lista))
-                await _audit_log(guild, "voice", color=_C_YELLOW,
-                    description=f"{_E_ALERT} {member.mention} mudou de chamada de voz.",
+                    campos.append(("Duração", _fmt_duracao_ptbr(now - entrou_em)))
+                campos.append((f"Membros na chamada ({total})", lista))
+                await _audit_log(guild, "voice", color=_C_YELLOW, subject=member,
+                    description=f"{member.mention} mudou de chamada de voz.",
                     fields=campos)
         if before.mute != after.mute:
-            await _audit_log(guild, "voice_mute",
+            await _audit_log(guild, "voice_mute", subject=member,
                 title="Membro mutado (voz)" if after.mute else "Membro desmutado (voz)",
                 description=f"**Usuário:** {member.mention}\n**Ação:** {'Mutado' if after.mute else 'Desmutado'} no servidor")
         if before.deaf != after.deaf:
-            await _audit_log(guild, "voice_mute",
+            await _audit_log(guild, "voice_mute", subject=member,
                 title="Membro ensurdecido (voz)" if after.deaf else "Membro des-ensurdecido (voz)",
                 description=f"**Usuário:** {member.mention}\n**Ação:** {'Ensurdecido' if after.deaf else 'Des-ensurdecido'} no servidor")
     except Exception as _e:
@@ -18953,10 +18922,10 @@ async def _log_member_removal(guild, member):
         except Exception:
             pass
         if kicker is not None:
-            await _audit_log(guild, "kick", title="Membro expulso",
+            await _audit_log(guild, "kick", title="Membro expulso", subject=member,
                 description=f"**Usuário:** {member.mention} · `{member}`\n**Responsável:** {kicker.mention}")
         else:
-            await _audit_log(guild, "leave", title="Membro saiu",
+            await _audit_log(guild, "leave", title="Membro saiu", subject=member,
                 description=f"**Usuário:** {member.mention} · `{member}`")
     except Exception as _e:
         print(f"[audit_log] leave/kick: {_e}", flush=True)
@@ -25790,7 +25759,7 @@ async def on_guild_channel_update(before: discord.abc.GuildChannel, after: disco
 async def on_member_unban(guild: discord.Guild, user: discord.User):
     if _audit_is_on(guild, "unban"):
         bot.loop.create_task(_log_entity_event(guild, "unban", discord.AuditLogAction.unban,
-            "Membro desbanido", f"**Usuário:** {user.mention} · `{user}`"))
+            "Membro desbanido", f"**Usuário:** {user.mention} · `{user}`", subject=user))
 
 
 @bot.event
@@ -25804,7 +25773,7 @@ async def on_message_delete(message: discord.Message):
         if len(content) > 1000:
             content = content[:1000] + "…"
         await _audit_log(
-            message.guild, "msg_delete", title="Mensagem apagada",
+            message.guild, "msg_delete", title="Mensagem apagada", subject=message.author,
             description=(f"**Autor:** {message.author.mention if message.author else '—'}\n"
                         f"**Canal:** {message.channel.mention}\n**Conteúdo:**\n{content}"))
     except Exception as _e:
@@ -25823,7 +25792,7 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
         _b = (before.content or "*(vazio)*")[:500]
         _a = (after.content or "*(vazio)*")[:500]
         await _audit_log(
-            after.guild, "msg_edit", title="Mensagem editada",
+            after.guild, "msg_edit", title="Mensagem editada", subject=after.author,
             description=(f"**Autor:** {after.author.mention if after.author else '—'}\n"
                         f"**Canal:** {after.channel.mention}\n**Antes:**\n{_b}\n**Depois:**\n{_a}\n"
                         f"[Ir à mensagem]({after.jump_url})"))
@@ -25931,7 +25900,7 @@ async def _check_admin_massban(guild: discord.Guild) -> None:
 async def on_member_ban(guild: discord.Guild, user: discord.User):
     if _audit_is_on(guild, "ban"):
         bot.loop.create_task(_log_entity_event(guild, "ban", discord.AuditLogAction.ban,
-            "Membro banido", f"**Usuário:** {user.mention} · `{user}`"))
+            "Membro banido", f"**Usuário:** {user.mention} · `{user}`", subject=user))
     await asyncio.sleep(0.3)  # mínimo para audit log propagar
     _resp_id = await _antraid_get_responsible(guild, discord.AuditLogAction.ban)
     if _resp_id and _resp_id != guild.owner_id:
@@ -30808,10 +30777,10 @@ async def on_member_join(member: discord.Member):
     if member.bot:
         if _audit_is_on(member.guild, "bot_add"):
             bot.loop.create_task(_log_entity_event(member.guild, "bot_add", discord.AuditLogAction.bot_add,
-                "Bot adicionado", f"**Bot:** {member.mention} · `{member}`"))
+                "Bot adicionado", f"**Bot:** {member.mention} · `{member}`", subject=member))
     elif _audit_is_on(member.guild, "join"):
         _cr = f"<t:{int(member.created_at.timestamp())}:R>"
-        bot.loop.create_task(_audit_log(member.guild, "join", title="Membro entrou",
+        bot.loop.create_task(_audit_log(member.guild, "join", title="Membro entrou", subject=member,
             description=f"**Usuário:** {member.mention} · `{member}`\n**Conta criada:** {_cr}"))
 
     if settings.get("blacklist_enabled") and member.id in settings.get("blacklist_users", []):
