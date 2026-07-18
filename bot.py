@@ -39168,6 +39168,44 @@ class AntDescLogSelect(GuildChannelSelect):
             ephemeral=True)
 
 
+class AntDescLimitModal(discord.ui.Modal):
+    def __init__(self, author: discord.Member):
+        super().__init__(title="Limite de Ações — Anti Desconect", timeout=300)
+        self.author = author
+        settings = get_settings(author.guild.id if author.guild else 0)
+        self.acoes = discord.ui.TextInput(
+            label="Número de ações", placeholder="Ex: 10",
+            default=str(int(settings.get("antdesc_limit", 10))), required=True, max_length=4)
+        self.janela = discord.ui.TextInput(
+            label="Janela (segundos)", placeholder="Ex: 15",
+            default=str(int(settings.get("antdesc_window", 15))), required=True, max_length=5)
+        self.add_item(self.acoes)
+        self.add_item(self.janela)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        try:
+            lim = int(self.acoes.value.strip())
+            win = int(self.janela.value.strip())
+        except ValueError:
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Use apenas números."), ephemeral=True)
+            return
+        if not (1 <= lim <= 1000) or not (1 <= win <= 3600):
+            await interaction.response.send_message(
+                embed=_notif_embed("<a:alerta:1518271939460857968> Fora do intervalo: ações 1–1000, segundos 1–3600."),
+                ephemeral=True)
+            return
+        settings["antdesc_limit"] = lim
+        settings["antdesc_window"] = win
+        save_settings_to_disk()
+        embed = build_antdesc_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=AntDescView(self.author))
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> Limite definido: **{lim}** ação(ões) em **{win}** segundos."),
+            ephemeral=True)
+
+
 class AntDescView(discord.ui.View):
     def __init__(self, author: discord.Member):
         super().__init__(timeout=None)
@@ -39192,6 +39230,7 @@ class AntDescView(discord.ui.View):
             (toggle_label, toggle_style, self._toggle),
             ("Configurar Cargos", discord.ButtonStyle.secondary, self._cargos),
             ("Configurar Logs", discord.ButtonStyle.secondary, self._logs),
+            ("Limite de Ações", discord.ButtonStyle.secondary, self._limite),
         ]
         row1 = [
             ("Listar Configurações", discord.ButtonStyle.secondary, self._listar),
@@ -39231,6 +39270,9 @@ class AntDescView(discord.ui.View):
         await interaction.response.send_message(
             embed=_notif_embed("Selecione o canal onde os alertas de abuso serão enviados:"),
             view=_SingleSelectView(AntDescLogSelect(self)), ephemeral=True)
+
+    async def _limite(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AntDescLimitModal(self.author))
 
     async def _listar(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
