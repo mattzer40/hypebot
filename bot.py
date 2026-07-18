@@ -18797,6 +18797,7 @@ _E_BAN_USER = "<:comunidade_:1518272016971595807>"
 _E_BAN_MOD  = "<:seguranca:1518271987393232936>"
 _E_BAN_MOTV = "<:entretenimento_:1518271992191779038>"
 _E_BAN_RED  = "<a:redalert:1518272086018097352>"
+_E_BAN_STAR = "<:estrela:1518272022093877309>"   # unban: emoji não-verde (a pedido do cliente)
 
 
 async def _log_ban(guild, user, kind):
@@ -18863,7 +18864,7 @@ async def _log_ban(guild, user, kind):
             u_lbl, a_lbl, verbo = "Usuário Banido", "Autor do Banimento", "baniu"
         else:
             color = _C_GREEN
-            titulo = f"{gname} — Usuário Desbanido"   # sem emoji verde (pedido do cliente)
+            titulo = f"{gname} — Usuário Desbanido {_E_BAN_STAR}"
             u_lbl, a_lbl, verbo = "Usuário Desbanido", "Autor do Desbanimento", "desbaniu"
 
         embed = discord.Embed(title=titulo, color=color)
