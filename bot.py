@@ -18804,7 +18804,7 @@ _E_BAN_USER = "<:comunidade_:1518272016971595807>"
 _E_BAN_MOD  = "<:seguranca:1518271987393232936>"
 _E_BAN_MOTV = "<:entretenimento_:1518271992191779038>"
 _E_BAN_RED  = "<a:redalert:1518272086018097352>"
-_E_BAN_STAR = "<:estrela:1518272022093877309>"   # unban: emoji não-verde (a pedido do cliente)
+_E_BAN_STAR = "<:Picsart_260523_224131777:1518272109925630042>"   # unban: emoji do cliente
 
 
 async def _log_ban(guild, user, kind):
