@@ -839,6 +839,10 @@ TRANSLATIONS = {
         "btn_allowed_roles": "Cargos Permitidos",
         "btn_log_channel": "Canal de Logs",
         "btn_list_users": "Listar Usuários",
+        "btn_add_user": "Adicionar Usuário",
+        "btn_remove_user": "Remover Usuário",
+        "send_blacklist_add_id": "Envie no chat o **ID** do usuário para **adicionar** à blacklist.",
+        "send_blacklist_rem_id": "Envie no chat o **ID** do usuário para **remover** da blacklist.",
         "send_blacklist_role": "Envie o cargo (@cargo/id) que pode usar a blacklist",
         "send_blacklist_action": "Envie a ação desejada (`expulsar`, `banir`)",
         "blacklist_activated": "Blacklist ativada!",
@@ -2566,6 +2570,10 @@ TRANSLATIONS = {
         "btn_allowed_roles": "Allowed Roles",
         "btn_log_channel": "Log Channel",
         "btn_list_users": "List Users",
+        "btn_add_user": "Add User",
+        "btn_remove_user": "Remove User",
+        "send_blacklist_add_id": "Send the **ID** of the user to **add** to the blacklist.",
+        "send_blacklist_rem_id": "Send the **ID** of the user to **remove** from the blacklist.",
         "send_blacklist_role": "Send the role (@role/id) that can use the blacklist",
         "send_blacklist_action": "Send the desired action (`kick`, `ban`)",
         "blacklist_activated": "Blacklist enabled!",
@@ -26573,19 +26581,20 @@ class BlacklistView(discord.ui.View):
             (t["btn_log_channel"], discord.ButtonStyle.secondary, self._define_logs),
         ]
         row1 = [
+            (t["btn_add_user"], discord.ButtonStyle.success, self._add_user),
+            (t["btn_remove_user"], discord.ButtonStyle.danger, self._remove_user),
             (t["btn_list_users"], discord.ButtonStyle.secondary, self._list_users),
+        ]
+        row2 = [
             (t["btn_list_config"], discord.ButtonStyle.secondary, self._list_config),
             (t["btn_reset_config"], discord.ButtonStyle.danger, self._reset_config),
         ]
 
-        for label, style, cb in row0:
-            btn = discord.ui.Button(label=label, style=style, row=0, emoji=_button_emoji(style))
-            btn.callback = cb
-            self.add_item(btn)
-        for label, style, cb in row1:
-            btn = discord.ui.Button(label=label, style=style, row=1, emoji=_button_emoji(style))
-            btn.callback = cb
-            self.add_item(btn)
+        for r, row in ((0, row0), (1, row1), (2, row2)):
+            for label, style, cb in row:
+                btn = discord.ui.Button(label=label, style=style, row=r, emoji=_button_emoji(style))
+                btn.callback = cb
+                self.add_item(btn)
 
     async def _refresh(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -26706,6 +26715,48 @@ class BlacklistView(discord.ui.View):
             return
         settings["blacklist_log_channel"] = channel.id
         await interaction.followup.send(embed=_notif_embed(t["channel_updated"]), ephemeral=True)
+        await self._refresh(interaction)
+
+    async def _add_user(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        content = await self._wait_for_input(interaction, t["send_blacklist_add_id"])
+        if content is None:
+            return
+        try:
+            uid = int(content.strip("<@!> "))
+        except ValueError:
+            await interaction.followup.send(embed=_notif_embed(t["blacklist_usage"]), ephemeral=True)
+            return
+        users = settings.setdefault("blacklist_users", [])
+        if uid in users:
+            await interaction.followup.send(embed=_notif_embed(t["already_in_blacklist"]), ephemeral=True)
+            return
+        users.append(uid)
+        save_settings_to_disk()
+        await interaction.followup.send(
+            embed=_notif_embed(f"{t['user_added_blacklist']} (<@{uid}>)"), ephemeral=True)
+        await self._refresh(interaction)
+
+    async def _remove_user(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        content = await self._wait_for_input(interaction, t["send_blacklist_rem_id"])
+        if content is None:
+            return
+        try:
+            uid = int(content.strip("<@!> "))
+        except ValueError:
+            await interaction.followup.send(embed=_notif_embed(t["blacklist_usage"]), ephemeral=True)
+            return
+        users = settings.setdefault("blacklist_users", [])
+        if uid not in users:
+            await interaction.followup.send(embed=_notif_embed(t["not_in_blacklist"]), ephemeral=True)
+            return
+        users.remove(uid)
+        save_settings_to_disk()
+        await interaction.followup.send(
+            embed=_notif_embed(f"{t['user_removed_blacklist']} (<@{uid}>)"), ephemeral=True)
         await self._refresh(interaction)
 
     async def _list_users(self, interaction: discord.Interaction):
