@@ -18854,6 +18854,31 @@ def _membros_na_call(channel, limite: int = 15) -> tuple[int, str]:
     return total, ("\n".join(linhas) if linhas else "*(vazio)*")
 
 
+async def _voice_mod_responsible(guild, member, attr: str):
+    """Quem fez o server-mute/deafen (attr='mute'/'deaf') do membro, via audit log.
+    Filtra pelo alvo e confirma que a mudança foi de mute/deaf (member_update também
+    cobre nick/timeout). Retorna o User/Member responsável ou None."""
+    try:
+        await asyncio.sleep(0.6)  # deixa o audit log do Discord propagar
+        import datetime as _dt
+        fallback = None
+        async for e in guild.audit_logs(limit=8, action=discord.AuditLogAction.member_update):
+            if not (e.target and e.target.id == member.id):
+                continue
+            if (_dt.datetime.now(_dt.timezone.utc) - e.created_at).total_seconds() > 10:
+                break
+            if fallback is None:
+                fallback = e.user
+            try:
+                if hasattr(e.after, attr) or hasattr(e.before, attr):
+                    return e.user
+            except Exception:
+                pass
+        return fallback
+    except Exception:
+        return None
+
+
 async def _log_voice(guild, member, before, after):
     """Tráfego de voz (entrar/sair/mudar de call) + silenciados de voz (server mute/deafen)."""
     try:
@@ -18896,13 +18921,21 @@ async def _log_voice(guild, member, before, after):
                     description=f"{member.mention} mudou de chamada de voz.",
                     fields=campos)
         if before.mute != after.mute:
+            _r = await _voice_mod_responsible(guild, member, "mute")
+            _resp = _r.mention if _r else "`Desconhecido`"
             await _audit_log(guild, "voice_mute", subject=member,
                 title="Membro mutado (voz)" if after.mute else "Membro desmutado (voz)",
-                description=f"**Usuário:** {member.mention}\n**Ação:** {'Mutado' if after.mute else 'Desmutado'} no servidor")
+                description=(f"**Usuário:** {member.mention}\n"
+                             f"**Ação:** {'Mutado' if after.mute else 'Desmutado'} no servidor\n"
+                             f"**Responsável:** {_resp}"))
         if before.deaf != after.deaf:
+            _r = await _voice_mod_responsible(guild, member, "deaf")
+            _resp = _r.mention if _r else "`Desconhecido`"
             await _audit_log(guild, "voice_mute", subject=member,
                 title="Membro ensurdecido (voz)" if after.deaf else "Membro des-ensurdecido (voz)",
-                description=f"**Usuário:** {member.mention}\n**Ação:** {'Ensurdecido' if after.deaf else 'Des-ensurdecido'} no servidor")
+                description=(f"**Usuário:** {member.mention}\n"
+                             f"**Ação:** {'Ensurdecido' if after.deaf else 'Des-ensurdecido'} no servidor\n"
+                             f"**Responsável:** {_resp}"))
     except Exception as _e:
         print(f"[audit_log] voice: {_e}", flush=True)
 
