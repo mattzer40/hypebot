@@ -18677,6 +18677,46 @@ AUDIT_LOG_CATEGORIES = [
 ]
 _AUDIT_EVENT_LABELS = {ev: lbl for cat in AUDIT_LOG_CATEGORIES for ev, lbl in cat["events"]}
 
+# Estilo por tipo de evento: (emoji no título, cor da barra lateral).
+# Cores padrão do Discord: verde=57F287, vermelho=ED4245, amarelo=FEE75C, azul=5865F2.
+_C_GREEN, _C_RED, _C_YELLOW, _C_BLUE = 0x57F287, 0xED4245, 0xFEE75C, 0x5865F2
+_AUDIT_STYLE = {
+    "ban":                ("🔨", _C_RED),
+    "unban":              ("🕊️", _C_GREEN),
+    "kick":               ("👢", _C_RED),
+    "role_create":        ("✨", _C_GREEN),
+    "role_delete":        ("🗑️", _C_RED),
+    "role_update":        ("🛠️", _C_YELLOW),
+    "member_role_add":    ("➕", _C_GREEN),
+    "member_role_remove": ("➖", _C_RED),
+    "channel_create":     ("📁", _C_GREEN),
+    "channel_delete":     ("🗑️", _C_RED),
+    "channel_update":     ("✏️", _C_YELLOW),
+    "timeout":            ("🔇", _C_YELLOW),
+    "voice_mute":         ("🎙️", _C_YELLOW),
+    "bot_add":            ("🤖", _C_BLUE),
+    "join":               ("📥", _C_GREEN),
+    "leave":              ("📤", _C_RED),
+    "msg_delete":         ("🗑️", _C_RED),
+    "msg_edit":           ("✏️", _C_YELLOW),
+    "voice":              ("🔊", _C_BLUE),
+    "sec_cargos":         ("🛡️", _C_RED),
+    "sec_antiraid":       ("🚨", _C_RED),
+    "sec_url":            ("🔗", _C_RED),
+}
+
+
+def _channel_type_emoji(channel) -> str:
+    """Emoji do tipo de canal, para as frases de log."""
+    t = getattr(channel, "type", None)
+    return {
+        discord.ChannelType.voice:            "🔊",
+        discord.ChannelType.stage_voice:      "🎙️",
+        discord.ChannelType.category:         "📂",
+        discord.ChannelType.news:             "📢",
+        discord.ChannelType.forum:            "🗂️",
+    }.get(t, "💬")
+
 
 async def _audit_log(guild, event_key, *, title=None, description=None, color=None,
                      fields=None, author_name=None, author_icon=None, thumbnail=None, embed=None):
@@ -18693,9 +18733,14 @@ async def _audit_log(guild, event_key, *, title=None, description=None, color=No
         if ch is None or not hasattr(ch, "send"):
             return
         if embed is None:
+            # Estilo por tipo: emoji no título + cor da barra (só quando o chamador
+            # não passou uma cor explícita). Mantém as descrições que cada handler monta.
+            _emoji, _style_color = _AUDIT_STYLE.get(event_key, ("", None))
+            _title = f"{_emoji} {title}" if (_emoji and title) else title
+            if color is None:
+                color = _style_color if _style_color is not None else settings.get("embed_color", 0x2B2D31)
             embed = discord.Embed(
-                title=title, description=description,
-                color=color if color is not None else settings.get("embed_color", 0x2B2D31),
+                title=_title, description=description, color=color,
             )
             if author_name:
                 embed.set_author(name=author_name, icon_url=author_icon)
@@ -18732,6 +18777,33 @@ async def _log_entity_event(guild, event_key, action, title, desc):
     try:
         resp = await _audit_responsible_mention(guild, action)
         await _audit_log(guild, event_key, title=title, description=f"{desc}\n**Responsável:** {resp}")
+    except Exception as _e:
+        print(f"[audit_log] {event_key}: {_e}", flush=True)
+
+
+_AUDIT_CHANNEL_TITLES = {
+    "channel_create": "Canal criado",
+    "channel_delete": "Canal deletado",
+    "channel_update": "Canal atualizado",
+}
+
+
+async def _log_channel_natural(guild, event_key, action, verbo, channel, *,
+                               mention=True, before=None, after=None):
+    """Log de canal em frase natural: 'O canal X foi <verbo> por Y.'
+    Em atualização com troca de nome, acrescenta Nome anterior → Novo nome."""
+    try:
+        if mention:
+            ref = getattr(channel, "mention", None) or f"`{channel.name}`"
+        else:
+            # Canal deletado não tem menção clicável — mostra o ícone do tipo + nome.
+            ref = f"{_channel_type_emoji(channel)} `{channel.name}`"
+        resp = await _audit_responsible_mention(guild, action)
+        desc = f"O canal {ref} foi {verbo} por {resp}."
+        if before is not None and after is not None and before.name != after.name:
+            desc += f"\n**Nome anterior:** `{before.name}`\n**Novo nome:** `{after.name}`"
+        await _audit_log(guild, event_key, title=_AUDIT_CHANNEL_TITLES.get(event_key, "Canal"),
+                         description=desc)
     except Exception as _e:
         print(f"[audit_log] {event_key}: {_e}", flush=True)
 
@@ -25590,8 +25662,8 @@ async def on_guild_channel_create(channel: discord.abc.GuildChannel):
         return
     print(f"[AR-canal] CREATE id={channel.id} nome={channel.name} guild={channel.guild.id}", flush=True)
     if _audit_is_on(channel.guild, "channel_create"):
-        bot.loop.create_task(_log_entity_event(channel.guild, "channel_create", discord.AuditLogAction.channel_create,
-            "Canal criado", f"**Canal:** {getattr(channel, 'mention', '`'+channel.name+'`')}"))
+        bot.loop.create_task(_log_channel_natural(channel.guild, "channel_create",
+            discord.AuditLogAction.channel_create, "criado", channel))
     triggered = await _antraid_handle(channel.guild, discord.AuditLogAction.channel_create, "criacao_canais")
     print(f"[AR-canal] CREATE triggered={triggered} id={channel.id} nome={channel.name}", flush=True)
     if triggered:
@@ -25611,8 +25683,8 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
         return
     print(f"[AR-canal] DELETE id={channel.id} nome={channel.name} guild={channel.guild.id}", flush=True)
     if _audit_is_on(channel.guild, "channel_delete"):
-        bot.loop.create_task(_log_entity_event(channel.guild, "channel_delete", discord.AuditLogAction.channel_delete,
-            "Canal deletado", f"**Canal:** `{channel.name}`"))
+        bot.loop.create_task(_log_channel_natural(channel.guild, "channel_delete",
+            discord.AuditLogAction.channel_delete, "deletado", channel, mention=False))
     triggered = await _antraid_handle(channel.guild, discord.AuditLogAction.channel_delete, "exclusao_canais")
     print(f"[AR-canal] DELETE triggered={triggered} id={channel.id} nome={channel.name}", flush=True)
     if triggered:
@@ -25628,8 +25700,8 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
 @bot.event
 async def on_guild_channel_update(before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
     if _audit_is_on(before.guild, "channel_update"):
-        bot.loop.create_task(_log_entity_event(before.guild, "channel_update", discord.AuditLogAction.channel_update,
-            "Canal atualizado", f"**Canal:** {getattr(after, 'mention', '`'+after.name+'`')}"))
+        bot.loop.create_task(_log_channel_natural(before.guild, "channel_update",
+            discord.AuditLogAction.channel_update, "atualizado", after, before=before, after=after))
     triggered = await _antraid_handle(before.guild, discord.AuditLogAction.channel_update, "edicao_canais")
     if triggered:
         try:
