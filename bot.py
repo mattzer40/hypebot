@@ -18836,6 +18836,19 @@ def build_central_logs_embed(author: discord.Member, settings: dict) -> discord.
 
 _AUTO_LOG_CAT_NAME = "logs"
 
+# Descrição (tópico) de cada canal de log — chaveado pelo id da categoria.
+_AUTO_LOG_TOPICS = {
+    "banimentos":   "Banimentos, desbanimentos e expulsões de membros",
+    "cargos":       "Criação, edição e atribuição de cargos",
+    "canais":       "Criação, exclusão e atualização de canais",
+    "silenciados":  "Membros silenciados no chat e na call",
+    "bots":         "Bots adicionados ao servidor",
+    "entrada_saida": "Entradas e saídas de membros",
+    "mensagens":    "Mensagens apagadas e editadas",
+    "voz":          "Movimentação de membros nos canais de voz",
+    "seguranca":    "Proteção de cargos, anti-raid / anti-bot e proteção de URL",
+}
+
 
 async def _auto_create_log_channels(guild: discord.Guild, settings: dict, *, private: bool = True):
     """Cria (ou reaproveita) 1 canal de log por categoria dentro de uma categoria
@@ -18865,15 +18878,22 @@ async def _auto_create_log_channels(guild: discord.Guild, settings: dict, *, pri
     criados, reusados = [], []
     for cat in AUDIT_LOG_CATEGORIES:
         chname = cat["id"].replace("_", "-")
+        topic = _AUTO_LOG_TOPICS.get(cat["id"])
         ch = discord.utils.find(
             lambda c, n=chname: c.name == n and c.category_id == category.id,
             guild.text_channels)
         if ch is None:
             ch = await guild.create_text_channel(
-                name=chname, category=category, overwrites=overwrites,
+                name=chname, category=category, overwrites=overwrites, topic=topic,
                 reason="Central de Logs — criação automática")
             criados.append(ch)
         else:
+            # Reaproveitado: garante a descrição também (best-effort, sem quebrar se faltar perm)
+            if topic and getattr(ch, "topic", None) != topic:
+                try:
+                    await ch.edit(topic=topic, reason="Central de Logs — descrição")
+                except discord.HTTPException:
+                    pass
             reusados.append(ch)
         for ev, _ in cat["events"]:
             logs[ev] = ch.id
