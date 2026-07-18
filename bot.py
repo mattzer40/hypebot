@@ -4772,6 +4772,12 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("desmute_channel", None)
     settings.setdefault("desmute_log_channel", None)
     settings.setdefault("desmute_roles", [])
+    # Anti Desconect (anti-abuso de voz: mute/disconnect/move em massa)
+    settings.setdefault("antdesc_enabled", False)
+    settings.setdefault("antdesc_roles", [])          # cargos da staff vigiada
+    settings.setdefault("antdesc_limit", 10)          # nº de ações
+    settings.setdefault("antdesc_window", 15)         # janela em segundos
+    settings.setdefault("antdesc_log_channel", None)
     settings.setdefault("contador_call_enabled", False)
     settings.setdefault("contador_call_channel", None)
     settings.setdefault("contador_call_message", "users in call: {contador}")
@@ -18647,6 +18653,7 @@ SECURITY_MENU_1_OPTIONS = [
     ("Ant Bot", "<:Bot:1518272060860928072>", "ant_bot"),
     ("Ant Fake", "<:seguranca:1518271987393232936>", "ant_fake"),
     ("Ant Link/Convite", "<:Bot:1518272060860928072>", "ant_link"),
+    ("Ant Desconect", "<:mov_call:1518271964077232150>", "ant_desconect"),
     ("Ant Spam", "<:seguranca:1518271987393232936>", "ant_spam"),
     ("Avisos (Warns)", "<:tickets:1518271952526250155>", "avisos"),
     ("Backup/Restore Automático", "<:bot_v4:1506344862679826483>", "backup"),
@@ -19473,6 +19480,12 @@ class SecurityMenuOne(discord.ui.Select):
         if selected == "protecao_geral":
             embed = build_protecao_geral_embed(interaction.user, settings)
             view = ProtecaoGeralView(interaction.user)
+            await interaction.response.edit_message(embed=embed, view=view)
+            return
+
+        if selected == "ant_desconect":
+            embed = build_antdesc_embed(interaction.user, settings)
+            view = AntDescView(interaction.user)
             await interaction.response.edit_message(embed=embed, view=view)
             return
 
@@ -30735,6 +30748,121 @@ async def _dm_kicked_from_call(
         pass
 
 
+# ── Anti Desconect (anti-abuso de voz) ────────────────────────────────────────
+_antdesc_history: dict[tuple[int, int], list[float]] = {}   # (guild, autor) -> timestamps
+_antdesc_punished: dict[tuple[int, int], float] = {}        # (guild, autor) -> quando puniu
+
+_ANTDESC_ACTIONS = {
+    "disconnect": discord.AuditLogAction.member_disconnect,
+    "move":       discord.AuditLogAction.member_move,
+    "mute":       discord.AuditLogAction.member_update,
+}
+_ANTDESC_VERBO = {"disconnect": "desconectou", "move": "moveu", "mute": "mutou"}
+
+
+async def _antdesc_detect(guild: discord.Guild, target: discord.Member, kind: str):
+    """Descobre QUEM fez a ação de voz (via audit log) e, se for staff vigiada que
+    passou do limite na janela, pune tirando todos os cargos por 30min."""
+    try:
+        settings = get_settings(guild.id)
+        monitored = set(settings.get("antdesc_roles", []))
+        if not monitored:
+            return
+        await asyncio.sleep(0.5)  # deixa o audit log propagar
+        action = _ANTDESC_ACTIONS[kind]
+        import datetime as _dt
+        actor = None
+        try:
+            async for e in guild.audit_logs(limit=6, action=action):
+                if (_dt.datetime.now(_dt.timezone.utc) - e.created_at).total_seconds() > 10:
+                    break
+                if kind == "mute" and not (hasattr(e.after, "mute") or hasattr(e.before, "mute")):
+                    continue
+                if e.user and e.user.id != target.id:
+                    actor = e.user
+                    break
+        except Exception:
+            return
+        if actor is None:
+            return
+
+        actor_member = guild.get_member(actor.id)
+        if actor_member is None or actor_member.bot:
+            return
+        # Só vigia quem tem cargo monitorado; nunca pune o dono do servidor.
+        if actor_member.id == guild.owner_id:
+            return
+        if not (monitored & {r.id for r in actor_member.roles}):
+            return
+
+        key = (guild.id, actor.id)
+        now = datetime.now().timestamp()
+        # Já punido há pouco? não recontar.
+        if now - _antdesc_punished.get(key, 0) < 60:
+            return
+        window = int(settings.get("antdesc_window", 15))
+        limit = int(settings.get("antdesc_limit", 10))
+        hist = _antdesc_history.setdefault(key, [])
+        hist.append(now)
+        hist[:] = [t for t in hist if now - t <= window]
+        if len(hist) >= limit:
+            hist.clear()
+            _antdesc_punished[key] = now
+            await _antdesc_punish(guild, actor_member, kind, settings)
+    except Exception as _e:
+        print(f"[antdesc] {_e}", flush=True)
+
+
+async def _antdesc_punish(guild, member, kind, settings):
+    """Remove todos os cargos do abusador por 30min, loga e agenda restauração."""
+    me = guild.me
+    removable = [r for r in member.roles
+                 if not r.is_default() and not r.managed and r.position < me.top_role.position]
+    for r in removable:
+        _register_bot_role_action(member.id, r.id, "remove")
+    try:
+        await member.remove_roles(*removable,
+            reason="Anti Desconect: abuso de voz — cargos removidos por 30min")
+    except (discord.Forbidden, discord.HTTPException):
+        for r in removable:
+            bot_role_actions.pop((member.id, r.id, "remove"), None)
+        return
+
+    # Log
+    log_id = settings.get("antdesc_log_channel")
+    ch = guild.get_channel(log_id) if log_id else None
+    if ch is not None:
+        try:
+            emb = discord.Embed(
+                title=f"{guild.name} — Anti Desconect",
+                description=(f"{member.mention} `{member}` passou do limite de ações em call "
+                            f"({_ANTDESC_VERBO.get(kind, kind)} membros) e teve **todos os cargos "
+                            f"removidos por 30 minutos**."),
+                color=_C_RED,
+            )
+            emb.add_field(name="Cargos removidos", value=str(len(removable)), inline=True)
+            emb.add_field(name="Ação detectada", value=_ANTDESC_VERBO.get(kind, kind), inline=True)
+            emb.set_thumbnail(url=member.display_avatar.url)
+            emb.set_footer(text=_footer_name(guild, settings))
+            emb.timestamp = datetime.now()
+            await ch.send(embed=emb, allowed_mentions=discord.AllowedMentions.none())
+        except Exception:
+            pass
+
+    async def _restore():
+        await asyncio.sleep(30 * 60)
+        try:
+            valid = [g_r for r in removable if (g_r := guild.get_role(r.id)) is not None
+                     and g_r.position < guild.me.top_role.position]
+            for g_r in valid:
+                _register_bot_role_action(member.id, g_r.id, "add")
+            if valid:
+                await member.add_roles(*valid, reason="Anti Desconect: restauração após 30min")
+        except Exception:
+            pass
+    bot.loop.create_task(_restore())
+
+
 @bot.event
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
     if member.guild is None:
@@ -30742,6 +30870,18 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
     if _audit_is_on(member.guild, "voice") or _audit_is_on(member.guild, "voice_mute"):
         bot.loop.create_task(_log_voice(member.guild, member, before, after))
     settings = get_settings(member.guild.id)
+
+    # Anti Desconect — detecta mute/disconnect/move abusivo contra este membro.
+    if settings.get("antdesc_enabled") and settings.get("antdesc_roles"):
+        _kind = None
+        if before.channel is not None and after.channel is None:
+            _kind = "disconnect"
+        elif before.channel is not None and after.channel is not None and before.channel != after.channel:
+            _kind = "move"
+        elif (not before.mute) and after.mute:
+            _kind = "mute"
+        if _kind is not None:
+            bot.loop.create_task(_antdesc_detect(member.guild, member, _kind))
 
     # Desmute Automático
     if settings.get("desmute_enabled"):
@@ -38845,6 +38985,178 @@ class BatePontoView(discord.ui.View):
         view = BatePontoView(self.author)
         await interaction.response.edit_message(embed=embed, view=view)
         await interaction.followup.send(embed=_notif_embed(t["bp_reset_done"]), ephemeral=True)
+
+
+# =============================================================================
+# Segurança — Anti Desconect (anti-abuso de voz)
+# =============================================================================
+
+def build_antdesc_embed(author: discord.Member, settings: dict) -> discord.Embed:
+    guild = author.guild
+    embed = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
+    icon_url = (guild.icon.url if guild and guild.icon else None) or _avatar_url(author)
+    embed.set_author(name="Anti Desconect", icon_url=icon_url)
+    embed.set_thumbnail(url=_avatar_url(author))
+
+    enabled = settings.get("antdesc_enabled", False)
+    status = ("<a:online:1518271945550856295> `(Ativado)`"
+              if enabled else "<a:alerta:1518271939460857968> `(Desativado)`")
+    n_cargos = len(settings.get("antdesc_roles", []))
+    limite = int(settings.get("antdesc_limit", 10))
+    janela = int(settings.get("antdesc_window", 15))
+    log_id = settings.get("antdesc_log_channel")
+    log_val = "`Sem acesso`"
+    if log_id and guild:
+        _ch = guild.get_channel(log_id)
+        log_val = _ch.mention if _ch else "`Canal removido`"
+
+    embed.add_field(
+        name="<:seguranca:1518271987393232936>  Configurações",
+        value=(f"┃ **Status:** {status}\n"
+               f"<:comunidade_:1518272016971595807> **Cargos vigiados:** `{n_cargos}`\n"
+               f"<:ferramentas_:1518271998613131274> **Limite de ações:** `{limite} ação(ões) em {janela} segundos`\n"
+               f"<:mov_call:1518271964077232150> **Logs:** {log_val}"),
+        inline=False,
+    )
+    embed.add_field(
+        name="<:entretenimento_:1518271992191779038>  Como funciona",
+        value=("Detecta **mute**, **disconnect** e **move** de membros feitos pela staff vigiada. "
+               "Quem passar do limite perde **todos os cargos por 30 minutos**."),
+        inline=False,
+    )
+    embed.set_footer(text=f"Anti Desconect • {_footer_name(guild, settings)}", icon_url=icon_url)
+    embed.timestamp = datetime.now()
+    return embed
+
+
+class AntDescCargosSelect(discord.ui.RoleSelect):
+    def __init__(self, parent_view: "AntDescView"):
+        super().__init__(placeholder="Selecione os cargos da staff a vigiar...",
+                         min_values=0, max_values=25)
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["antdesc_roles"] = [r.id for r in self.values]
+        save_settings_to_disk()
+        embed = build_antdesc_embed(self.parent_view.author, settings)
+        await interaction.response.edit_message(embed=embed, view=AntDescView(self.parent_view.author))
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> Cargos vigiados atualizados ({len(self.values)})."),
+            ephemeral=True)
+
+
+class AntDescLogSelect(GuildChannelSelect):
+    def __init__(self, parent_view: "AntDescView"):
+        super().__init__(placeholder="Selecione o canal de logs...",
+                         channel_types=[discord.ChannelType.text],
+                         guild=getattr(parent_view.author, "guild", None))
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        ch = self.values[0]
+        settings["antdesc_log_channel"] = ch.id
+        save_settings_to_disk()
+        embed = build_antdesc_embed(self.parent_view.author, settings)
+        await interaction.response.edit_message(embed=embed, view=AntDescView(self.parent_view.author))
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> Canal de logs definido em {ch.mention}."),
+            ephemeral=True)
+
+
+class AntDescView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=None)
+        self.author = author
+        self._build()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
+            await interaction.response.send_message(TRANSLATIONS[lang]["only_author"], ephemeral=True)
+            return False
+        return True
+
+    def _build(self):
+        self.clear_items()
+        settings = get_settings(self.author.guild.id if self.author.guild else 0)
+        enabled = settings.get("antdesc_enabled", False)
+        toggle_label = "Desativar Função" if enabled else "Ativar Função"
+        toggle_style = discord.ButtonStyle.danger if enabled else discord.ButtonStyle.success
+        row0 = [
+            ("Voltar", discord.ButtonStyle.primary, self._back),
+            (toggle_label, toggle_style, self._toggle),
+            ("Configurar Cargos", discord.ButtonStyle.secondary, self._cargos),
+            ("Configurar Logs", discord.ButtonStyle.secondary, self._logs),
+        ]
+        row1 = [
+            ("Listar Configurações", discord.ButtonStyle.secondary, self._listar),
+            ("Resetar Configurações", discord.ButtonStyle.danger, self._reset),
+        ]
+        for label, style, cb in row0:
+            b = discord.ui.Button(label=label, style=style, row=0, emoji=_button_emoji(style))
+            b.callback = cb
+            self.add_item(b)
+        for label, style, cb in row1:
+            b = discord.ui.Button(label=label, style=style, row=1, emoji=_button_emoji(style))
+            b.callback = cb
+            self.add_item(b)
+
+    async def _back(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=build_security_embed(self.author, settings), view=SecurityView(self.author))
+
+    async def _toggle(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["antdesc_enabled"] = not settings.get("antdesc_enabled", False)
+        save_settings_to_disk()
+        embed = build_antdesc_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=AntDescView(self.author))
+        estado = "ativado" if settings["antdesc_enabled"] else "desativado"
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> Anti Desconect {estado} com sucesso!"),
+            ephemeral=True)
+
+    async def _cargos(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            embed=_notif_embed("Selecione os cargos da staff que o Anti Desconect vai vigiar:"),
+            view=_SingleSelectView(AntDescCargosSelect(self)), ephemeral=True)
+
+    async def _logs(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            embed=_notif_embed("Selecione o canal onde os alertas de abuso serão enviados:"),
+            view=_SingleSelectView(AntDescLogSelect(self)), ephemeral=True)
+
+    async def _listar(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        cargos = _format_roles_list(interaction.guild, settings.get("antdesc_roles", [])) or "`Nenhum`"
+        log_id = settings.get("antdesc_log_channel")
+        _ch = interaction.guild.get_channel(log_id) if log_id else None
+        emb = discord.Embed(title="Anti Desconect — Configurações", color=settings.get("embed_color", 0x2B2D31))
+        emb.add_field(name="Status",
+                      value=("Ativado" if settings.get("antdesc_enabled") else "Desativado"), inline=True)
+        emb.add_field(name="Limite",
+                      value=f"{int(settings.get('antdesc_limit', 10))} em {int(settings.get('antdesc_window', 15))}s",
+                      inline=True)
+        emb.add_field(name="Canal de Logs", value=(_ch.mention if _ch else "`Nenhum`"), inline=False)
+        emb.add_field(name="Cargos vigiados", value=cargos, inline=False)
+        await interaction.response.send_message(embed=emb, ephemeral=True)
+
+    async def _reset(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["antdesc_enabled"] = False
+        settings["antdesc_roles"] = []
+        settings["antdesc_limit"] = 10
+        settings["antdesc_window"] = 15
+        settings["antdesc_log_channel"] = None
+        save_settings_to_disk()
+        embed = build_antdesc_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=AntDescView(self.author))
+        await interaction.followup.send(
+            embed=_notif_embed("<a:alerta:1518271939460857968> Configurações do Anti Desconect redefinidas."),
+            ephemeral=True)
 
 
 # =============================================================================
