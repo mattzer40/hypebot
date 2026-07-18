@@ -18837,19 +18837,79 @@ async def _log_timeout(guild, member, until):
         print(f"[audit_log] timeout: {_e}", flush=True)
 
 
+# Marca quando cada membro entrou numa call, p/ calcular a duração ao sair/mudar.
+_voice_join_ts: dict[tuple[int, int], float] = {}
+
+
+def _fmt_duracao_ptbr(segundos: float) -> str:
+    """Ex.: '3 horas e 29 minutos', '20 segundos', '1 hora e 5 minutos'."""
+    segundos = int(max(0, segundos))
+    h, resto = divmod(segundos, 3600)
+    m, s = divmod(resto, 60)
+    partes = []
+    if h:
+        partes.append(f"{h} hora" + ("s" if h != 1 else ""))
+    if m:
+        partes.append(f"{m} minuto" + ("s" if m != 1 else ""))
+    if s and not h:          # não mostra segundos quando já tem horas
+        partes.append(f"{s} segundo" + ("s" if s != 1 else ""))
+    if not partes:
+        partes.append("0 segundos")
+    if len(partes) == 1:
+        return partes[0]
+    return " e ".join(partes) if len(partes) == 2 else ", ".join(partes[:-1]) + " e " + partes[-1]
+
+
+def _membros_na_call(channel, limite: int = 15) -> tuple[int, str]:
+    membros = list(getattr(channel, "members", []) or [])
+    total = len(membros)
+    linhas = [m.mention for m in membros[:limite]]
+    if total > limite:
+        linhas.append(f"*+{total - limite} outros*")
+    return total, ("\n".join(linhas) if linhas else "*(vazio)*")
+
+
 async def _log_voice(guild, member, before, after):
     """Tráfego de voz (entrar/sair/mudar de call) + silenciados de voz (server mute/deafen)."""
     try:
         if before.channel != after.channel:
+            now = datetime.now().timestamp()
+            key = (guild.id, member.id)
             if before.channel is None and after.channel is not None:
-                await _audit_log(guild, "voice", title="Entrou em call",
-                    description=f"**Usuário:** {member.mention}\n**Canal:** {after.channel.mention}")
+                # Entrou
+                _voice_join_ts[key] = now
+                total, lista = _membros_na_call(after.channel)
+                ts = int(now)
+                await _audit_log(guild, "voice", color=_C_GREEN,
+                    description=f"🟢 {member.mention} entrou em uma chamada de voz.",
+                    fields=[
+                        ("📞 Chamada", after.channel.mention),
+                        ("🕐 Data e Hora", f"<t:{ts}:F> (<t:{ts}:R>)"),
+                        (f"👥 Membros na chamada ({total})", lista),
+                    ])
             elif after.channel is None and before.channel is not None:
-                await _audit_log(guild, "voice", title="Saiu da call",
-                    description=f"**Usuário:** {member.mention}\n**Canal:** {before.channel.mention}")
+                # Saiu
+                entrou_em = _voice_join_ts.pop(key, None)
+                total, lista = _membros_na_call(before.channel)
+                campos = [("📞 Chamada", before.channel.mention)]
+                if entrou_em:
+                    campos.append(("🕐 Duração", _fmt_duracao_ptbr(now - entrou_em)))
+                campos.append((f"👥 Membros na chamada ({total})", lista))
+                await _audit_log(guild, "voice", color=_C_RED,
+                    description=f"🔴 {member.mention} saiu de uma chamada de voz.",
+                    fields=campos)
             else:
-                await _audit_log(guild, "voice", title="Mudou de call",
-                    description=f"**Usuário:** {member.mention}\n{before.channel.mention} → {after.channel.mention}")
+                # Mudou de call
+                entrou_em = _voice_join_ts.get(key)
+                _voice_join_ts[key] = now  # reinicia a contagem na nova call
+                total, lista = _membros_na_call(after.channel)
+                campos = [("📞 Chamada", f"{before.channel.mention} → {after.channel.mention}")]
+                if entrou_em:
+                    campos.append(("🕐 Duração", _fmt_duracao_ptbr(now - entrou_em)))
+                campos.append((f"👥 Membros na chamada ({total})", lista))
+                await _audit_log(guild, "voice", color=_C_YELLOW,
+                    description=f"🟡 {member.mention} mudou de chamada de voz.",
+                    fields=campos)
         if before.mute != after.mute:
             await _audit_log(guild, "voice_mute",
                 title="Membro mutado (voz)" if after.mute else "Membro desmutado (voz)",
