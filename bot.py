@@ -857,6 +857,7 @@ TRANSLATIONS = {
         "blacklist_usage": "Uso: `n!bl <add|rem> @usuário`",
         "expulsar_action": "Expulsar",
         "banir_action": "Banir",
+        "remover_cargos_action": "Remover Cargos",
         "cmd_block_panel_title": "Sistema de Bloqueio de Comandos - NATA®",
         "cmd_block_observations_text": (
             "Configure os canais onde os comandos serão permitidos quando o "
@@ -2588,6 +2589,7 @@ TRANSLATIONS = {
         "blacklist_usage": "Usage: `n!bl <add|rem> @user`",
         "expulsar_action": "Kick",
         "banir_action": "Ban",
+        "remover_cargos_action": "Remove Roles",
         "cmd_block_panel_title": "Command Block System - NATA®",
         "cmd_block_observations_text": (
             "Configure the channels where commands will be allowed when the "
@@ -26525,7 +26527,10 @@ def build_blacklist_embed(author: discord.Member, settings: dict) -> discord.Emb
 
     allowed_count = len(settings.get("blacklist_allowed_roles", []))
     action = settings.get("blacklist_action", "expulsar")
-    action_display = t["expulsar_action"] if action == "expulsar" else t["banir_action"]
+    action_display = {
+        "expulsar": t["expulsar_action"], "banir": t["banir_action"],
+        "remover_cargos": t["remover_cargos_action"],
+    }.get(action, action)
 
     embed.add_field(
         name=f"<:f1:1518271958024720555>  {t['protection']}",
@@ -26545,6 +26550,63 @@ def build_blacklist_embed(author: discord.Member, settings: dict) -> discord.Emb
     embed.set_footer(text=_footer_name(author.guild, settings), icon_url=icon_url)
     embed.timestamp = datetime.now()
     return embed
+
+
+async def _apply_blacklist_action(guild, member, action, settings) -> bool:
+    """Aplica a ação da blacklist (banir / expulsar / remover_cargos) a um membro.
+    Retorna True se aplicou algo. Nunca age no dono do servidor nem em bots."""
+    try:
+        if member is None or member.bot or member.id == guild.owner_id:
+            return False
+        if action == "banir":
+            await member.ban(reason="Blacklist: usuário banido automaticamente.", delete_message_days=0)
+            return True
+        if action == "remover_cargos":
+            me = guild.me
+            removable = [r for r in member.roles
+                         if not r.is_default() and not r.managed and r.position < me.top_role.position]
+            if not removable:
+                return False
+            for r in removable:
+                _register_bot_role_action(member.id, r.id, "remove")
+            await member.remove_roles(*removable, reason="Blacklist: cargos removidos automaticamente.")
+            return True
+        # padrão: expulsar
+        await member.kick(reason="Blacklist: usuário expulso automaticamente.")
+        return True
+    except (discord.Forbidden, discord.HTTPException):
+        return False
+
+
+class BlacklistActionSelect(discord.ui.Select):
+    def __init__(self, parent_view: "BlacklistView"):
+        settings = get_settings(parent_view.author.guild.id if parent_view.author.guild else 0)
+        t = TRANSLATIONS[settings["language"]]
+        options = [
+            discord.SelectOption(label=t["banir_action"], value="banir",
+                                 description="Banir o usuário do servidor",
+                                 emoji=discord.PartialEmoji.from_str("<:seguranca:1518271987393232936>")),
+            discord.SelectOption(label=t["expulsar_action"], value="expulsar",
+                                 description="Expulsar o usuário do servidor",
+                                 emoji=discord.PartialEmoji.from_str("<:Bot:1518272060860928072>")),
+            discord.SelectOption(label=t["remover_cargos_action"], value="remover_cargos",
+                                 description="Remover todos os cargos do usuário",
+                                 emoji=discord.PartialEmoji.from_str("<:ferramentas_:1518271998613131274>")),
+        ]
+        super().__init__(placeholder="Selecione uma ação", min_values=1, max_values=1, options=options)
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        action = self.values[0]
+        settings["blacklist_action"] = action
+        save_settings_to_disk()
+        embed = build_blacklist_embed(self.parent_view.author, settings)
+        await interaction.response.edit_message(embed=embed, view=BlacklistView(self.parent_view.author))
+        disp = {"banir": t["banir_action"], "expulsar": t["expulsar_action"],
+                "remover_cargos": t["remover_cargos_action"]}.get(action, action)
+        await interaction.followup.send(t["action_set"].format(action=disp), ephemeral=True)
 
 
 class BlacklistView(discord.ui.View):
@@ -26682,20 +26744,9 @@ class BlacklistView(discord.ui.View):
     async def _define_action(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         t = TRANSLATIONS[settings["language"]]
-        content = await self._wait_for_input(interaction, t["send_blacklist_action"])
-        if content is None:
-            return
-        action = content.lower()
-        norm = {"kick": "expulsar", "ban": "banir", "kikar": "expulsar"}
-        action = norm.get(action, action)
-        if action not in ("expulsar", "banir"):
-            await interaction.followup.send(embed=_notif_embed(t["invalid_action"]), ephemeral=True)
-            return
-        settings["blacklist_action"] = action
-        await interaction.followup.send(
-            t["action_set"].format(action=action), ephemeral=True
-        )
-        await self._refresh(interaction)
+        await interaction.response.send_message(
+            embed=_notif_embed("Selecione a ação que será aplicada aos usuários na blacklist."),
+            view=_SingleSelectView(BlacklistActionSelect(self)), ephemeral=True)
 
     async def _define_logs(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -26734,6 +26785,12 @@ class BlacklistView(discord.ui.View):
             return
         users.append(uid)
         save_settings_to_disk()
+        # Aplica a ação na hora, se a blacklist estiver ativa e o usuário estiver no servidor.
+        if settings.get("blacklist_enabled"):
+            _m = interaction.guild.get_member(uid)
+            if _m is not None:
+                await _apply_blacklist_action(
+                    interaction.guild, _m, settings.get("blacklist_action", "expulsar"), settings)
         await interaction.followup.send(
             embed=_notif_embed(f"{t['user_added_blacklist']} (<@{uid}>)"), ephemeral=True)
         await self._refresh(interaction)
@@ -31149,12 +31206,7 @@ async def on_member_join(member: discord.Member):
 
     if settings.get("blacklist_enabled") and member.id in settings.get("blacklist_users", []):
         action = settings.get("blacklist_action", "expulsar")
-        try:
-            if action == "banir":
-                await member.ban(reason="Blacklist: usuário banido automaticamente.", delete_message_days=0)
-            else:
-                await member.kick(reason="Blacklist: usuário expulso automaticamente.")
-        except (discord.Forbidden, discord.HTTPException):
+        if not await _apply_blacklist_action(member.guild, member, action, settings):
             return
         await _log_kick(
             member,
