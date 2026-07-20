@@ -6297,6 +6297,17 @@ class AppearanceView(discord.ui.View):
                 _bf.write(image_bytes)
         except OSError:
             pass
+        # Grava o hash MD5 no MESMO caminho que o on_ready confere, para que o boot
+        # NÃO re-aplique o mesmo banner e estoure o rate limit do Discord.
+        try:
+            import hashlib as _hlb2
+            _banner_hash_file = (
+                os.environ.get("BOT_BANNER_FILE")
+                or os.path.join(os.path.dirname(os.path.abspath(__file__)), "default_banner.png")
+            ) + ".md5"
+            open(_banner_hash_file, "w").write(_hlb2.md5(image_bytes).hexdigest())
+        except Exception:
+            pass
 
         # Aguarda o CDN processar o novo banner antes de buscar a URL estável
         await asyncio.sleep(3)
@@ -29383,21 +29394,47 @@ async def on_ready():
         # Banner — tenta com retry porque múltiplos bots no mesmo restart competem pelo rate limit
         _bb = _read_image("BOT_BANNER_FILE", "default_banner.png")
         if _bb:
-            for _ba in range(3):
-                try:
-                    await bot.user.edit(banner=_bb)
-                    print(f"[banner] OK ({len(_bb)} bytes)", flush=True)
-                    break
-                except discord.HTTPException as _e:
-                    _is_rl = _e.code == 50035 and "too fast" in (_e.text or "").lower()
-                    print(f"[banner] HTTPException código {_e.code} (tentativa {_ba+1}): {_e.text}", flush=True)
-                    if _is_rl and _ba < 2:
-                        await asyncio.sleep(90 * (_ba + 1))
-                        continue
-                    break
-                except Exception as _e:
-                    print(f"[banner] erro: {type(_e).__name__}: {_e}", flush=True)
-                    break
+            # Verifica via hash MD5 se o banner mudou desde a última aplicação.
+            # Sem isso, o bot re-editava o banner em TODO restart e estourava o
+            # rate limit do Discord ("You are changing your profile banner too fast"),
+            # derrubando também a troca manual do usuário logo após um deploy.
+            import hashlib as _hlb
+            _bb_hash = _hlb.md5(_bb).hexdigest()
+            _banner_hash_file = (
+                os.environ.get("BOT_BANNER_FILE")
+                or os.path.join(_code_dir, "default_banner.png")
+            ) + ".md5"
+            try:
+                _saved_bhash = (
+                    open(_banner_hash_file).read().strip()
+                    if os.path.exists(_banner_hash_file) else ""
+                )
+            except Exception:
+                _saved_bhash = ""
+
+            if _bb_hash == _saved_bhash:
+                print("[banner] banner já está atualizado, pulando troca.", flush=True)
+            else:
+                for _ba in range(3):
+                    try:
+                        await bot.user.edit(banner=_bb)
+                        print(f"[banner] OK ({len(_bb)} bytes)", flush=True)
+                        # Salva o hash para não re-aplicar no próximo restart
+                        try:
+                            open(_banner_hash_file, "w").write(_bb_hash)
+                        except Exception:
+                            pass
+                        break
+                    except discord.HTTPException as _e:
+                        _is_rl = _e.code == 50035 and "too fast" in (_e.text or "").lower()
+                        print(f"[banner] HTTPException código {_e.code} (tentativa {_ba+1}): {_e.text}", flush=True)
+                        if _is_rl and _ba < 2:
+                            await asyncio.sleep(90 * (_ba + 1))
+                            continue
+                        break
+                    except Exception as _e:
+                        print(f"[banner] erro: {type(_e).__name__}: {_e}", flush=True)
+                        break
         else:
             print("[banner] arquivo não encontrado", flush=True)
 
