@@ -46625,21 +46625,75 @@ class NukeConfirmView(discord.ui.View):
 
     async def _confirmar(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
+        guild = self.channel.guild
+        me = guild.me if guild else None
+
+        # Checagem prévia de permissão — evita "Nukeando..." travado e acúmulo de duplicatas
+        if me is not None:
+            perms = self.channel.permissions_for(me)
+            if not perms.manage_channels:
+                await interaction.response.edit_message(
+                    content=(
+                        "<a:alerta:1518271939460857968> **Sem permissão.** Preciso da permissão "
+                        "**Gerenciar Canais** e do meu cargo acima na hierarquia para recriar este canal."
+                    ),
+                    embed=None, view=None,
+                )
+                return
+
         await interaction.response.edit_message(
             content="<a:online:1518271945550856295> **Nukeando...**", embed=None, view=None
         )
+
+        # 1) Clona o canal
         try:
             new_ch = await self.channel.clone(reason=f"Nuke por {self.author} — {self.motivo}")
-            await new_ch.edit(position=self.channel.position)
+        except discord.Forbidden:
+            await self._report_erro(interaction, "Sem permissão para clonar o canal.")
+            return
+        except discord.HTTPException as e:
+            await self._report_erro(interaction, f"Falha ao clonar o canal: `{e}`")
+            return
+
+        # 2) Deleta o original — se falhar, DESFAZ a clonagem (não acumula duplicata)
+        try:
             await self.channel.delete(reason=f"Nuke por {self.author} — {self.motivo}")
-            guild_name = self.channel.guild.name if self.channel.guild else ""
-            nuke_emb = discord.Embed(color=0xF4A300)
-            nuke_emb.description = (
-                f"<:atencao:1518272104368308304> | **Canal recriado por:** `{self.author.display_name}`\n"
-                f"Motivo: {self.motivo} · {guild_name}"
+        except (discord.Forbidden, discord.HTTPException) as e:
+            try:
+                await new_ch.delete(reason="Rollback: falha ao deletar canal original")
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+            motivo_err = (
+                "Sem permissão para deletar o canal original — verifique **Gerenciar Canais** "
+                "e a hierarquia do meu cargo."
+                if isinstance(e, discord.Forbidden)
+                else f"Falha ao deletar o canal original: `{e}`"
             )
+            await self._report_erro(interaction, motivo_err)
+            return
+
+        # 3) Reposiciona (best-effort) e envia embed de sucesso
+        try:
+            await new_ch.edit(position=self.channel.position)
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+        guild_name = guild.name if guild else ""
+        nuke_emb = discord.Embed(color=0xF4A300)
+        nuke_emb.description = (
+            f"<:atencao:1518272104368308304> | **Canal recriado por:** `{self.author.display_name}`\n"
+            f"Motivo: {self.motivo} · {guild_name}"
+        )
+        try:
             await new_ch.send(embed=nuke_emb, delete_after=60)
         except (discord.Forbidden, discord.HTTPException):
+            pass
+
+    async def _report_erro(self, interaction: discord.Interaction, msg: str) -> None:
+        try:
+            await interaction.edit_original_response(
+                content=f"<a:alerta:1518271939460857968> {msg}"
+            )
+        except discord.HTTPException:
             pass
 
     async def _cancelar(self, interaction: discord.Interaction):
