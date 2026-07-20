@@ -1071,6 +1071,7 @@ TRANSLATIONS = {
         ),
         "btn_adicionar_grupo_cargo": "Adicionar Grupo(Cargo)",
         "btn_adicionar_grupo_usuario": "Adicionar Grupo(Usuário)",
+        "btn_remover_grupo_usuario": "Remover Grupo(Usuário)",
         "btn_editar_lista": "Editar Lista",
         "btn_deletar_grupo": "Deletar Grupo",
         "modal_grupo_cargo_title": "Criar Grupo por Cargo",
@@ -1088,6 +1089,8 @@ TRANSLATIONS = {
         "grupo_added": "Grupo adicionado com sucesso!",
         "grupo_deleted": "Grupo removido com sucesso!",
         "select_grupo_to_delete": "Selecione o grupo a deletar:",
+        "select_usuario_to_remove": "Selecione o usuário a remover do grupo:",
+        "no_usuarios_to_select": "Nenhum grupo de usuário para remover.",
         "select_grupo_to_edit": "Selecione o grupo a editar:",
         "no_grupos_to_select": "Nenhum grupo para selecionar.",
         "editar_choice_placeholder": "Escolha: Cargo ou Usuário",
@@ -2800,6 +2803,7 @@ TRANSLATIONS = {
         ),
         "btn_adicionar_grupo_cargo": "Add Group (Role)",
         "btn_adicionar_grupo_usuario": "Add Group (User)",
+        "btn_remover_grupo_usuario": "Remove Group (User)",
         "btn_editar_lista": "Edit List",
         "btn_deletar_grupo": "Delete Group",
         "modal_grupo_cargo_title": "Create Group by Role",
@@ -2817,6 +2821,8 @@ TRANSLATIONS = {
         "grupo_added": "Group added successfully!",
         "grupo_deleted": "Group removed successfully!",
         "select_grupo_to_delete": "Select the group to delete:",
+        "select_usuario_to_remove": "Select the user to remove from the group:",
+        "no_usuarios_to_select": "No user group to remove.",
         "select_grupo_to_edit": "Select the group to edit:",
         "no_grupos_to_select": "No group to select.",
         "editar_choice_placeholder": "Choose: Role or User",
@@ -20732,6 +20738,7 @@ class EditandoCargosView(discord.ui.View):
             (t["back"], discord.ButtonStyle.primary, self._back),
             (t["btn_adicionar_grupo_cargo"], discord.ButtonStyle.secondary, self._add_cargo),
             (t["btn_adicionar_grupo_usuario"], discord.ButtonStyle.secondary, self._add_usuario),
+            (t["btn_remover_grupo_usuario"], discord.ButtonStyle.danger, self._remover_grupo_usuario),
             (t["btn_editar_lista"], discord.ButtonStyle.secondary, self._editar_lista),
             (t["btn_deletar_grupo"], discord.ButtonStyle.danger, self._deletar_grupo),
         ]
@@ -20755,6 +20762,32 @@ class EditandoCargosView(discord.ui.View):
         settings = get_settings(interaction.guild.id)
         t = TRANSLATIONS[settings["language"]]
         await interaction.response.send_modal(GrupoUsuarioModal(self, t))
+
+    async def _remover_grupo_usuario(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        t = TRANSLATIONS[settings["language"]]
+        guild = interaction.guild
+
+        options: list[discord.SelectOption] = []
+        for uid_str in settings.get("protecao_grupos_usuarios", {}):
+            try:
+                uid = int(uid_str)
+            except ValueError:
+                continue
+            member = guild.get_member(uid)
+            label = f"Usuário: {member.name if member else uid_str}"
+            options.append(discord.SelectOption(label=label[:100], value=f"u:{uid_str}"))
+
+        if not options:
+            await interaction.response.send_message(embed=_notif_embed(t["no_usuarios_to_select"]), ephemeral=True)
+            return
+
+        view = discord.ui.View(timeout=120)
+        view.add_item(DeletarGrupoSelect(self, options[:25]))
+        embed = discord.Embed(
+            description=t["select_usuario_to_remove"], color=settings["embed_color"]
+        )
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _editar_lista(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
