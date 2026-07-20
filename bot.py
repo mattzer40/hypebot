@@ -4849,6 +4849,12 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("wl_codigos", [])            # códigos de uso único
     settings.setdefault("wl_embed", {"title": None, "description": None, "color": None})
     settings.setdefault("wl_pending", {})            # {user_id: ficha_msg_id} anti-duplicata
+    # ── Movimentação de Call (upamento/rebaixamento por tempo em call) ────────
+    settings.setdefault("mc_enabled", False)
+    settings.setdefault("mc_tiers", [])              # [{"role": int, "meta": int_segundos}]
+    settings.setdefault("mc_muted_weight", 25)       # % que o tempo mutado vale
+    settings.setdefault("mc_log_channel", None)
+    settings.setdefault("mc_last_eval_week", "")     # controle da avaliação semanal
     settings.setdefault("welcome_enabled", False)
     settings.setdefault("welcome_msg_entrar_enabled", True)
     settings.setdefault("welcome_msg_registro_enabled", False)
@@ -5716,6 +5722,12 @@ class MenuSelect(discord.ui.Select):
         if selected == "vender_vip":
             embed = build_vendas_embed(interaction.user, settings)
             view = VendasView(interaction.user)
+            await interaction.response.edit_message(embed=embed, view=view)
+            return
+
+        if selected == "mov_call":
+            embed = build_movcall_embed(interaction.user, settings)
+            view = MovCallView(interaction.user)
             await interaction.response.edit_message(embed=embed, view=view)
             return
 
@@ -29961,6 +29973,10 @@ async def on_ready():
         _call_lock_cleanup_task.start()
     if not _contador_call_task.is_running():
         _contador_call_task.start()
+    if not _mc_promo_task.is_running():
+        _mc_promo_task.start()
+    if not _mc_weekly_task.is_running():
+        _mc_weekly_task.start()
 
     # ── Bio / Descrição do perfil ─────────────────────────────────────────────
     _bio_text = "**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot"
@@ -46537,6 +46553,493 @@ async def tempo_cmd(ctx: commands.Context, usuario: discord.Member = None):
         asyncio.create_task(_del())
     else:
         await ctx.send(content=f"⏱️ **{target.display_name}** — Total: `{_fmt_vt(data.get('total_seconds', 0) + extra)}`")
+
+
+# =============================================================================
+# MOVIMENTAÇÃO DE CALL — upamento/rebaixamento por tempo em call (semanal)
+# Escada de cargos, cada um com uma meta semanal. Sobe 1 nível na hora ao bater
+# a meta do próximo; toda segunda cai 1 nível quem não bateu a meta do próprio.
+# Usa os mesmos dados de tempo do /tempo (_voice_time). Tempo mutado conta menos.
+# =============================================================================
+
+def _mc_tiers_sorted(settings: dict) -> list:
+    return sorted((settings.get("mc_tiers") or []), key=lambda t: t.get("meta", 0))
+
+
+def _mc_effective(total: float, muted: float, weight: int) -> float:
+    """Tempo efetivo = desmutado (100%) + mutado (weight%)."""
+    unmuted = max(0.0, total - muted)
+    return unmuted + muted * (max(0, min(100, weight)) / 100.0)
+
+
+def _mc_current_tier_index(member: discord.Member, tiers: list) -> int:
+    """Maior índice de tier cujo cargo o membro possui (-1 se nenhum)."""
+    role_ids = {r.id for r in member.roles}
+    idx = -1
+    for i, t in enumerate(tiers):
+        if t.get("role") in role_ids:
+            idx = i
+    return idx
+
+
+async def _mc_set_tier(member: discord.Member, tiers: list, target_idx: int):
+    """Deixa o membro APENAS com o cargo do target_idx (remove os outros da escada)."""
+    desired = tiers[target_idx].get("role") if 0 <= target_idx < len(tiers) else None
+    tier_role_ids = {t.get("role") for t in tiers}
+    member_role_ids = {r.id for r in member.roles}
+    guild = member.guild
+    to_add, to_remove = [], []
+    if desired and desired not in member_role_ids:
+        r = guild.get_role(desired)
+        if r:
+            to_add.append(r)
+    for rid in tier_role_ids:
+        if rid != desired and rid in member_role_ids:
+            r = guild.get_role(rid)
+            if r:
+                to_remove.append(r)
+    try:
+        if to_add:
+            for r in to_add:
+                _register_bot_role_action(member.id, r.id, "add")
+            await member.add_roles(*to_add, reason="Movimentação de Call")
+        if to_remove:
+            for r in to_remove:
+                _register_bot_role_action(member.id, r.id, "remove")
+            await member.remove_roles(*to_remove, reason="Movimentação de Call")
+    except discord.HTTPException as _e:
+        print(f"[mov_call] set_tier erro ({member.id}): {_e}", flush=True)
+
+
+async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: int):
+    cid = settings.get("mc_log_channel")
+    ch = guild.get_channel(cid) if cid and guild else None
+    if not isinstance(ch, discord.TextChannel):
+        return
+    if 0 <= idx < len(tiers):
+        role = guild.get_role(tiers[idx].get("role"))
+        dest = role.mention if role else "cargo removido"
+    else:
+        dest = "nenhum cargo (saiu da escada)"
+    up = kind == "promovido"
+    emoji = "<a:online:1518271945550856295>" if up else "<:disslike:1518272066506330232>"
+    emb = discord.Embed(color=0x57F287 if up else 0xED4245)
+    emb.description = f"{emoji} {member.mention} foi **{kind}** para {dest}."
+    emb.set_footer(text=_footer_name(guild, settings))
+    emb.timestamp = datetime.now()
+    try:
+        await ch.send(embed=emb)
+    except discord.HTTPException:
+        pass
+
+
+async def _mc_check_member(guild, settings: dict, member: discord.Member, tiers: list):
+    """Promoção em tempo real: sobe 1 nível se o tempo efetivo da semana bater a
+    meta do próximo cargo."""
+    weight = settings.get("mc_muted_weight", 25)
+    data = _get_user_vt(guild.id, member.id)
+    _vt_rotate(data)
+    sess = _voice_sessions.get((guild.id, member.id))
+    now = datetime.now().timestamp()
+    extra = (now - sess["join"]) if sess else 0
+    exmut = (now - sess["mute_start"]) if (sess and sess.get("mute_start")) else 0
+    eff = _mc_effective(
+        data.get("week_seconds", 0) + extra,
+        data.get("week_muted_seconds", 0) + exmut,
+        weight,
+    )
+    cur = _mc_current_tier_index(member, tiers)
+    nxt = cur + 1
+    if nxt < len(tiers) and eff >= tiers[nxt].get("meta", 0):
+        await _mc_set_tier(member, tiers, nxt)
+        await _mc_log(guild, settings, member, "promovido", tiers, nxt)
+
+
+async def _mc_eval_guild_weekly(guild, settings: dict):
+    """Rebaixamento semanal: quem não bateu a meta do próprio cargo na semana que
+    terminou cai 1 nível."""
+    tiers = _mc_tiers_sorted(settings)
+    if not tiers:
+        return
+    weight = settings.get("mc_muted_weight", 25)
+    membros: dict[int, discord.Member] = {}
+    for t in tiers:
+        role = guild.get_role(t.get("role"))
+        if role:
+            for m in role.members:
+                membros[m.id] = m
+    n = 0
+    for m in membros.values():
+        cur = _mc_current_tier_index(m, tiers)
+        if cur < 0:
+            continue
+        data = _get_user_vt(guild.id, m.id)
+        _vt_rotate(data)  # garante que last_week reflete a semana que terminou
+        eff = _mc_effective(
+            data.get("last_week_seconds", 0),
+            data.get("last_week_muted_seconds", 0),
+            weight,
+        )
+        if eff < tiers[cur].get("meta", 0):
+            await _mc_set_tier(m, tiers, cur - 1)
+            await _mc_log(guild, settings, m, "rebaixado", tiers, cur - 1)
+            n += 1
+            await asyncio.sleep(0.5)  # evita rajada de rate limit
+    _save_voice_time()
+    print(f"[mov_call] {guild.id}: {n} rebaixamento(s) na avaliação semanal", flush=True)
+
+
+@tasks.loop(minutes=2)
+async def _mc_promo_task():
+    for (gid, uid) in list(_voice_sessions.keys()):
+        try:
+            settings = get_settings(gid)
+            if not settings.get("mc_enabled"):
+                continue
+            tiers = _mc_tiers_sorted(settings)
+            if not tiers:
+                continue
+            guild = bot.get_guild(gid)
+            if not guild:
+                continue
+            member = guild.get_member(uid)
+            if not member:
+                continue
+            await _mc_check_member(guild, settings, member, tiers)
+        except Exception as _e:
+            print(f"[mov_call] promo erro g={gid} u={uid}: {_e}", flush=True)
+
+
+@_mc_promo_task.before_loop
+async def _mc_promo_before():
+    await bot.wait_until_ready()
+
+
+@tasks.loop(minutes=20)
+async def _mc_weekly_task():
+    this_week = _vt_week_start()
+    for guild in list(bot.guilds):
+        try:
+            settings = get_settings(guild.id)
+            if not settings.get("mc_enabled"):
+                continue
+            if not _mc_tiers_sorted(settings):
+                continue
+            last = settings.get("mc_last_eval_week", "")
+            if last == "":
+                settings["mc_last_eval_week"] = this_week  # bootstrap: não avalia
+                save_settings_to_disk()
+                continue
+            if last == this_week:
+                continue
+            await _mc_eval_guild_weekly(guild, settings)
+            settings["mc_last_eval_week"] = this_week
+            save_settings_to_disk()
+        except Exception as _e:
+            print(f"[mov_call] weekly erro g={guild.id}: {_e}", flush=True)
+
+
+@_mc_weekly_task.before_loop
+async def _mc_weekly_before():
+    await bot.wait_until_ready()
+
+
+# ── Painel de configuração (menu principal → Movimentação de Call) ────────────
+
+def build_movcall_embed(author: discord.Member, settings: dict) -> discord.Embed:
+    guild = author.guild
+    icon_url = (guild.icon.url if guild and guild.icon else None) or _avatar_url(author)
+    embed = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
+    embed.set_author(name="Movimentação de Call", icon_url=icon_url)
+    embed.set_thumbnail(url=icon_url)
+
+    enabled = settings.get("mc_enabled", False)
+    status = ("<a:online:1518271945550856295> `(Ativado)`" if enabled
+              else "<a:alerta:1518271939460857968> `(Desativado)`")
+    weight = settings.get("mc_muted_weight", 25)
+    log_val = _wl_ch_mention(guild, settings.get("mc_log_channel"))
+
+    tiers = _mc_tiers_sorted(settings)
+    if tiers:
+        lines = []
+        for i, t in enumerate(tiers, 1):
+            role = guild.get_role(t.get("role")) if guild else None
+            rm = role.mention if role else f"<@&{t.get('role')}>"
+            lines.append(f"`{i}.` {rm} — meta: `{_fmt_vt(t.get('meta', 0))}`/semana")
+        tiers_val = "\n".join(lines)
+    else:
+        tiers_val = "`Nenhum cargo configurado`"
+
+    embed.add_field(
+        name="<:mov_call:1518271964077232150>  Informações",
+        value=(
+            f"┃ **Status:** {status}\n"
+            f"**Peso do tempo mutado:** `{weight}%`\n"
+            f"**Canal de Logs:** {log_val}"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="<:vender_cargo:1518272029604970719>  Cargos (escada, meta semanal)",
+        value=tiers_val[:1024],
+        inline=False,
+    )
+    embed.add_field(
+        name="<:entretenimento_:1518271992191779038>  Como funciona",
+        value=(
+            "Ao atingir a meta semanal do próximo cargo, o membro **sobe 1 nível na hora**. "
+            "Toda **segunda-feira**, quem **não bateu a meta do próprio cargo** cai **1 nível**. "
+            "O tempo **mutado** conta menos (peso acima). Os cargos são ordenados pela meta."
+        ),
+        inline=False,
+    )
+    embed.set_footer(text=_footer_name(guild, settings), icon_url=icon_url)
+    embed.timestamp = datetime.now()
+    return embed
+
+
+class MovCallView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=None)
+        self.author = author
+        self._build()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
+            await interaction.response.send_message(TRANSLATIONS[lang]["only_author"], ephemeral=True)
+            return False
+        return True
+
+    def _build(self):
+        self.clear_items()
+        settings = get_settings(self.author.guild.id if self.author.guild else 0)
+        enabled = settings.get("mc_enabled", False)
+        toggle_label = "Desativar" if enabled else "Ativar"
+        toggle_style = discord.ButtonStyle.danger if enabled else discord.ButtonStyle.success
+        rows = [
+            [("Voltar", discord.ButtonStyle.primary, self._back),
+             (toggle_label, toggle_style, self._toggle),
+             ("Adicionar Cargo", discord.ButtonStyle.secondary, self._add_cargo)],
+            [("Remover Cargo", discord.ButtonStyle.secondary, self._rem_cargo),
+             ("Peso do Mutado", discord.ButtonStyle.secondary, self._weight),
+             ("Canal de Logs", discord.ButtonStyle.secondary, self._log)],
+            [("Resetar Configurações", discord.ButtonStyle.danger, self._reset)],
+        ]
+        for r, row in enumerate(rows):
+            for label, style, cb in row:
+                emoji = _button_emoji(style) if style != discord.ButtonStyle.primary else None
+                btn = discord.ui.Button(label=label, style=style, row=r, emoji=emoji)
+                btn.callback = cb
+                self.add_item(btn)
+
+    async def _refresh(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=build_movcall_embed(self.author, settings), view=MovCallView(self.author))
+
+    async def _back(self, interaction: discord.Interaction):
+        lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
+        embed = build_main_embed(self.author, lang)
+        view = MenuView(self.author.id, lang=lang)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    async def _toggle(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["mc_enabled"] = not settings.get("mc_enabled", False)
+        if settings["mc_enabled"] and not settings.get("mc_last_eval_week"):
+            settings["mc_last_eval_week"] = _vt_week_start()
+        save_settings_to_disk()
+        on = settings["mc_enabled"]
+        await self._refresh(interaction)
+        await interaction.followup.send(embed=_notif_embed(
+            "<a:online:1518271945550856295> Movimentação de Call **ativada**." if on
+            else "<a:alerta:1518271939460857968> Movimentação de Call **desativada**.",
+            0x57F287 if on else 0xED4245), ephemeral=True)
+
+    async def _add_cargo(self, interaction: discord.Interaction):
+        view = discord.ui.View(timeout=180)
+        view.add_item(McRoleSelect(self))
+        await interaction.response.send_message(
+            embed=_notif_embed("Selecione o cargo da escada (depois informe a meta semanal)."),
+            view=view, ephemeral=True)
+
+    async def _rem_cargo(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        tiers = _mc_tiers_sorted(settings)
+        if not tiers:
+            await interaction.response.send_message(
+                embed=_notif_embed("Nenhum cargo para remover."), ephemeral=True)
+            return
+        guild = interaction.guild
+        options = []
+        for t in tiers[:25]:
+            role = guild.get_role(t.get("role")) if guild else None
+            name = role.name if role else str(t.get("role"))
+            options.append(discord.SelectOption(
+                label=f"{name} — {_fmt_vt(t.get('meta', 0))}"[:100], value=str(t.get("role"))))
+        view = discord.ui.View(timeout=180)
+        view.add_item(McRemoveSelect(self, options))
+        await interaction.response.send_message(
+            embed=_notif_embed("Selecione o cargo para **remover** da escada."),
+            view=view, ephemeral=True)
+
+    async def _weight(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(McWeightModal(self))
+
+    async def _log(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(McLogModal(self))
+
+    async def _reset(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["mc_enabled"] = False
+        settings["mc_tiers"] = []
+        settings["mc_muted_weight"] = 25
+        settings["mc_log_channel"] = None
+        settings["mc_last_eval_week"] = ""
+        save_settings_to_disk()
+        await self._refresh(interaction)
+        await interaction.followup.send(embed=_notif_embed(
+            "<a:online:1518271945550856295> Movimentação de Call resetada."), ephemeral=True)
+
+
+class McRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, parent: "MovCallView"):
+        super().__init__(placeholder="Selecione o cargo", min_values=1, max_values=1)
+        self.parent = parent
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(McMetaModal(self.parent, self.values[0].id))
+
+
+class McMetaModal(discord.ui.Modal):
+    def __init__(self, parent: "MovCallView", role_id: int):
+        super().__init__(title="Meta semanal do cargo", timeout=300)
+        self.parent = parent
+        self.role_id = role_id
+        s = get_settings(parent.author.guild.id if parent.author.guild else 0)
+        cur = next((t for t in s.get("mc_tiers", []) if t.get("role") == role_id), None)
+        cur_h = f"{cur['meta'] / 3600:g}" if cur else ""
+        self.inp = discord.ui.TextInput(
+            label="Meta semanal em horas (ex: 10 ou 7.5)", required=True,
+            default=cur_h, placeholder="Ex: 10", max_length=8)
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        raw = self.inp.value.strip().replace(",", ".")
+        try:
+            horas = float(raw)
+            if horas <= 0:
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Valor inválido. Informe um número de horas (ex: 10)."),
+                ephemeral=True)
+            return
+        meta = int(horas * 3600)
+        tiers = settings.setdefault("mc_tiers", [])
+        existing = next((t for t in tiers if t.get("role") == self.role_id), None)
+        if existing:
+            existing["meta"] = meta
+        else:
+            tiers.append({"role": self.role_id, "meta": meta})
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_movcall_embed(self.parent.author, settings),
+                view=MovCallView(self.parent.author))
+        except discord.HTTPException:
+            pass
+        await interaction.followup.send(embed=_notif_embed(
+            f"<a:online:1518271945550856295> Cargo <@&{self.role_id}> definido com meta `{_fmt_vt(meta)}`/semana."),
+            ephemeral=True)
+
+
+class McRemoveSelect(discord.ui.Select):
+    def __init__(self, parent: "MovCallView", options: list):
+        super().__init__(placeholder="Selecione para remover", min_values=1,
+                         max_values=len(options), options=options)
+        self.parent = parent
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        rem = {int(v) for v in self.values}
+        settings["mc_tiers"] = [t for t in settings.get("mc_tiers", []) if t.get("role") not in rem]
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_movcall_embed(self.parent.author, settings),
+                view=MovCallView(self.parent.author))
+        except discord.HTTPException:
+            pass
+        await interaction.followup.send(embed=_notif_embed(
+            f"<a:alerta:1518271939460857968> {len(rem)} cargo(s) removido(s) da escada."), ephemeral=True)
+
+
+class McWeightModal(discord.ui.Modal):
+    def __init__(self, parent: "MovCallView"):
+        super().__init__(title="Peso do tempo mutado", timeout=300)
+        self.parent = parent
+        s = get_settings(parent.author.guild.id if parent.author.guild else 0)
+        self.inp = discord.ui.TextInput(
+            label="Peso do mutado em % (0 a 100)", required=True,
+            default=str(s.get("mc_muted_weight", 25)),
+            placeholder="Ex: 25 (mutado vale 1/4 do desmutado)", max_length=3)
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        try:
+            w = int(self.inp.value.strip())
+            if not (0 <= w <= 100):
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Informe um número de 0 a 100."), ephemeral=True)
+            return
+        settings["mc_muted_weight"] = w
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_movcall_embed(self.parent.author, settings),
+                view=MovCallView(self.parent.author))
+        except discord.HTTPException:
+            pass
+        await interaction.followup.send(embed=_notif_embed(
+            f"<a:online:1518271945550856295> Peso do tempo mutado: `{w}%`."), ephemeral=True)
+
+
+class McLogModal(discord.ui.Modal):
+    def __init__(self, parent: "MovCallView"):
+        super().__init__(title="Canal de Logs", timeout=300)
+        self.parent = parent
+        s = get_settings(parent.author.guild.id if parent.author.guild else 0)
+        self.inp = discord.ui.TextInput(
+            label="ID do canal de logs (vazio = remover)", required=False,
+            default=str(s.get("mc_log_channel") or ""), placeholder="ID do canal", max_length=25)
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        raw = self.inp.value.strip().lstrip("<#").rstrip(">")
+        if not raw:
+            settings["mc_log_channel"] = None
+        elif raw.isdigit() and isinstance(interaction.guild.get_channel(int(raw)), discord.TextChannel):
+            settings["mc_log_channel"] = int(raw)
+        else:
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> ID inválido. Use o ID de um canal de texto."), ephemeral=True)
+            return
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_movcall_embed(self.parent.author, settings),
+                view=MovCallView(self.parent.author))
+        except discord.HTTPException:
+            pass
+        await interaction.followup.send(embed=_notif_embed(
+            "<a:online:1518271945550856295> Canal de logs atualizado."), ephemeral=True)
 
 
 # ── /ficha ───────────────────────────────────────────────────────────────────
