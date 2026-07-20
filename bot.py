@@ -4838,6 +4838,17 @@ def get_settings(guild_id: int) -> dict:
         "title": None, "description": None, "color": None,
         "thumbnail": None, "image": None,
     })
+    # ── Whitelist (substitui a Verificação em Comunidade) ────────────────────
+    settings.setdefault("wl_enabled", False)
+    settings.setdefault("wl_channel", None)          # canal do painel público
+    settings.setdefault("wl_fichas_channel", None)   # canal das fichas p/ staff
+    settings.setdefault("wl_log_channel", None)      # canal de logs
+    settings.setdefault("wl_cargo_aprovado", None)   # cargo dado ao aprovar
+    settings.setdefault("wl_cargos_resp", [])        # cargos que podem aprovar
+    settings.setdefault("wl_codigo_enabled", False)  # Modo Código
+    settings.setdefault("wl_codigos", [])            # códigos de uso único
+    settings.setdefault("wl_embed", {"title": None, "description": None, "color": None})
+    settings.setdefault("wl_pending", {})            # {user_id: ficha_msg_id} anti-duplicata
     settings.setdefault("welcome_enabled", False)
     settings.setdefault("welcome_msg_entrar_enabled", True)
     settings.setdefault("welcome_msg_registro_enabled", False)
@@ -9815,8 +9826,8 @@ class ComunidadeMenuSelect(discord.ui.Select):
             return
 
         if selected == "com_verif":
-            embed = build_verificacao_embed(interaction.user, settings)
-            view = VerificacaoView(interaction.user)
+            embed = build_whitelist_embed(interaction.user, settings)
+            view = WhitelistAdminView(interaction.user)
             await interaction.response.edit_message(embed=embed, view=view)
             return
 
@@ -10316,6 +10327,690 @@ class VerificacaoView(discord.ui.View):
         view = VerificacaoView(self.author, from_servidor=self.from_servidor)
         await interaction.response.edit_message(embed=embed, view=view)
         await interaction.followup.send(embed=_notif_embed(t["verif_reset_done"]), ephemeral=True)
+
+
+# -----------------------------------------------------------------------------
+# Comunidade — Whitelist (fichas + aprovação por staff + modo código)
+# Substitui a Verificação por URL no menu Comunidade.
+# -----------------------------------------------------------------------------
+
+def _wl_ch_mention(guild, cid) -> str:
+    if cid and guild:
+        ch = guild.get_channel(cid)
+        return ch.mention if ch else f"<#{cid}>"
+    return "`Não definido`"
+
+
+def build_whitelist_embed(author: discord.Member, settings: dict) -> discord.Embed:
+    guild = author.guild
+    icon_url = (guild.icon.url if guild and guild.icon else None) or _avatar_url(author)
+    embed = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
+    embed.set_author(name="Painel de Whitelist", icon_url=icon_url)
+    embed.set_thumbnail(url=icon_url)
+
+    enabled = settings.get("wl_enabled", False)
+    status = ("<a:online:1518271945550856295> `(Ativado)`" if enabled
+              else "<a:alerta:1518271939460857968> `(Desativado)`")
+    codigo = "`(Ativado)`" if settings.get("wl_codigo_enabled", False) else "`(Desativado)`"
+    n_cod = len(settings.get("wl_codigos", []))
+
+    resp = settings.get("wl_cargos_resp", [])
+    resp_val = ", ".join(f"<@&{r}>" for r in resp[:10]) if resp else "`Nenhum`"
+    cargo_ap = settings.get("wl_cargo_aprovado")
+    cargo_val = f"<@&{cargo_ap}>" if cargo_ap else "`Não definido.`"
+
+    embed.add_field(
+        name="<:comunidade_:1518272016971595807>  Informações",
+        value=(
+            f"┃ **Status:** {status}\n"
+            f"**Opção com Código:** {codigo}  (`{n_cod}` código(s))\n"
+            f"**Canal da Whitelist:** {_wl_ch_mention(guild, settings.get('wl_channel'))}\n"
+            f"**Canal de Fichas:** {_wl_ch_mention(guild, settings.get('wl_fichas_channel'))}\n"
+            f"**Canal dos Logs:** {_wl_ch_mention(guild, settings.get('wl_log_channel'))}\n"
+            f"**Cargo Aprovado:** {cargo_val}\n"
+            f"**Cargos Responsáveis:** {resp_val}"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="<:entretenimento_:1518271992191779038>  Observações",
+        value=(
+            "O membro clica em **Verificar** no painel e uma **ficha** vai para o "
+            "canal de fichas, onde os **Cargos Responsáveis** aprovam ou recusam. "
+            "Ao aprovar, o membro ganha o **Cargo Aprovado**.\n"
+            "Com o **Modo Código**, o membro pode digitar um código de uso único "
+            "para ser aprovado na hora."
+        ),
+        inline=False,
+    )
+    embed.set_footer(text=_footer_name(guild, settings), icon_url=icon_url)
+    embed.timestamp = datetime.now()
+    return embed
+
+
+class WhitelistAdminView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=None)
+        self.author = author
+        self._build()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
+            await interaction.response.send_message(TRANSLATIONS[lang]["only_author"], ephemeral=True)
+            return False
+        return True
+
+    def _build(self):
+        self.clear_items()
+        settings = get_settings(self.author.guild.id if self.author.guild else 0)
+        enabled = settings.get("wl_enabled", False)
+        cod_on = settings.get("wl_codigo_enabled", False)
+        toggle_label = "Desativar" if enabled else "Ativar"
+        toggle_style = discord.ButtonStyle.danger if enabled else discord.ButtonStyle.success
+        rows = [
+            [("Voltar", discord.ButtonStyle.primary, self._back),
+             (toggle_label, toggle_style, self._toggle),
+             ("Modo Código: ON" if cod_on else "Modo Código", discord.ButtonStyle.secondary, self._modo_codigo)],
+            [("Configurar Canais", discord.ButtonStyle.secondary, self._canais),
+             ("Definir Cargo Aprovado", discord.ButtonStyle.secondary, self._cargo_aprovado)],
+            [("Adicionar Cargo", discord.ButtonStyle.secondary, self._add_cargo),
+             ("Remover Cargo", discord.ButtonStyle.secondary, self._rem_cargo)],
+            [("Configurar Embed", discord.ButtonStyle.secondary, self._cfg_embed),
+             ("Enviar Painel", discord.ButtonStyle.success, self._enviar),
+             ("Resetar Configurações", discord.ButtonStyle.danger, self._reset)],
+        ]
+        for r, row in enumerate(rows):
+            for label, style, cb in row:
+                emoji = _button_emoji(style) if style != discord.ButtonStyle.primary else None
+                btn = discord.ui.Button(label=label, style=style, row=r, emoji=emoji)
+                btn.callback = cb
+                self.add_item(btn)
+
+    async def _refresh(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=build_whitelist_embed(self.author, settings),
+            view=WhitelistAdminView(self.author),
+        )
+
+    async def _back(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_comunidade_embed(self.author, settings)
+        view = ComunidadeView(self.author)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    async def _toggle(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["wl_enabled"] = not settings.get("wl_enabled", False)
+        save_settings_to_disk()
+        on = settings["wl_enabled"]
+        await self._refresh(interaction)
+        await interaction.followup.send(embed=_notif_embed(
+            "<a:online:1518271945550856295> Whitelist **ativada**." if on
+            else "<a:alerta:1518271939460857968> Whitelist **desativada**.",
+            0x57F287 if on else 0xED4245), ephemeral=True)
+
+    async def _modo_codigo(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        await interaction.response.send_message(
+            embed=build_wl_codigo_embed(settings), view=WlCodigoView(self.author), ephemeral=True)
+
+    async def _canais(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(WlCanaisModal(self))
+
+    async def _cargo_aprovado(self, interaction: discord.Interaction):
+        view = discord.ui.View(timeout=180)
+        view.add_item(WlCargoAprovadoSelect(self))
+        await interaction.response.send_message(
+            embed=_notif_embed("Selecione o cargo que o membro recebe ao ser aprovado."),
+            view=view, ephemeral=True)
+
+    async def _add_cargo(self, interaction: discord.Interaction):
+        view = discord.ui.View(timeout=180)
+        view.add_item(WlCargoRespSelect(self))
+        await interaction.response.send_message(
+            embed=_notif_embed("Selecione os cargos responsáveis para **adicionar**."),
+            view=view, ephemeral=True)
+
+    async def _rem_cargo(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        resp = settings.get("wl_cargos_resp", [])
+        if not resp:
+            await interaction.response.send_message(
+                embed=_notif_embed("Nenhum cargo responsável para remover."), ephemeral=True)
+            return
+        guild = interaction.guild
+        options = []
+        for rid in resp[:25]:
+            role = guild.get_role(rid) if guild else None
+            options.append(discord.SelectOption(label=(role.name if role else str(rid))[:100], value=str(rid)))
+        view = discord.ui.View(timeout=180)
+        view.add_item(WlCargoRespRemoveSelect(self, options))
+        await interaction.response.send_message(
+            embed=_notif_embed("Selecione os cargos responsáveis para **remover**."),
+            view=view, ephemeral=True)
+
+    async def _cfg_embed(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(WlEmbedModal(self))
+
+    async def _enviar(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        cid = settings.get("wl_channel")
+        channel = interaction.guild.get_channel(cid) if cid else None
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Configure o **Canal da Whitelist** antes de enviar o painel."),
+                ephemeral=True)
+            return
+        embed, view = _wl_build_public(settings, interaction.guild)
+        try:
+            await channel.send(embed=embed, view=view)
+        except discord.HTTPException as e:
+            await interaction.response.send_message(embed=_notif_embed(
+                f"<a:alerta:1518271939460857968> Falha ao enviar: `{e}`"), ephemeral=True)
+            return
+        await interaction.response.send_message(embed=_notif_embed(
+            f"<a:online:1518271945550856295> Painel enviado em {channel.mention}."), ephemeral=True)
+
+    async def _reset(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["wl_enabled"] = False
+        settings["wl_channel"] = None
+        settings["wl_fichas_channel"] = None
+        settings["wl_log_channel"] = None
+        settings["wl_cargo_aprovado"] = None
+        settings["wl_cargos_resp"] = []
+        settings["wl_codigo_enabled"] = False
+        settings["wl_codigos"] = []
+        settings["wl_embed"] = {"title": None, "description": None, "color": None}
+        settings["wl_pending"] = {}
+        save_settings_to_disk()
+        await self._refresh(interaction)
+        await interaction.followup.send(embed=_notif_embed(
+            "<a:online:1518271945550856295> Configurações da whitelist resetadas."), ephemeral=True)
+
+
+class WlCanaisModal(discord.ui.Modal):
+    def __init__(self, parent: "WhitelistAdminView"):
+        super().__init__(title="Configurar canais da whitelist", timeout=300)
+        self.parent = parent
+        s = get_settings(parent.author.guild.id if parent.author.guild else 0)
+        self.c_wl = discord.ui.TextInput(
+            label="Canal da whitelist (ID)", required=False,
+            default=str(s.get("wl_channel") or ""), placeholder="ID do canal do painel", max_length=25)
+        self.c_fi = discord.ui.TextInput(
+            label="Canal das fichas (ID)", required=False,
+            default=str(s.get("wl_fichas_channel") or ""), placeholder="ID do canal de fichas", max_length=25)
+        self.c_lo = discord.ui.TextInput(
+            label="Canal de logs (ID)", required=False,
+            default=str(s.get("wl_log_channel") or ""), placeholder="ID do canal de logs", max_length=25)
+        for it in (self.c_wl, self.c_fi, self.c_lo):
+            self.add_item(it)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        guild = interaction.guild
+
+        def _resolve(raw):
+            raw = (raw or "").strip().lstrip("<#").rstrip(">")
+            if not raw:
+                return None, True  # limpar
+            if not raw.isdigit():
+                return None, False
+            ch = guild.get_channel(int(raw))
+            if not isinstance(ch, discord.TextChannel):
+                return None, False
+            return int(raw), True
+
+        errs = []
+        for txt, key, name in ((self.c_wl.value, "wl_channel", "whitelist"),
+                               (self.c_fi.value, "wl_fichas_channel", "fichas"),
+                               (self.c_lo.value, "wl_log_channel", "logs")):
+            val, ok = _resolve(txt)
+            if not ok:
+                errs.append(name)
+                continue
+            settings[key] = val
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_whitelist_embed(self.parent.author, settings),
+                view=WhitelistAdminView(self.parent.author))
+        except discord.HTTPException:
+            pass
+        if errs:
+            await interaction.followup.send(embed=_notif_embed(
+                f"<a:alerta:1518271939460857968> IDs inválidos (ignorados): {', '.join(errs)}. "
+                "Use o ID de um canal de texto."), ephemeral=True)
+        else:
+            await interaction.followup.send(embed=_notif_embed(
+                "<a:online:1518271945550856295> Canais atualizados."), ephemeral=True)
+
+
+class WlCargoAprovadoSelect(discord.ui.RoleSelect):
+    def __init__(self, parent: "WhitelistAdminView"):
+        super().__init__(placeholder="Selecione o cargo aprovado", min_values=1, max_values=1)
+        self.parent = parent
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["wl_cargo_aprovado"] = self.values[0].id
+        save_settings_to_disk()
+        await interaction.response.send_message(embed=_notif_embed(
+            f"<a:online:1518271945550856295> Cargo aprovado: {self.values[0].mention}"), ephemeral=True)
+
+
+class WlCargoRespSelect(discord.ui.RoleSelect):
+    def __init__(self, parent: "WhitelistAdminView"):
+        super().__init__(placeholder="Selecione os cargos responsáveis", min_values=1, max_values=10)
+        self.parent = parent
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        cur = set(settings.get("wl_cargos_resp", []))
+        cur.update(r.id for r in self.values)
+        settings["wl_cargos_resp"] = list(cur)
+        save_settings_to_disk()
+        await interaction.response.send_message(embed=_notif_embed(
+            f"<a:online:1518271945550856295> {len(self.values)} cargo(s) adicionado(s) aos responsáveis."),
+            ephemeral=True)
+
+
+class WlCargoRespRemoveSelect(discord.ui.Select):
+    def __init__(self, parent: "WhitelistAdminView", options: list):
+        super().__init__(placeholder="Selecione para remover", min_values=1,
+                         max_values=len(options), options=options)
+        self.parent = parent
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        rem = {int(v) for v in self.values}
+        settings["wl_cargos_resp"] = [r for r in settings.get("wl_cargos_resp", []) if r not in rem]
+        save_settings_to_disk()
+        await interaction.response.send_message(embed=_notif_embed(
+            f"<a:alerta:1518271939460857968> {len(rem)} cargo(s) removido(s)."), ephemeral=True)
+
+
+class WlEmbedModal(discord.ui.Modal):
+    def __init__(self, parent: "WhitelistAdminView"):
+        super().__init__(title="Configurar Embed do Painel", timeout=300)
+        self.parent = parent
+        d = get_settings(parent.author.guild.id if parent.author.guild else 0).get("wl_embed", {})
+        self.i_title = discord.ui.TextInput(
+            label="Título", required=False, default=d.get("title") or "", max_length=256)
+        self.i_desc = discord.ui.TextInput(
+            label="Descrição", required=False, style=discord.TextStyle.paragraph,
+            default=d.get("description") or "", max_length=2000)
+        self.i_color = discord.ui.TextInput(
+            label="Cor (hex, ex: #5865F2)", required=False,
+            default=(f"#{d['color']:06X}" if isinstance(d.get("color"), int) else ""), max_length=10)
+        for it in (self.i_title, self.i_desc, self.i_color):
+            self.add_item(it)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        d = settings.setdefault("wl_embed", {"title": None, "description": None, "color": None})
+        d["title"] = self.i_title.value.strip() or None
+        d["description"] = self.i_desc.value.strip() or None
+        cv = self.i_color.value.strip().lstrip("#")
+        if cv:
+            try:
+                d["color"] = int(cv, 16)
+            except ValueError:
+                pass
+        else:
+            d["color"] = None
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_whitelist_embed(self.parent.author, settings),
+                view=WhitelistAdminView(self.parent.author))
+        except discord.HTTPException:
+            pass
+        await interaction.followup.send(embed=_notif_embed(
+            "<a:online:1518271945550856295> Embed do painel atualizado."), ephemeral=True)
+
+
+# ── Modo Código ───────────────────────────────────────────────────────────────
+
+def build_wl_codigo_embed(settings: dict) -> discord.Embed:
+    codigos = settings.get("wl_codigos", [])
+    on = settings.get("wl_codigo_enabled", False)
+    status = "`(Ativado)`" if on else "`(Desativado)`"
+    lista = ", ".join(f"`{c}`" for c in codigos[:20]) if codigos else "`Nenhum`"
+    if len(codigos) > 20:
+        lista += f" (+{len(codigos) - 20})"
+    emb = discord.Embed(color=settings.get("embed_color", 0x2B2D31), title="Modo Código")
+    emb.description = (
+        f"**Status:** {status}\n"
+        f"**Códigos de uso único ({len(codigos)}):** {lista}\n\n"
+        "Cada código funciona **uma vez** e some após o uso. Ative o modo e envie "
+        "o painel novamente para o botão **Tenho código** aparecer."
+    )
+    return emb
+
+
+class WlCodigoView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=300)
+        self.author = author
+        self._build()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
+            await interaction.response.send_message(TRANSLATIONS[lang]["only_author"], ephemeral=True)
+            return False
+        return True
+
+    def _build(self):
+        self.clear_items()
+        settings = get_settings(self.author.guild.id if self.author.guild else 0)
+        on = settings.get("wl_codigo_enabled", False)
+        buttons = [
+            ("Desativar" if on else "Ativar", discord.ButtonStyle.danger if on else discord.ButtonStyle.success, self._toggle),
+            ("Adicionar Códigos", discord.ButtonStyle.secondary, self._add),
+            ("Gerar 5 Códigos", discord.ButtonStyle.secondary, self._gen),
+            ("Limpar Códigos", discord.ButtonStyle.danger, self._clear),
+        ]
+        for label, style, cb in buttons:
+            b = discord.ui.Button(label=label, style=style)
+            b.callback = cb
+            self.add_item(b)
+
+    async def _refresh(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=build_wl_codigo_embed(settings), view=WlCodigoView(self.author))
+
+    async def _toggle(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["wl_codigo_enabled"] = not settings.get("wl_codigo_enabled", False)
+        save_settings_to_disk()
+        await self._refresh(interaction)
+
+    async def _add(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(WlCodigoAddModal(self))
+
+    async def _gen(self, interaction: discord.Interaction):
+        import secrets as _secrets, string as _string
+        settings = get_settings(interaction.guild.id)
+        alfa = _string.ascii_uppercase + _string.digits
+        novos = ["".join(_secrets.choice(alfa) for _ in range(8)) for _ in range(5)]
+        settings.setdefault("wl_codigos", []).extend(novos)
+        save_settings_to_disk()
+        await interaction.response.edit_message(
+            embed=build_wl_codigo_embed(settings), view=WlCodigoView(self.author))
+        await interaction.followup.send(embed=_notif_embed(
+            "Códigos gerados:\n" + "\n".join(f"`{c}`" for c in novos)), ephemeral=True)
+
+    async def _clear(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["wl_codigos"] = []
+        save_settings_to_disk()
+        await self._refresh(interaction)
+
+
+class WlCodigoAddModal(discord.ui.Modal):
+    def __init__(self, parent: "WlCodigoView"):
+        super().__init__(title="Adicionar Códigos", timeout=300)
+        self.parent = parent
+        self.inp = discord.ui.TextInput(
+            label="Códigos (1 por linha)", style=discord.TextStyle.paragraph,
+            required=True, max_length=2000, placeholder="ABC123\nXYZ789")
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        raw = self.inp.value.replace(",", "\n")
+        novos = [c.strip() for c in raw.split("\n") if c.strip()]
+        cur = settings.setdefault("wl_codigos", [])
+        added = 0
+        for c in novos:
+            if c not in cur:
+                cur.append(c)
+                added += 1
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_wl_codigo_embed(settings), view=WlCodigoView(self.parent.author))
+        except discord.HTTPException:
+            pass
+        await interaction.followup.send(embed=_notif_embed(
+            f"<a:online:1518271945550856295> {added} código(s) adicionado(s)."), ephemeral=True)
+
+
+# ── Painel público + fichas + handlers ────────────────────────────────────────
+
+def _wl_build_public(settings: dict, guild):
+    d = settings.get("wl_embed", {})
+    color = d.get("color") if isinstance(d.get("color"), int) else settings.get("embed_color", 0x2B2D31)
+    icon_url = (guild.icon.url if guild and guild.icon else None) or (bot.user.display_avatar.url if bot.user else None)
+    emb = discord.Embed(color=color)
+    emb.title = d.get("title") or "Whitelist"
+    emb.description = d.get("description") or "Clique em **Verificar** para enviar sua ficha e ser aprovado pela equipe."
+    if icon_url:
+        emb.set_thumbnail(url=icon_url)
+    view = discord.ui.View(timeout=None)
+    view.add_item(discord.ui.Button(
+        label="Verificar", style=discord.ButtonStyle.success,
+        emoji="<a:online:1518271945550856295>", custom_id="wl_verify"))
+    if settings.get("wl_codigo_enabled", False):
+        view.add_item(discord.ui.Button(
+            label="Tenho código", style=discord.ButtonStyle.secondary, custom_id="wl_code"))
+    return emb, view
+
+
+def _wl_ficha_embed(member: discord.Member, settings: dict, status: str = "pendente", by=None) -> discord.Embed:
+    color_map = {"pendente": 0xF4A300, "aprovada": 0x57F287, "recusada": 0xED4245}
+    emb = discord.Embed(color=color_map.get(status, 0xF4A300))
+    emb.set_author(name=f"Ficha de {member.display_name}", icon_url=member.display_avatar.url)
+    emb.set_thumbnail(url=member.display_avatar.url)
+    status_txt = {
+        "pendente": "<a:alerta:1518271939460857968> Pendente",
+        "aprovada": "<a:online:1518271945550856295> Aprovada",
+        "recusada": "<:disslike:1518272066506330232> Recusada",
+    }.get(status, status)
+    criada = member.created_at.strftime("%d/%m/%Y")
+    entrou = member.joined_at.strftime("%d/%m/%Y") if member.joined_at else "?"
+    emb.description = (
+        f"**Membro:** {member.mention} (`{member}`)\n"
+        f"**ID:** `{member.id}`\n"
+        f"**Conta criada:** {criada}\n"
+        f"**Entrou no servidor:** {entrou}\n"
+        f"**Status:** {status_txt}"
+    )
+    if by is not None:
+        emb.description += f"\n**Por:** {by.mention}"
+    emb.timestamp = datetime.now()
+    return emb
+
+
+def _wl_ficha_view(uid: int, done: bool = False) -> discord.ui.View:
+    view = discord.ui.View(timeout=None)
+    view.add_item(discord.ui.Button(
+        label="Aprovar", style=discord.ButtonStyle.success,
+        custom_id=f"wl_approve_{uid}", disabled=done))
+    view.add_item(discord.ui.Button(
+        label="Recusar", style=discord.ButtonStyle.danger,
+        custom_id=f"wl_deny_{uid}", disabled=done))
+    return view
+
+
+def _wl_is_resp(member, settings: dict) -> bool:
+    if not isinstance(member, discord.Member):
+        return False
+    if member.guild_permissions.administrator or member.guild_permissions.manage_guild:
+        return True
+    resp = set(settings.get("wl_cargos_resp", []))
+    return bool(resp & {r.id for r in member.roles})
+
+
+async def _wl_log(guild, settings: dict, embed: discord.Embed):
+    cid = settings.get("wl_log_channel")
+    ch = guild.get_channel(cid) if cid and guild else None
+    if isinstance(ch, discord.TextChannel):
+        try:
+            await ch.send(embed=embed)
+        except discord.HTTPException:
+            pass
+
+
+async def _handle_wl_verify(interaction: discord.Interaction):
+    settings = get_settings(interaction.guild.id)
+    if not settings.get("wl_enabled", False):
+        await interaction.response.send_message(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> A whitelist está desativada no momento."), ephemeral=True)
+        return
+    fichas_id = settings.get("wl_fichas_channel")
+    fichas_ch = interaction.guild.get_channel(fichas_id) if fichas_id else None
+    if not isinstance(fichas_ch, discord.TextChannel):
+        await interaction.response.send_message(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> Canal de fichas não configurado. Avise um administrador."), ephemeral=True)
+        return
+    member = interaction.user
+    cargo_id = settings.get("wl_cargo_aprovado")
+    if cargo_id and isinstance(member, discord.Member) and any(r.id == cargo_id for r in member.roles):
+        await interaction.response.send_message(embed=_notif_embed(
+            "<a:online:1518271945550856295> Você já está aprovado!"), ephemeral=True)
+        return
+    pending = settings.setdefault("wl_pending", {})
+    if str(member.id) in pending:
+        await interaction.response.send_message(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> Você já tem uma ficha pendente. Aguarde a análise da equipe."), ephemeral=True)
+        return
+    emb = _wl_ficha_embed(member, settings, "pendente")
+    try:
+        msg = await fichas_ch.send(embed=emb, view=_wl_ficha_view(member.id))
+    except discord.HTTPException as e:
+        await interaction.response.send_message(embed=_notif_embed(
+            f"<a:alerta:1518271939460857968> Não foi possível enviar sua ficha: `{e}`"), ephemeral=True)
+        return
+    pending[str(member.id)] = msg.id
+    save_settings_to_disk()
+    await interaction.response.send_message(embed=_notif_embed(
+        "<a:online:1518271945550856295> Sua ficha foi enviada! Aguarde a análise da equipe."), ephemeral=True)
+
+
+async def _handle_wl_code(interaction: discord.Interaction):
+    settings = get_settings(interaction.guild.id)
+    if not settings.get("wl_enabled", False) or not settings.get("wl_codigo_enabled", False):
+        await interaction.response.send_message(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> O modo código não está disponível."), ephemeral=True)
+        return
+    await interaction.response.send_modal(WlCodigoInputModal())
+
+
+class WlCodigoInputModal(discord.ui.Modal):
+    def __init__(self):
+        super().__init__(title="Digite seu código", timeout=300)
+        self.inp = discord.ui.TextInput(label="Código", required=True, max_length=64)
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        code = self.inp.value.strip()
+        codigos = settings.setdefault("wl_codigos", [])
+        member = interaction.user
+        cargo_id = settings.get("wl_cargo_aprovado")
+        if cargo_id and isinstance(member, discord.Member) and any(r.id == cargo_id for r in member.roles):
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:online:1518271945550856295> Você já está aprovado!"), ephemeral=True)
+            return
+        if code not in codigos:
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Código inválido ou já utilizado."), ephemeral=True)
+            return
+        codigos.remove(code)  # uso único
+        role = interaction.guild.get_role(cargo_id) if cargo_id else None
+        applied = False
+        if role and isinstance(member, discord.Member):
+            try:
+                _register_bot_role_action(member.id, role.id, "add")
+                await member.add_roles(role, reason="Whitelist — código")
+                applied = True
+            except discord.HTTPException:
+                pass
+        settings.setdefault("wl_pending", {}).pop(str(member.id), None)
+        save_settings_to_disk()
+        await interaction.response.send_message(embed=_notif_embed(
+            "<a:online:1518271945550856295> Código válido! Você foi aprovado."
+            + ("" if applied else " (não consegui aplicar o cargo — avise um admin)")), ephemeral=True)
+        log_emb = _wl_ficha_embed(member, settings, "aprovada", by=member)
+        log_emb.description += f"\n**Via:** Código `{code}`"
+        await _wl_log(interaction.guild, settings, log_emb)
+
+
+async def _wl_approve(interaction: discord.Interaction, uid: int):
+    settings = get_settings(interaction.guild.id)
+    if not _wl_is_resp(interaction.user, settings):
+        await interaction.response.send_message(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> Apenas os Cargos Responsáveis podem aprovar."), ephemeral=True)
+        return
+    guild = interaction.guild
+    member = guild.get_member(uid)
+    cargo_id = settings.get("wl_cargo_aprovado")
+    role = guild.get_role(cargo_id) if cargo_id else None
+    applied = False
+    if member and role:
+        try:
+            _register_bot_role_action(member.id, role.id, "add")
+            await member.add_roles(role, reason=f"Whitelist aprovada por {interaction.user}")
+            applied = True
+        except discord.HTTPException:
+            pass
+    settings.setdefault("wl_pending", {}).pop(str(uid), None)
+    save_settings_to_disk()
+    if member:
+        new_emb = _wl_ficha_embed(member, settings, "aprovada", by=interaction.user)
+    else:
+        new_emb = discord.Embed(color=0x57F287, description=(
+            f"<a:online:1518271945550856295> Ficha de <@{uid}> **aprovada** por {interaction.user.mention}."))
+    try:
+        await interaction.response.edit_message(embed=new_emb, view=_wl_ficha_view(uid, done=True))
+    except discord.HTTPException:
+        pass
+    await _wl_log(guild, settings, new_emb)
+    if member and not applied and role:
+        try:
+            await interaction.followup.send(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Aprovado, mas não consegui aplicar o cargo "
+                "(verifique Gerenciar Cargos e a hierarquia)."), ephemeral=True)
+        except discord.HTTPException:
+            pass
+    if member:
+        try:
+            await member.send(f"<a:online:1518271945550856295> Sua whitelist em **{guild.name}** foi **aprovada**!")
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
+
+async def _wl_deny(interaction: discord.Interaction, uid: int):
+    settings = get_settings(interaction.guild.id)
+    if not _wl_is_resp(interaction.user, settings):
+        await interaction.response.send_message(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> Apenas os Cargos Responsáveis podem recusar."), ephemeral=True)
+        return
+    guild = interaction.guild
+    member = guild.get_member(uid)
+    settings.setdefault("wl_pending", {}).pop(str(uid), None)
+    save_settings_to_disk()
+    if member:
+        new_emb = _wl_ficha_embed(member, settings, "recusada", by=interaction.user)
+    else:
+        new_emb = discord.Embed(color=0xED4245, description=(
+            f"<:disslike:1518272066506330232> Ficha de <@{uid}> **recusada** por {interaction.user.mention}."))
+    try:
+        await interaction.response.edit_message(embed=new_emb, view=_wl_ficha_view(uid, done=True))
+    except discord.HTTPException:
+        pass
+    await _wl_log(guild, settings, new_emb)
+    if member:
+        try:
+            await member.send(f"<:disslike:1518272066506330232> Sua whitelist em **{guild.name}** foi **recusada**.")
+        except (discord.Forbidden, discord.HTTPException):
+            pass
 
 
 # -----------------------------------------------------------------------------
@@ -48878,6 +49573,57 @@ async def on_interaction(interaction: discord.Interaction):
                     await interaction.response.send_message(
                         "<a:alerta:1518271939460857968> Erro ao processar verificação.", ephemeral=True
                     )
+                except Exception:
+                    pass
+        return
+
+    # ── Whitelist: painel público (Verificar / Tenho código) ───────────────────
+    if cid == "wl_verify":
+        try:
+            await _handle_wl_verify(interaction)
+        except Exception as _e:
+            print(f"[wl_verify] ERRO: {_e}", flush=True)
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.send_message(
+                        embed=_notif_embed("<a:alerta:1518271939460857968> Erro ao enviar sua ficha."),
+                        ephemeral=True)
+                except Exception:
+                    pass
+        return
+
+    if cid == "wl_code":
+        try:
+            await _handle_wl_code(interaction)
+        except Exception as _e:
+            print(f"[wl_code] ERRO: {_e}", flush=True)
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.send_message(
+                        embed=_notif_embed("<a:alerta:1518271939460857968> Erro ao processar o código."),
+                        ephemeral=True)
+                except Exception:
+                    pass
+        return
+
+    # ── Whitelist: botões da ficha (Aprovar / Recusar) ─────────────────────────
+    if cid.startswith("wl_approve_") or cid.startswith("wl_deny_"):
+        try:
+            _wl_uid = int(cid.rsplit("_", 1)[-1])
+        except (ValueError, IndexError):
+            return
+        try:
+            if cid.startswith("wl_approve_"):
+                await _wl_approve(interaction, _wl_uid)
+            else:
+                await _wl_deny(interaction, _wl_uid)
+        except Exception as _e:
+            print(f"[wl_ficha] ERRO: {_e}", flush=True)
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.send_message(
+                        embed=_notif_embed("<a:alerta:1518271939460857968> Erro ao processar a ficha."),
+                        ephemeral=True)
                 except Exception:
                     pass
         return
