@@ -42587,9 +42587,18 @@ class EmbedBuilderView(discord.ui.View):
             # Sem arquivos — edita normalmente (texto, cor, título, separador)
             try:
                 if sep_blocks:
+                    # Components V2 (LayoutView): NÃO passar embeds/content — o Discord
+                    # rejeita o campo 'embeds' (mesmo vazio) junto da flag IS_COMPONENTS_V2.
                     layout = self._build_preview_layout()
-                    await self.main_message.edit(
-                        content=None, embeds=[], view=layout, attachments=[])
+                    try:
+                        await self.main_message.edit(view=layout, attachments=[])
+                    except discord.HTTPException:
+                        # Mensagem clássica (com embed) não converte p/ V2 via edit — reenvia
+                        try:
+                            await self.main_message.delete()
+                        except Exception:
+                            pass
+                        self.main_message = await channel.send(view=layout)
                 else:
                     await self.main_message.edit(
                         content=None, embeds=self.build_embeds(), view=self, attachments=[])
@@ -42774,10 +42783,26 @@ class EmbedBuilderView(discord.ui.View):
         self._build()
         files, attach_urls = self._get_preview_files()
         if self.draft.get("sep_blocks"):
+            # Components V2 (LayoutView): NÃO passar embeds/content junto — o Discord
+            # rejeita o campo 'embeds' (mesmo []) com a flag IS_COMPONENTS_V2 (erro 50035).
             layout = self._build_preview_layout(attach_urls=attach_urls)
-            await interaction.response.edit_message(
-                content=None, embeds=[], view=layout,
-                attachments=files if files else [])
+            try:
+                await interaction.response.edit_message(
+                    view=layout, attachments=files if files else [])
+            except discord.HTTPException:
+                # Mensagem clássica (com embed) não converte p/ V2 via edit — reenvia
+                try:
+                    await interaction.response.defer()
+                except discord.HTTPException:
+                    pass
+                _ch = self.main_message.channel if self.main_message else interaction.channel
+                try:
+                    if self.main_message:
+                        await self.main_message.delete()
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                    pass
+                self.main_message = await _ch.send(
+                    view=layout, files=files if files else discord.utils.MISSING)
         else:
             await interaction.response.edit_message(
                 content=None,
