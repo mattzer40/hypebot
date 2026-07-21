@@ -15091,7 +15091,7 @@ class _DecorTextEditModal(_ModalV2):
         try:
             files = self.thumb_upload_lbl.component.values
             if files:
-                thumbnail = files[0].url
+                thumbnail = await _cache_uploaded_attachment(files[0])
         except Exception:
             pass
         try:
@@ -15162,7 +15162,7 @@ class _DecorGalleryEditModal(_ModalV2):
         try:
             uploaded = self.upload_lbl.component.values
             if uploaded:
-                images = [att.url for att in uploaded]
+                images = [await _cache_uploaded_attachment(att) for att in uploaded]
         except Exception:
             pass
 
@@ -15823,7 +15823,7 @@ class _DecorTextModal(_ModalV2):
         try:
             files = self.thumb_upload_lbl.component.values
             if files:
-                thumbnail = files[0].url
+                thumbnail = await _cache_uploaded_attachment(files[0])
         except Exception:
             pass
 
@@ -15888,7 +15888,7 @@ class _DecorGalleryModal(_ModalV2, title="Adicionar Galeria (até 10)"):
         # Imagens via upload
         images: list[str] = []
         try:
-            images = [att.url for att in self.upload_lbl.component.values]
+            images = [await _cache_uploaded_attachment(att) for att in self.upload_lbl.component.values]
         except Exception:
             pass
 
@@ -40889,6 +40889,23 @@ async def _fetch_cached_bytes(url: str) -> bytes | None:
     return None
 
 
+async def _cache_uploaded_attachment(att) -> str:
+    """Baixa os bytes de um anexo RECÉM-upado (URL ainda válida, inclusive as de
+    `ephemeral-attachments`, que expiram em minutos) e grava no cache de imagens
+    do painel. Assim o painel consegue re-anexar a imagem depois mesmo com a URL
+    morta. Retorna att.url (referência guardada no bloco)."""
+    try:
+        _b = await att.read()
+        if _b and len(_b) > 100:
+            _cache = _panel_img_cache_path(att.url)
+            os.makedirs(_PANEL_IMG_CACHE_DIR, exist_ok=True)
+            with open(_cache, "wb") as _cf:
+                _cf.write(_b)
+    except Exception as _e:
+        print(f"[panel_img_cache] falha ao cachear upload: {_e}", flush=True)
+    return att.url
+
+
 async def _reattach_embed_images(draft: dict, prefix: str) -> tuple[dict, list]:
     """Recebe um draft de embed e devolve (draft_ajustado, files) com thumbnail/image
     re-anexados via attachment:// a partir dos bytes (do draft ou do cache em disco),
@@ -41106,7 +41123,8 @@ class PanelV2TextModal(_ModalV2):
         settings = get_settings(interaction.guild.id)
         t = TRANSLATIONS[settings["language"]]
         if self.thumb_upload.values:
-            thumb = self.thumb_upload.values[0].url
+            # Cacheia os bytes agora (URL do upload é ephemeral e expira em minutos)
+            thumb = await _cache_uploaded_attachment(self.thumb_upload.values[0])
         else:
             thumb = self._existing.get("thumbnail")
         block = {
@@ -41161,7 +41179,8 @@ class PanelV2GalleryModal(_ModalV2):
     async def on_submit(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         t = TRANSLATIONS[settings["language"]]
-        uploaded = [a.url for a in (self.files_upload.values or [])]
+        # Cacheia os bytes AGORA (a URL do upload é ephemeral e expira em minutos)
+        uploaded = [await _cache_uploaded_attachment(a) for a in (self.files_upload.values or [])]
         typed    = [l.strip() for l in (self.links_inp.value or "").splitlines() if l.strip()]
         links    = (uploaded + typed)[:10] or self._existing.get("images", [])
         block = {
