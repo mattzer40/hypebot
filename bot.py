@@ -9558,10 +9558,15 @@ class TicketPainelLeiaView(discord.ui.View):
                 layout = build_panel_v2_layout(v2_data, settings, ticket_panel=panel, image_map=_imgmap)
                 await target.send(view=layout, files=_files)
             else:
-                embed = _draft_to_embed(ep, settings["embed_color"])
+                # Re-anexa thumbnail/imagem via attachment:// (cache em disco) para
+                # a foto do painel não expirar junto com o link do CDN.
+                _ep_send, _ep_files = await _reattach_embed_images(ep, "ticket_panel")
+                embed = _draft_to_embed(_ep_send, settings["embed_color"])
                 buttons_view = _draft_view_from_buttons(ep)
                 # Merge: if we have both menu and buttons view, prefer menu_view
-                await target.send(embed=embed, view=menu_view or buttons_view)
+                await target.send(
+                    embed=embed, view=menu_view or buttons_view,
+                    files=_ep_files or discord.utils.MISSING)
         except Exception as e:
             await interaction.followup.send(f"Erro: {str(e)[:200]}", ephemeral=True)
             return
@@ -40865,6 +40870,64 @@ async def _panel_v2_attachments(blocks: list) -> tuple[list, dict]:
     return files, url_map
 
 
+async def _fetch_cached_bytes(url: str) -> bytes | None:
+    """Baixa a imagem (ou lê do cache em disco em /data) — resolve URLs do CDN do
+    Discord que expiram ~24h. Cacheia na 1ª vez que a URL ainda é válida; depois
+    lê do cache mesmo que a URL já tenha expirado."""
+    if not url or not str(url).startswith(("http://", "https://")):
+        return None
+    _cache = _panel_img_cache_path(url)
+    try:
+        if os.path.exists(_cache) and os.path.getsize(_cache) > 100:
+            with open(_cache, "rb") as _cf:
+                return _cf.read()
+    except Exception:
+        pass
+    try:
+        import aiohttp as _ah_fc
+        async with _ah_fc.ClientSession() as _s:
+            async with _s.get(url) as _r:
+                if _r.status != 200:
+                    return None
+                _data = await _r.read()
+        if _data and len(_data) > 100:
+            try:
+                os.makedirs(_PANEL_IMG_CACHE_DIR, exist_ok=True)
+                with open(_cache, "wb") as _cf:
+                    _cf.write(_data)
+            except Exception:
+                pass
+            return _data
+    except Exception:
+        return None
+    return None
+
+
+async def _reattach_embed_images(draft: dict, prefix: str) -> tuple[dict, list]:
+    """Recebe um draft de embed e devolve (draft_ajustado, files) com thumbnail/image
+    re-anexados via attachment:// a partir dos bytes (do draft ou do cache em disco),
+    para a imagem nunca depender do link do CDN que expira."""
+    out = dict(draft)
+    files: list = []
+    idx = 0
+    for field in ("thumbnail", "image"):
+        b = draft.get(f"_{field}_bytes")
+        ext = draft.get(f"_{field}_ext", "png")
+        if not b:
+            url = draft.get(field)
+            if url and str(url).startswith(("http://", "https://")):
+                b = await _fetch_cached_bytes(url)
+                if b:
+                    _base = str(url).split("?", 1)[0].lower()
+                    ext = "gif" if _base.endswith(".gif") else "png"
+        if b:
+            fname = f"{prefix}_{field}_{idx}.{ext}"
+            idx += 1
+            files.append(discord.File(io.BytesIO(b), filename=fname))
+            out[field] = f"attachment://{fname}"
+    return out, files
+
+
 def build_panel_v2_layout(
     panel: dict,
     settings: dict,
@@ -43756,15 +43819,9 @@ class EmbedBuilderView(discord.ui.View):
 
         else:
             # ── Embed tradicional ──
-            _send_files: list[discord.File] = []
-            _draft_send = dict(self.draft)
-            for _field in ("thumbnail", "image"):
-                _b = self.draft.get(f"_{_field}_bytes")
-                _e = self.draft.get(f"_{_field}_ext", "png")
-                if _b:
-                    _fname = f"embed_{_field}.{_e}"
-                    _send_files.append(discord.File(io.BytesIO(_b), filename=_fname))
-                    _draft_send[_field] = f"attachment://{_fname}"
+            # Re-anexa imagens via attachment:// (bytes do draft OU cache em disco),
+            # para a foto não expirar com o link do CDN — inclusive ao editar.
+            _draft_send, _send_files = await _reattach_embed_images(self.draft, "embed")
 
             embed = _draft_to_embed(_draft_send, settings["embed_color"])
             buttons_view = _draft_view_from_buttons(self.draft)
@@ -45163,8 +45220,17 @@ async def embed_cmd(ctx: commands.Context, *args: str):
                 draft["color"] = None
             if e.thumbnail and e.thumbnail.url:
                 draft["thumbnail"] = e.thumbnail.url
+                # Cacheia os bytes agora (URL ainda válida) p/ não perder a foto ao editar
+                _tb = await _fetch_cached_bytes(e.thumbnail.url)
+                if _tb:
+                    draft["_thumbnail_bytes"] = _tb
+                    draft["_thumbnail_ext"] = "gif" if e.thumbnail.url.split("?", 1)[0].lower().endswith(".gif") else "png"
             if e.image and e.image.url:
                 draft["image"] = e.image.url
+                _ib = await _fetch_cached_bytes(e.image.url)
+                if _ib:
+                    draft["_image_bytes"] = _ib
+                    draft["_image_ext"] = "gif" if e.image.url.split("?", 1)[0].lower().endswith(".gif") else "png"
             if e.footer:
                 draft["footer_text"] = e.footer.text
                 draft["footer_icon"] = e.footer.icon_url
