@@ -9536,37 +9536,21 @@ class TicketPainelLeiaView(discord.ui.View):
 
         await interaction.response.defer(ephemeral=True)
         try:
-            menu_view = None
-            if panel.get("menus_selecao") and panel.get("menu_opcoes"):
-                menu_view = _build_ticket_panel_menu_view(panel)
-            elif panel.get("usar_botao"):
-                _pb_id    = str(panel.get("id", ""))
-                _pb_ecfg  = panel.get("embed", {}) or {}
-                _pb_label = (_pb_ecfg.get("button_label") or panel.get("nome") or "Abrir Ticket")[:80]
-                _pb_btn   = discord.ui.Button(
-                    label=_pb_label,
-                    style=discord.ButtonStyle.primary,
-                    emoji=_parse_menu_emoji(_pb_ecfg.get("button_emoji")),
-                    custom_id=f"ticket_panel_btn_{_pb_id}",
-                )
-                menu_view = discord.ui.View(timeout=None)
-                menu_view.add_item(_pb_btn)
-            if has_v2:
-                # Envia como LayoutView V2 com separadores nativos. Re-anexa as
-                # imagens (evita links do CDN que expiram → "Imagem não encontrada").
-                _files, _imgmap = await _panel_v2_attachments((v2_data or {}).get("blocks", []))
-                layout = build_panel_v2_layout(v2_data, settings, ticket_panel=panel, image_map=_imgmap)
-                await target.send(view=layout, files=_files)
+            _payload = await _render_ticket_panel(panel, settings)
+            if _payload["embed"] is not None:
+                _sent = await target.send(
+                    embed=_payload["embed"], view=_payload["view"],
+                    files=_payload["files"] or discord.utils.MISSING)
             else:
-                # Re-anexa thumbnail/imagem via attachment:// (cache em disco) para
-                # a foto do painel não expirar junto com o link do CDN.
-                _ep_send, _ep_files = await _reattach_embed_images(ep, "ticket_panel")
-                embed = _draft_to_embed(_ep_send, settings["embed_color"])
-                buttons_view = _draft_view_from_buttons(ep)
-                # Merge: if we have both menu and buttons view, prefer menu_view
-                await target.send(
-                    embed=embed, view=menu_view or buttons_view,
-                    files=_ep_files or discord.utils.MISSING)
+                _sent = await target.send(
+                    view=_payload["view"], files=_payload["files"] or discord.utils.MISSING)
+            # Rastreia o painel enviado para o refresh periódico (anti-expiração da foto)
+            _ticket_sent_panels[str(_sent.id)] = {
+                "channel": target.id,
+                "guild": interaction.guild.id,
+                "panel": self.panel_id,
+            }
+            _save_ticket_sent_panels()
         except Exception as e:
             await interaction.followup.send(f"Erro: {str(e)[:200]}", ephemeral=True)
             return
@@ -29982,6 +29966,8 @@ async def on_ready():
         _mc_promo_task.start()
     if not _mc_weekly_task.is_running():
         _mc_weekly_task.start()
+    if not _ticket_panel_refresh_task.is_running():
+        _ticket_panel_refresh_task.start()
 
     # ── Bio / Descrição do perfil ─────────────────────────────────────────────
     _bio_text = "**Bot desenvolvido pela Hypebots**\nhttps://discord.gg/hypebot"
@@ -40928,6 +40914,89 @@ async def _reattach_embed_images(draft: dict, prefix: str) -> tuple[dict, list]:
     return out, files
 
 
+async def _render_ticket_panel(panel: dict, settings: dict) -> dict:
+    """Monta o payload do painel de ticket (embed/layout + view + files), sempre
+    re-anexando as imagens do cache. Usado tanto no envio quanto no refresh
+    periódico anti-expiração. Retorna {"embed", "view", "files"}."""
+    menu_view = None
+    if panel.get("menus_selecao") and panel.get("menu_opcoes"):
+        menu_view = _build_ticket_panel_menu_view(panel)
+    elif panel.get("usar_botao"):
+        _pb_id   = str(panel.get("id", ""))
+        _pb_ecfg = panel.get("embed", {}) or {}
+        _pb_label = (_pb_ecfg.get("button_label") or panel.get("nome") or "Abrir Ticket")[:80]
+        _pb_btn = discord.ui.Button(
+            label=_pb_label,
+            style=discord.ButtonStyle.primary,
+            emoji=_parse_menu_emoji(_pb_ecfg.get("button_emoji")),
+            custom_id=f"ticket_panel_btn_{_pb_id}",
+        )
+        menu_view = discord.ui.View(timeout=None)
+        menu_view.add_item(_pb_btn)
+
+    v2_data = panel.get("embed_painel_v2")
+    ep      = panel.get("embed_painel")
+    if bool(v2_data and v2_data.get("blocks")):
+        _files, _imgmap = await _panel_v2_attachments((v2_data or {}).get("blocks", []))
+        layout = build_panel_v2_layout(v2_data, settings, ticket_panel=panel, image_map=_imgmap)
+        return {"embed": None, "view": layout, "files": _files}
+    _ep_send, _ep_files = await _reattach_embed_images(ep or {}, "ticket_panel")
+    embed = _draft_to_embed(_ep_send, settings["embed_color"])
+    buttons_view = _draft_view_from_buttons(ep or {})
+    return {"embed": embed, "view": menu_view or buttons_view, "files": _ep_files}
+
+
+@tasks.loop(hours=12)
+async def _ticket_panel_refresh_task():
+    """Re-edita os painéis de ticket enviados re-subindo a imagem (do cache) antes
+    do link do CDN expirar (~24h). Roda no boot e a cada 12h — a foto nunca expira."""
+    if not _ticket_sent_panels:
+        return
+    for _mid, _info in list(_ticket_sent_panels.items()):
+        try:
+            guild = bot.get_guild(_info.get("guild"))
+            if not guild:
+                continue
+            ch = guild.get_channel(_info.get("channel"))
+            if not isinstance(ch, discord.TextChannel):
+                continue
+            try:
+                msg = await ch.fetch_message(int(_mid))
+            except discord.NotFound:
+                _ticket_sent_panels.pop(_mid, None)
+                _save_ticket_sent_panels()
+                continue
+            except discord.HTTPException:
+                continue
+            settings = get_settings(guild.id)
+            panel = _find_panel(settings, _info.get("panel"))
+            if not panel:
+                _ticket_sent_panels.pop(_mid, None)
+                _save_ticket_sent_panels()
+                continue
+            _payload = await _render_ticket_panel(panel, settings)
+            _files = _payload["files"]
+            # Só mexe nos anexos se conseguimos re-anexar a imagem (senão preserva)
+            if _payload["embed"] is not None:
+                if _files:
+                    await msg.edit(embed=_payload["embed"], view=_payload["view"], attachments=_files)
+                else:
+                    await msg.edit(embed=_payload["embed"], view=_payload["view"])
+            else:
+                if _files:
+                    await msg.edit(view=_payload["view"], attachments=_files)
+                else:
+                    await msg.edit(view=_payload["view"])
+            await asyncio.sleep(1)
+        except Exception as _e:
+            print(f"[ticket_refresh] erro {_mid}: {_e}", flush=True)
+
+
+@_ticket_panel_refresh_task.before_loop
+async def _ticket_panel_refresh_before():
+    await bot.wait_until_ready()
+
+
 def build_panel_v2_layout(
     panel: dict,
     settings: dict,
@@ -41865,6 +41934,29 @@ def _save_embed_draft_data() -> None:
         print(f"[WARN] _save_embed_draft_data falhou: {_e}", flush=True)
 
 _load_embed_draft_data()
+
+# ── Painéis de ticket enviados — {msg_id: {channel, guild, panel}} p/ refresh anti-expiração ──
+_TICKET_SENT_PANELS_FILE = os.path.join(os.environ.get("DATA_DIR", os.path.dirname(os.path.abspath(__file__))), "ticket_sent_panels.json")
+_ticket_sent_panels: dict[str, dict] = {}
+
+def _load_ticket_sent_panels() -> None:
+    global _ticket_sent_panels
+    try:
+        if os.path.exists(_TICKET_SENT_PANELS_FILE):
+            with open(_TICKET_SENT_PANELS_FILE, "r", encoding="utf-8") as _f:
+                _ticket_sent_panels = json.load(_f)
+    except Exception:
+        _ticket_sent_panels = {}
+
+def _save_ticket_sent_panels() -> None:
+    try:
+        os.makedirs(os.path.dirname(_TICKET_SENT_PANELS_FILE) or ".", exist_ok=True)
+        with open(_TICKET_SENT_PANELS_FILE, "w", encoding="utf-8") as _f:
+            json.dump(_ticket_sent_panels, _f, ensure_ascii=False)
+    except Exception as _e:
+        print(f"[WARN] _save_ticket_sent_panels: {_e}", flush=True)
+
+_load_ticket_sent_panels()
 
 # ── PanelV2 data — persiste panel dict por message_id para edição posterior ──
 _PANELV2_DATA_FILE = os.path.join(os.environ.get("DATA_DIR", os.path.dirname(os.path.abspath(__file__))), "panelv2_data.json")
