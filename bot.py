@@ -46978,8 +46978,13 @@ async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: in
 
 
 async def _mc_check_member(guild, settings: dict, member: discord.Member, tiers: list):
-    """Promoção em tempo real: sobe 1 nível se o tempo efetivo da semana bater a
-    meta do próximo cargo."""
+    """Promoção em tempo real: coloca o membro DIRETO no cargo mais alto cuja meta
+    semanal ele já bateu, numa única troca.
+
+    Antes subia 1 degrau por ciclo (2 min). Como o membro só é avaliado quando já
+    tem o tempo de VÁRIOS degraus, isso ficava tirando e colocando cargo a cada
+    2 min até chegar no lugar — poluía o canal de logs e o histórico do membro.
+    O resultado final é idêntico (ele bateu a meta de todos os degraus abaixo)."""
     weight = settings.get("mc_muted_weight", 25)
     data = _get_user_vt(guild.id, member.id)
     _vt_rotate(data)
@@ -46993,14 +46998,20 @@ async def _mc_check_member(guild, settings: dict, member: discord.Member, tiers:
         weight,
     )
     cur = _mc_current_tier_index(member, tiers)
-    nxt = cur + 1
-    if nxt < len(tiers) and eff >= tiers[nxt].get("meta", 0):
-        _ok, _motivo = await _mc_set_tier(member, tiers, nxt)
-        if not _ok:
-            # Não aplicou o cargo — avisa o admin em vez de logar promoção falsa
-            await _mc_warn_perm(guild, settings, _motivo)
-            return
-        await _mc_log(guild, settings, member, "promovido", tiers, nxt, old_idx=cur)
+    # Cargo mais alto cuja meta já foi batida (tiers está ordenado por meta asc)
+    alvo = cur
+    for _i, _t in enumerate(tiers):
+        if eff >= _t.get("meta", 0):
+            alvo = max(alvo, _i)
+    if alvo <= cur:
+        return  # já está no cargo certo — nada a fazer (sem churn)
+
+    _ok, _motivo = await _mc_set_tier(member, tiers, alvo)
+    if not _ok:
+        # Não aplicou o cargo — avisa o admin em vez de logar promoção falsa
+        await _mc_warn_perm(guild, settings, _motivo)
+        return
+    await _mc_log(guild, settings, member, "promovido", tiers, alvo, old_idx=cur)
 
 
 async def _mc_eval_guild_weekly(guild, settings: dict):
