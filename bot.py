@@ -46803,24 +46803,33 @@ def _mc_progress_text(guild, settings: dict, member, eff_week: float) -> str | N
         return r.mention if r else f"<@&{rid}>"
 
     cur = _mc_current_tier_index(member, tiers)
-    cur_txt = _rmention(cur) if cur >= 0 else "`Nenhum`"
     nxt = cur + 1
     peso = settings.get("mc_muted_weight", 25)
 
+    # Topo da escada — mostra o que precisa manter para não cair
     if nxt >= len(tiers):
-        return (f"<:vender_cargo:1518272029604970719> **Cargo atual:** {cur_txt} — "
-                f"<a:online:1518271945550856295> **nível máximo!**")
+        manter = tiers[cur].get("meta", 0)
+        return (f"<:estrela:1518272022093877309> {_rmention(cur)} · **topo da escada!**\n"
+                f"-# <:evolution_g:1518272004560654579> Mantenha `{_fmt_vt(manter)}` "
+                f"efetivas por semana para não cair.")
 
-    meta = tiers[nxt].get("meta", 0)
+    meta  = tiers[nxt].get("meta", 0)
     falta = meta - eff_week
+    atual = _rmention(cur) if cur >= 0 else "**sem cargo**"
+
+    # Já bateu a meta — sobe no próximo ciclo (2 min)
     if falta <= 0:
-        return (f"<:vender_cargo:1518272029604970719> **Cargo atual:** {cur_txt} · "
-                f"**Próximo:** {_rmention(nxt)}\n"
-                f"-# <a:online:1518271945550856295> Meta batida! Você sobe em instantes.")
-    return (f"<:vender_cargo:1518272029604970719> **Cargo atual:** {cur_txt} · "
-            f"**Próximo:** {_rmention(nxt)}\n"
-            f"-# <:mov_call:1518271964077232150> Faltam `{_fmt_vt(falta)}` de tempo efetivo "
-            f"nesta semana (meta `{_fmt_vt(meta)}` · mutado conta `{peso}%`)")
+        return (f"<:evolution_g:1518272004560654579> {atual} → {_rmention(nxt)}\n"
+                f"-# <a:verificadoverde:1518272098290892810> Meta batida! "
+                f"Subindo de cargo em instantes...")
+
+    # Barra de progresso visual até a próxima meta
+    _pct  = 0 if meta <= 0 else max(0.0, min(1.0, eff_week / meta))
+    _full = int(_pct * 10)
+    _bar  = "█" * _full + "░" * (10 - _full)
+    return (f"<:vender_cargo:1518272029604970719> {atual} → próximo: {_rmention(nxt)}\n"
+            f"-# `{_bar}` **{int(_pct * 100)}%** · faltam `{_fmt_vt(falta)}` "
+            f"de `{_fmt_vt(meta)}` efetivas · mutado vale `{peso}%`")
 
 
 async def _mc_set_tier(member: discord.Member, tiers: list, target_idx: int):
@@ -46852,20 +46861,45 @@ async def _mc_set_tier(member: discord.Member, tiers: list, target_idx: int):
         print(f"[mov_call] set_tier erro ({member.id}): {_e}", flush=True)
 
 
-async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: int):
+async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: int,
+                  old_idx: int | None = None):
     cid = settings.get("mc_log_channel")
     ch = guild.get_channel(cid) if cid and guild else None
     if not isinstance(ch, discord.TextChannel):
         return
-    if 0 <= idx < len(tiers):
-        role = guild.get_role(tiers[idx].get("role"))
-        dest = role.mention if role else "cargo removido"
-    else:
-        dest = "nenhum cargo (saiu da escada)"
-    up = kind == "promovido"
-    emoji = "<a:online:1518271945550856295>" if up else "<:disslike:1518272066506330232>"
+
+    def _tier_txt(i) -> str:
+        if i is None or not (0 <= i < len(tiers)):
+            return "`Nenhum`"
+        r = guild.get_role(tiers[i].get("role"))
+        return r.mention if r else f"<@&{tiers[i].get('role')}>"
+
+    up    = kind == "promovido"
+    emoji = ("<:evolution_g:1518272004560654579>" if up
+             else "<a:redalert:1518272086018097352>")
+    titulo = "Subiu de cargo!" if up else "Rebaixado"
+    meta   = tiers[idx].get("meta", 0) if 0 <= idx < len(tiers) else 0
+
     emb = discord.Embed(color=0x57F287 if up else 0xED4245)
-    emb.description = f"{emoji} {member.mention} foi **{kind}** para {dest}."
+    emb.set_author(name=f"{member.display_name} — {titulo}",
+                   icon_url=member.display_avatar.url)
+    emb.set_thumbnail(url=member.display_avatar.url)
+    emb.description = (
+        f"{emoji} {member.mention}\n"
+        f"**De:** {_tier_txt(old_idx)}  →  **Para:** {_tier_txt(idx)}"
+    )
+    if up and meta:
+        emb.description += (
+            f"\n-# <a:verificadoverde:1518272098290892810> Bateu a meta de "
+            f"`{_fmt_vt(meta)}` na semana."
+        )
+    elif not up:
+        _perdida = tiers[old_idx].get("meta", 0) if (old_idx is not None and 0 <= old_idx < len(tiers)) else 0
+        if _perdida:
+            emb.description += (
+                f"\n-# <:mov_call:1518271964077232150> Não bateu a meta de "
+                f"`{_fmt_vt(_perdida)}` na semana passada."
+            )
     emb.set_footer(text=_footer_name(guild, settings))
     emb.timestamp = datetime.now()
     try:
@@ -46893,7 +46927,7 @@ async def _mc_check_member(guild, settings: dict, member: discord.Member, tiers:
     nxt = cur + 1
     if nxt < len(tiers) and eff >= tiers[nxt].get("meta", 0):
         await _mc_set_tier(member, tiers, nxt)
-        await _mc_log(guild, settings, member, "promovido", tiers, nxt)
+        await _mc_log(guild, settings, member, "promovido", tiers, nxt, old_idx=cur)
 
 
 async def _mc_eval_guild_weekly(guild, settings: dict):
@@ -46923,7 +46957,7 @@ async def _mc_eval_guild_weekly(guild, settings: dict):
         )
         if eff < tiers[cur].get("meta", 0):
             await _mc_set_tier(m, tiers, cur - 1)
-            await _mc_log(guild, settings, m, "rebaixado", tiers, cur - 1)
+            await _mc_log(guild, settings, m, "rebaixado", tiers, cur - 1, old_idx=cur)
             n += 1
             await asyncio.sleep(0.5)  # evita rajada de rate limit
     _save_voice_time()
