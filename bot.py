@@ -46802,15 +46802,27 @@ def _mc_progress_text(guild, settings: dict, member, eff_week: float) -> str | N
         r = guild.get_role(rid) if guild else None
         return r.mention if r else f"<@&{rid}>"
 
+    # Emoji do PRÓPRIO servidor (prioriza animados); cai no do bot se não houver
+    _e_cargo = str(_guild_emoji(
+        guild, "coroa", "crown", "rank", "trofeu", "medal", "vip", "up", "seta",
+        fallback="<:evolution_g:1518272004560654579>"))
+
     cur = _mc_current_tier_index(member, tiers)
     nxt = cur + 1
     peso = settings.get("mc_muted_weight", 25)
 
+    _e_ok = str(_guild_emoji(
+        guild, "certo", "correto", "check", "verificado", "sim", "confirm",
+        fallback="<a:verificadoverde:1518272098290892810>"))
+
     # Topo da escada — mostra o que precisa manter para não cair
     if nxt >= len(tiers):
         manter = tiers[cur].get("meta", 0)
-        return (f"<:f1:1518271958024720555> {_rmention(cur)} · **topo da escada!**\n"
-                f"-# <:evolution_g:1518272004560654579> Mantenha `{_fmt_vt(manter)}` "
+        _e_top = str(_guild_emoji(
+            guild, "coroa", "crown", "trofeu", "top", "rei", "king", "estrela", "star",
+            fallback="<:f1:1518271958024720555>"))
+        return (f"{_e_top} {_rmention(cur)} · **topo da escada!**\n"
+                f"-# {_e_cargo} Mantenha `{_fmt_vt(manter)}` "
                 f"efetivas por semana para não cair.")
 
     meta  = tiers[nxt].get("meta", 0)
@@ -46819,15 +46831,14 @@ def _mc_progress_text(guild, settings: dict, member, eff_week: float) -> str | N
 
     # Já bateu a meta — sobe no próximo ciclo (2 min)
     if falta <= 0:
-        return (f"<:evolution_g:1518272004560654579> {atual} → {_rmention(nxt)}\n"
-                f"-# <a:verificadoverde:1518272098290892810> Meta batida! "
-                f"Subindo de cargo em instantes...")
+        return (f"{_e_cargo} {atual} → {_rmention(nxt)}\n"
+                f"-# {_e_ok} Meta batida! Subindo de cargo em instantes...")
 
     # Barra de progresso visual até a próxima meta
     _pct  = 0 if meta <= 0 else max(0.0, min(1.0, eff_week / meta))
     _full = int(_pct * 10)
     _bar  = "█" * _full + "░" * (10 - _full)
-    return (f"<:vender_cargo:1518272029604970719> {atual} → próximo: {_rmention(nxt)}\n"
+    return (f"{_e_cargo} {atual} → próximo: {_rmention(nxt)}\n"
             f"-# `{_bar}` **{int(_pct * 100)}%** · faltam `{_fmt_vt(falta)}` "
             f"de `{_fmt_vt(meta)}` efetivas · mutado vale `{peso}%`")
 
@@ -46874,9 +46885,19 @@ async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: in
         r = guild.get_role(tiers[i].get("role"))
         return r.mention if r else f"<@&{tiers[i].get('role')}>"
 
-    up    = kind == "promovido"
-    emoji = ("<:evolution_g:1518272004560654579>" if up
-             else "<a:redalert:1518272086018097352>")
+    up = kind == "promovido"
+    # Emojis do PRÓPRIO servidor (prioriza animados); fallback = emoji do bot
+    if up:
+        emoji = str(_guild_emoji(
+            guild, "up", "subiu", "seta", "coroa", "trofeu", "evolution", "vip",
+            fallback="<:evolution_g:1518272004560654579>"))
+    else:
+        emoji = str(_guild_emoji(
+            guild, "down", "caiu", "desceu", "red", "alerta", "negativo",
+            fallback="<a:redalert:1518272086018097352>"))
+    _e_ok = str(_guild_emoji(
+        guild, "certo", "correto", "check", "verificado", "sim", "confirm",
+        fallback="<a:verificadoverde:1518272098290892810>"))
     titulo = "Subiu de cargo!" if up else "Rebaixado"
     meta   = tiers[idx].get("meta", 0) if 0 <= idx < len(tiers) else 0
 
@@ -46890,8 +46911,7 @@ async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: in
     )
     if up and meta:
         emb.description += (
-            f"\n-# <a:verificadoverde:1518272098290892810> Bateu a meta de "
-            f"`{_fmt_vt(meta)}` na semana."
+            f"\n-# {_e_ok} Bateu a meta de `{_fmt_vt(meta)}` na semana."
         )
     elif not up:
         _perdida = tiers[old_idx].get("meta", 0) if (old_idx is not None and 0 <= old_idx < len(tiers)) else 0
