@@ -4853,6 +4853,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("mc_enabled", False)
     settings.setdefault("mc_tiers", [])              # [{"role": int, "meta": int_segundos}]
     settings.setdefault("mc_muted_weight", 25)       # % que o tempo mutado vale
+    settings.setdefault("mc_exempt_roles", [])       # cargos isentos (não sobem/caem)
     settings.setdefault("mc_log_channel", None)
     settings.setdefault("mc_last_eval_week", "")     # controle da avaliação semanal
     settings.setdefault("mc_emojis", {})             # {up, down, ok, top} personalizados
@@ -47051,6 +47052,15 @@ async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: in
         pass
 
 
+def _mc_is_exempt(member, settings: dict) -> bool:
+    """True se o membro tem algum cargo isento — o sistema de upamento o ignora
+    (não sobe nem cai)."""
+    ex = set(settings.get("mc_exempt_roles", []))
+    if not ex or not isinstance(member, discord.Member):
+        return False
+    return bool(ex & {r.id for r in member.roles})
+
+
 async def _mc_check_member(guild, settings: dict, member: discord.Member, tiers: list):
     """Promoção em tempo real: coloca o membro DIRETO no cargo mais alto cuja meta
     semanal ele já bateu, numa única troca.
@@ -47059,6 +47069,8 @@ async def _mc_check_member(guild, settings: dict, member: discord.Member, tiers:
     tem o tempo de VÁRIOS degraus, isso ficava tirando e colocando cargo a cada
     2 min até chegar no lugar — poluía o canal de logs e o histórico do membro.
     O resultado final é idêntico (ele bateu a meta de todos os degraus abaixo)."""
+    if _mc_is_exempt(member, settings):
+        return  # cargo isento — não participa do upamento
     weight = settings.get("mc_muted_weight", 25)
     data = _get_user_vt(guild.id, member.id)
     _vt_rotate(data)
@@ -47106,6 +47118,8 @@ async def _mc_eval_guild_weekly(guild, settings: dict):
     n = 0
     _now_ts = datetime.now().timestamp()
     for m in membros.values():
+        if _mc_is_exempt(m, settings):
+            continue  # cargo isento — não é rebaixado
         cur = _mc_current_tier_index(m, tiers)
         if cur < 0:
             continue
@@ -47213,12 +47227,16 @@ def build_movcall_embed(author: discord.Member, settings: dict) -> discord.Embed
     else:
         tiers_val = "`Nenhum cargo configurado`"
 
+    _ex_ids = settings.get("mc_exempt_roles", [])
+    _isentos_val = ", ".join(f"<@&{r}>" for r in _ex_ids[:10]) if _ex_ids else "`Nenhum`"
+
     embed.add_field(
         name="<:mov_call:1518271964077232150>  Informações",
         value=(
             f"┃ **Status:** {status}\n"
             f"**Peso do tempo mutado:** `{weight}%`\n"
             f"**Canal de Logs:** {log_val}\n"
+            f"**Cargos Isentos:** {_isentos_val}\n"
             f"**Emojis:** {_mc_emoji(settings, 'up')} subiu · "
             f"{_mc_emoji(settings, 'down')} caiu · "
             f"{_mc_emoji(settings, 'ok')} meta · "
@@ -47271,9 +47289,10 @@ class MovCallView(discord.ui.View):
             [("Remover Cargo", discord.ButtonStyle.secondary, self._rem_cargo),
              ("Peso do Mutado", discord.ButtonStyle.secondary, self._weight),
              ("Canal de Logs", discord.ButtonStyle.secondary, self._log)],
-            [("Emojis", discord.ButtonStyle.secondary, self._emojis),
-             ("Resetar Tempo", discord.ButtonStyle.danger, self._reset_tempo),
-             ("Resetar Configurações", discord.ButtonStyle.danger, self._reset)],
+            [("Cargos Isentos", discord.ButtonStyle.secondary, self._isentos),
+             ("Emojis", discord.ButtonStyle.secondary, self._emojis),
+             ("Resetar Tempo", discord.ButtonStyle.danger, self._reset_tempo)],
+            [("Resetar Configurações", discord.ButtonStyle.danger, self._reset)],
         ]
         for r, row in enumerate(rows):
             for label, style, cb in row:
@@ -47342,6 +47361,13 @@ class MovCallView(discord.ui.View):
     async def _emojis(self, interaction: discord.Interaction):
         await interaction.response.send_modal(McEmojisModal(self))
 
+    async def _isentos(self, interaction: discord.Interaction):
+        view = discord.ui.View(timeout=180)
+        view.add_item(McIsentosSelect(self))
+        await interaction.response.send_message(embed=_notif_embed(
+            "Selecione os **cargos isentos** — quem tiver um deles **não sobe nem cai** "
+            "no sistema de upamento. Deixe vazio para não isentar ninguém."), view=view, ephemeral=True)
+
     async def _reset_tempo(self, interaction: discord.Interaction):
         view = McResetTempoView(self.author)
         await interaction.response.send_message(
@@ -47355,10 +47381,35 @@ class MovCallView(discord.ui.View):
         settings["mc_log_channel"] = None
         settings["mc_last_eval_week"] = ""
         settings["mc_emojis"] = {}
+        settings["mc_exempt_roles"] = []
         save_settings_to_disk()
         await self._refresh(interaction)
         await interaction.followup.send(embed=_notif_embed(
             "<a:online:1518271945550856295> Movimentação de Call resetada."), ephemeral=True)
+
+
+class McIsentosSelect(discord.ui.RoleSelect):
+    def __init__(self, parent: "MovCallView"):
+        cur = get_settings(parent.author.guild.id if parent.author.guild else 0).get("mc_exempt_roles", [])
+        _dv = [discord.SelectDefaultValue(id=rid, type=discord.SelectDefaultValueType.role)
+               for rid in cur[:25]]
+        super().__init__(placeholder="Cargos isentos (vazio = nenhum)",
+                         min_values=0, max_values=25, default_values=_dv)
+        self.parent_view = parent   # 'parent' é read-only em discord.ui.Item
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["mc_exempt_roles"] = [r.id for r in self.values]
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_movcall_embed(self.parent_view.author, settings),
+                view=MovCallView(self.parent_view.author))
+        except discord.HTTPException:
+            pass
+        _txt = (", ".join(r.mention for r in self.values)) if self.values else "`Nenhum`"
+        await interaction.followup.send(embed=_notif_embed(
+            f"<a:online:1518271945550856295> Cargos isentos atualizados: {_txt}"), ephemeral=True)
 
 
 class McRoleSelect(discord.ui.RoleSelect):
