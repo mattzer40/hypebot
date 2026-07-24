@@ -47004,8 +47004,10 @@ async def _mc_check_member(guild, settings: dict, member: discord.Member, tiers:
 
 
 async def _mc_eval_guild_weekly(guild, settings: dict):
-    """Rebaixamento semanal: quem não bateu a meta do próprio cargo na semana que
-    terminou cai 1 nível."""
+    """Rebaixamento de fim de semana (domingo 23:00, horário de Brasília):
+    quem não bateu a meta do próprio cargo NA SEMANA QUE ESTÁ FECHANDO cai 1 nível.
+    Como o contador só zera na segunda 00:00, aqui lemos a semana CORRENTE
+    (week_seconds) somada à sessão de call em andamento."""
     tiers = _mc_tiers_sorted(settings)
     if not tiers:
         return
@@ -47017,15 +47019,20 @@ async def _mc_eval_guild_weekly(guild, settings: dict):
             for m in role.members:
                 membros[m.id] = m
     n = 0
+    _now_ts = datetime.now().timestamp()
     for m in membros.values():
         cur = _mc_current_tier_index(m, tiers)
         if cur < 0:
             continue
         data = _get_user_vt(guild.id, m.id)
-        _vt_rotate(data)  # garante que last_week reflete a semana que terminou
+        _vt_rotate(data)
+        # Conta quem está em call NESTE momento (sessão ainda não commitada)
+        _sess  = _voice_sessions.get((guild.id, m.id))
+        _extra = (_now_ts - _sess["join"]) if _sess else 0
+        _exmut = (_now_ts - _sess["mute_start"]) if (_sess and _sess.get("mute_start")) else 0
         eff = _mc_effective(
-            data.get("last_week_seconds", 0),
-            data.get("last_week_muted_seconds", 0),
+            data.get("week_seconds", 0) + _extra,
+            data.get("week_muted_seconds", 0) + _exmut,
             weight,
         )
         if eff < tiers[cur].get("meta", 0):
@@ -47066,9 +47073,14 @@ async def _mc_promo_before():
     await bot.wait_until_ready()
 
 
-@tasks.loop(minutes=20)
+@tasks.loop(minutes=10)
 async def _mc_weekly_task():
-    this_week = _vt_week_start()
+    # Rebaixamento roda no FIM da semana: DOMINGO a partir das 23:00.
+    # datetime.now() já está em America/Sao_Paulo (TZ definido no topo do arquivo).
+    _now = datetime.now()
+    if _now.weekday() != 6 or _now.hour < 23:
+        return
+    marker = _now.date().isoformat()  # 1 execução por domingo
     for guild in list(bot.guilds):
         try:
             settings = get_settings(guild.id)
@@ -47076,15 +47088,10 @@ async def _mc_weekly_task():
                 continue
             if not _mc_tiers_sorted(settings):
                 continue
-            last = settings.get("mc_last_eval_week", "")
-            if last == "":
-                settings["mc_last_eval_week"] = this_week  # bootstrap: não avalia
-                save_settings_to_disk()
-                continue
-            if last == this_week:
-                continue
+            if settings.get("mc_last_eval_week") == marker:
+                continue  # já rodou neste domingo
             await _mc_eval_guild_weekly(guild, settings)
-            settings["mc_last_eval_week"] = this_week
+            settings["mc_last_eval_week"] = marker
             save_settings_to_disk()
         except Exception as _e:
             print(f"[mov_call] weekly erro g={guild.id}: {_e}", flush=True)
@@ -47143,7 +47150,7 @@ def build_movcall_embed(author: discord.Member, settings: dict) -> discord.Embed
         name="<:entretenimento_:1518271992191779038>  Como funciona",
         value=(
             "Ao atingir a meta semanal do próximo cargo, o membro **sobe 1 nível na hora**. "
-            "Toda **segunda-feira**, quem **não bateu a meta do próprio cargo** cai **1 nível**. "
+            "Todo **domingo às 23:00**, quem **não bateu a meta do próprio cargo** cai **1 nível**. "
             "O tempo **mutado** conta menos (peso acima). Os cargos são ordenados pela meta."
         ),
         inline=False,
