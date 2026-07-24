@@ -46843,22 +46843,40 @@ def _mc_progress_text(guild, settings: dict, member, eff_week: float) -> str | N
             f"de `{_fmt_vt(meta)}` efetivas · mutado vale `{peso}%`")
 
 
-async def _mc_set_tier(member: discord.Member, tiers: list, target_idx: int):
-    """Deixa o membro APENAS com o cargo do target_idx (remove os outros da escada)."""
+_mc_perm_warned: dict[int, float] = {}  # guild_id -> ts do último aviso (anti-spam)
+
+
+async def _mc_set_tier(member: discord.Member, tiers: list, target_idx: int) -> tuple[bool, str]:
+    """Deixa o membro APENAS com o cargo do target_idx (remove os outros da escada).
+    Retorna (ok, motivo). ok=False quando o cargo NÃO pôde ser aplicado — assim o
+    chamador não registra 'subiu de cargo' mentindo."""
+    guild = member.guild
     desired = tiers[target_idx].get("role") if 0 <= target_idx < len(tiers) else None
     tier_role_ids = {t.get("role") for t in tiers}
     member_role_ids = {r.id for r in member.roles}
-    guild = member.guild
+
+    me = guild.me if guild else None
+    if me is None:
+        return False, "bot não encontrado no servidor"
+    if not me.guild_permissions.manage_roles:
+        return False, "o bot está **sem a permissão `Gerenciar Cargos`**"
+
     to_add, to_remove = [], []
     if desired and desired not in member_role_ids:
         r = guild.get_role(desired)
-        if r:
-            to_add.append(r)
+        if r is None:
+            return False, f"o cargo `{desired}` não existe mais no servidor"
+        # Hierarquia: o bot só gerencia cargos ABAIXO do cargo mais alto dele
+        if r >= me.top_role:
+            return False, (f"o cargo {r.mention} está **acima (ou igual)** do cargo do bot "
+                           f"({me.top_role.mention}) na hierarquia")
+        to_add.append(r)
     for rid in tier_role_ids:
         if rid != desired and rid in member_role_ids:
             r = guild.get_role(rid)
-            if r:
+            if r and r < me.top_role:
                 to_remove.append(r)
+
     try:
         if to_add:
             for r in to_add:
@@ -46868,8 +46886,38 @@ async def _mc_set_tier(member: discord.Member, tiers: list, target_idx: int):
             for r in to_remove:
                 _register_bot_role_action(member.id, r.id, "remove")
             await member.remove_roles(*to_remove, reason="Movimentação de Call")
+    except discord.Forbidden:
+        return False, "o Discord recusou (**403**) — confira `Gerenciar Cargos` e a hierarquia"
     except discord.HTTPException as _e:
         print(f"[mov_call] set_tier erro ({member.id}): {_e}", flush=True)
+        return False, f"erro do Discord: `{_e}`"
+    return True, ""
+
+
+async def _mc_warn_perm(guild, settings: dict, motivo: str):
+    """Avisa no canal de logs que o cargo não pôde ser aplicado (1x por hora/guild)."""
+    import time as _t
+    _now = _t.time()
+    if _now - _mc_perm_warned.get(guild.id, 0) < 3600:
+        return
+    _mc_perm_warned[guild.id] = _now
+    print(f"[mov_call] {guild.id}: NÃO consegui aplicar cargo — {motivo}", flush=True)
+    cid = settings.get("mc_log_channel")
+    ch = guild.get_channel(cid) if cid else None
+    if not isinstance(ch, discord.TextChannel):
+        return
+    emb = discord.Embed(color=0xED4245)
+    emb.set_author(name="Movimentação de Call — não consegui aplicar o cargo")
+    emb.description = (
+        f"<a:alerta:1518271939460857968> {motivo}.\n\n"
+        "**Como resolver:** em *Configurações do Servidor → Cargos*, dê **Gerenciar Cargos** "
+        "ao cargo do bot e **arraste o cargo do bot para ACIMA** dos cargos da escada."
+    )
+    emb.timestamp = datetime.now()
+    try:
+        await ch.send(embed=emb)
+    except discord.HTTPException:
+        pass
 
 
 async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: int,
@@ -46946,7 +46994,11 @@ async def _mc_check_member(guild, settings: dict, member: discord.Member, tiers:
     cur = _mc_current_tier_index(member, tiers)
     nxt = cur + 1
     if nxt < len(tiers) and eff >= tiers[nxt].get("meta", 0):
-        await _mc_set_tier(member, tiers, nxt)
+        _ok, _motivo = await _mc_set_tier(member, tiers, nxt)
+        if not _ok:
+            # Não aplicou o cargo — avisa o admin em vez de logar promoção falsa
+            await _mc_warn_perm(guild, settings, _motivo)
+            return
         await _mc_log(guild, settings, member, "promovido", tiers, nxt, old_idx=cur)
 
 
@@ -46976,7 +47028,10 @@ async def _mc_eval_guild_weekly(guild, settings: dict):
             weight,
         )
         if eff < tiers[cur].get("meta", 0):
-            await _mc_set_tier(m, tiers, cur - 1)
+            _ok, _motivo = await _mc_set_tier(m, tiers, cur - 1)
+            if not _ok:
+                await _mc_warn_perm(guild, settings, _motivo)
+                continue
             await _mc_log(guild, settings, m, "rebaixado", tiers, cur - 1, old_idx=cur)
             n += 1
             await asyncio.sleep(0.5)  # evita rajada de rate limit
