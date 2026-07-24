@@ -47008,13 +47008,16 @@ async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: in
     if not isinstance(ch, discord.TextChannel):
         return
 
-    def _tier_txt(i) -> str:
+    up = kind == "promovido"
+
+    def _tier_txt(i, *, origem: bool = False) -> str:
+        # Fora da escada: ao SUBIR mostra "Nenhum" (De: Nenhum → cargo);
+        # ao CAIR mostra "@everyone" (De: cargo → @everyone).
         if i is None or not (0 <= i < len(tiers)):
-            return "`@everyone`"
+            return "`Nenhum`" if (up and origem) else "`@everyone`"
         r = guild.get_role(tiers[i].get("role"))
         return r.mention if r else f"<@&{tiers[i].get('role')}>"
 
-    up     = kind == "promovido"
     emoji  = _mc_emoji(settings, "up" if up else "down")
     _e_ok  = _mc_emoji(settings, "ok")
     titulo = "Subiu de cargo!" if up else "Rebaixado"
@@ -47027,7 +47030,7 @@ async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: in
     emb.set_thumbnail(url=member.display_avatar.url)
     emb.description = (
         f"{emoji} {member.mention}\n"
-        f"**De:** {_tier_txt(old_idx)}  →  **Para:** {_tier_txt(idx)}"
+        f"**De:** {_tier_txt(old_idx, origem=True)}  →  **Para:** {_tier_txt(idx)}"
     )
     if up and meta:
         emb.description += (
