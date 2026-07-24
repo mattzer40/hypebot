@@ -4855,6 +4855,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("mc_muted_weight", 25)       # % que o tempo mutado vale
     settings.setdefault("mc_log_channel", None)
     settings.setdefault("mc_last_eval_week", "")     # controle da avaliação semanal
+    settings.setdefault("mc_emojis", {})             # {up, down, ok, top} personalizados
     settings.setdefault("welcome_enabled", False)
     settings.setdefault("welcome_msg_entrar_enabled", True)
     settings.setdefault("welcome_msg_registro_enabled", False)
@@ -46788,6 +46789,23 @@ def _mc_current_tier_index(member: discord.Member, tiers: list) -> int:
     return idx
 
 
+# Emojis do sistema — defaults coerentes; o admin pode trocar no painel (botão Emojis)
+_MC_EMOJI_DEFAULTS = {
+    "up":   "<:evolution_g:1518272004560654579>",      # subiu de cargo
+    "down": "<a:redalert:1518272086018097352>",        # caiu de cargo
+    "ok":   "<a:verificadoverde:1518272098290892810>",  # bateu a meta
+    "top":  "<:f1:1518271958024720555>",               # topo da escada
+}
+
+
+def _mc_emoji(settings: dict, key: str) -> str:
+    """Emoji configurado pelo admin (painel → Emojis) ou o default do sistema."""
+    val = (settings.get("mc_emojis") or {}).get(key)
+    if isinstance(val, str) and val.strip():
+        return val.strip()
+    return _MC_EMOJI_DEFAULTS.get(key, "")
+
+
 def _mc_progress_text(guild, settings: dict, member, eff_week: float) -> str | None:
     """Linha de progresso da escada para mostrar no /tempo: cargo atual e quanto
     falta pra bater a meta do próximo. None se o sistema estiver off/sem cargos."""
@@ -46802,25 +46820,17 @@ def _mc_progress_text(guild, settings: dict, member, eff_week: float) -> str | N
         r = guild.get_role(rid) if guild else None
         return r.mention if r else f"<@&{rid}>"
 
-    # Emoji do PRÓPRIO servidor (prioriza animados); cai no do bot se não houver
-    _e_cargo = str(_guild_emoji(
-        guild, "coroa", "crown", "rank", "trofeu", "medal", "vip", "up", "seta",
-        fallback="<:evolution_g:1518272004560654579>"))
+    _e_cargo = _mc_emoji(settings, "up")
+    _e_ok    = _mc_emoji(settings, "ok")
 
     cur = _mc_current_tier_index(member, tiers)
     nxt = cur + 1
     peso = settings.get("mc_muted_weight", 25)
 
-    _e_ok = str(_guild_emoji(
-        guild, "certo", "correto", "check", "verificado", "sim", "confirm",
-        fallback="<a:verificadoverde:1518272098290892810>"))
-
     # Topo da escada — mostra o que precisa manter para não cair
     if nxt >= len(tiers):
         manter = tiers[cur].get("meta", 0)
-        _e_top = str(_guild_emoji(
-            guild, "coroa", "crown", "trofeu", "top", "rei", "king", "estrela", "star",
-            fallback="<:f1:1518271958024720555>"))
+        _e_top = _mc_emoji(settings, "top")
         return (f"{_e_top} {_rmention(cur)} · **topo da escada!**\n"
                 f"-# {_e_cargo} Mantenha `{_fmt_vt(manter)}` "
                 f"efetivas por semana para não cair.")
@@ -46933,23 +46943,14 @@ async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: in
         r = guild.get_role(tiers[i].get("role"))
         return r.mention if r else f"<@&{tiers[i].get('role')}>"
 
-    up = kind == "promovido"
-    # Emojis do PRÓPRIO servidor (prioriza animados); fallback = emoji do bot
-    if up:
-        emoji = str(_guild_emoji(
-            guild, "up", "subiu", "seta", "coroa", "trofeu", "evolution", "vip",
-            fallback="<:evolution_g:1518272004560654579>"))
-    else:
-        emoji = str(_guild_emoji(
-            guild, "down", "caiu", "desceu", "red", "alerta", "negativo",
-            fallback="<a:redalert:1518272086018097352>"))
-    _e_ok = str(_guild_emoji(
-        guild, "certo", "correto", "check", "verificado", "sim", "confirm",
-        fallback="<a:verificadoverde:1518272098290892810>"))
+    up     = kind == "promovido"
+    emoji  = _mc_emoji(settings, "up" if up else "down")
+    _e_ok  = _mc_emoji(settings, "ok")
     titulo = "Subiu de cargo!" if up else "Rebaixado"
     meta   = tiers[idx].get("meta", 0) if 0 <= idx < len(tiers) else 0
 
-    emb = discord.Embed(color=0x57F287 if up else 0xED4245)
+    # Cor da barra lateral = a mesma cor de embed do menu (Aparência)
+    emb = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
     emb.set_author(name=f"{member.display_name} — {titulo}",
                    icon_url=member.display_avatar.url)
     emb.set_thumbnail(url=member.display_avatar.url)
@@ -47125,7 +47126,11 @@ def build_movcall_embed(author: discord.Member, settings: dict) -> discord.Embed
         value=(
             f"┃ **Status:** {status}\n"
             f"**Peso do tempo mutado:** `{weight}%`\n"
-            f"**Canal de Logs:** {log_val}"
+            f"**Canal de Logs:** {log_val}\n"
+            f"**Emojis:** {_mc_emoji(settings, 'up')} subiu · "
+            f"{_mc_emoji(settings, 'down')} caiu · "
+            f"{_mc_emoji(settings, 'ok')} meta · "
+            f"{_mc_emoji(settings, 'top')} topo"
         ),
         inline=False,
     )
@@ -47174,7 +47179,8 @@ class MovCallView(discord.ui.View):
             [("Remover Cargo", discord.ButtonStyle.secondary, self._rem_cargo),
              ("Peso do Mutado", discord.ButtonStyle.secondary, self._weight),
              ("Canal de Logs", discord.ButtonStyle.secondary, self._log)],
-            [("Resetar Configurações", discord.ButtonStyle.danger, self._reset)],
+            [("Emojis", discord.ButtonStyle.secondary, self._emojis),
+             ("Resetar Configurações", discord.ButtonStyle.danger, self._reset)],
         ]
         for r, row in enumerate(rows):
             for label, style, cb in row:
@@ -47240,6 +47246,9 @@ class MovCallView(discord.ui.View):
     async def _log(self, interaction: discord.Interaction):
         await interaction.response.send_modal(McLogModal(self))
 
+    async def _emojis(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(McEmojisModal(self))
+
     async def _reset(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         settings["mc_enabled"] = False
@@ -47247,6 +47256,7 @@ class MovCallView(discord.ui.View):
         settings["mc_muted_weight"] = 25
         settings["mc_log_channel"] = None
         settings["mc_last_eval_week"] = ""
+        settings["mc_emojis"] = {}
         save_settings_to_disk()
         await self._refresh(interaction)
         await interaction.followup.send(embed=_notif_embed(
@@ -47359,6 +47369,52 @@ class McWeightModal(discord.ui.Modal):
             pass
         await interaction.followup.send(embed=_notif_embed(
             f"<a:online:1518271945550856295> Peso do tempo mutado: `{w}%`."), ephemeral=True)
+
+
+class McEmojisModal(discord.ui.Modal):
+    """Deixa o admin colar os emojis que quiser (do próprio servidor).
+    Campo vazio = usa o emoji padrão do sistema."""
+
+    def __init__(self, parent: "MovCallView"):
+        super().__init__(title="Emojis da Movimentação de Call", timeout=300)
+        self.parent = parent
+        s = get_settings(parent.author.guild.id if parent.author.guild else 0)
+        cfg = s.get("mc_emojis") or {}
+        _campos = [
+            ("up",   "Subiu de cargo",  _MC_EMOJI_DEFAULTS["up"]),
+            ("down", "Caiu de cargo",   _MC_EMOJI_DEFAULTS["down"]),
+            ("ok",   "Bateu a meta",    _MC_EMOJI_DEFAULTS["ok"]),
+            ("top",  "Topo da escada",  _MC_EMOJI_DEFAULTS["top"]),
+        ]
+        self._inputs = {}
+        for _k, _lbl, _dft in _campos:
+            _i = discord.ui.TextInput(
+                label=_lbl, required=False, max_length=60,
+                default=cfg.get(_k) or "",
+                placeholder=f"Cole o emoji (vazio = padrão {_dft[:20]}…)",
+            )
+            self._inputs[_k] = _i
+            self.add_item(_i)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        cfg = settings.setdefault("mc_emojis", {})
+        for _k, _i in self._inputs.items():
+            _v = (_i.value or "").strip()
+            if _v:
+                cfg[_k] = _v
+            else:
+                cfg.pop(_k, None)   # vazio = volta pro padrão
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_movcall_embed(self.parent.author, settings),
+                view=MovCallView(self.parent.author))
+        except discord.HTTPException:
+            pass
+        _preview = " ".join(_mc_emoji(settings, k) for k in ("up", "down", "ok", "top"))
+        await interaction.followup.send(embed=_notif_embed(
+            f"<a:online:1518271945550856295> Emojis atualizados: {_preview}"), ephemeral=True)
 
 
 class McLogModal(discord.ui.Modal):
