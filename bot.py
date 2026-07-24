@@ -10592,7 +10592,8 @@ class WlCanaisModal(discord.ui.Modal):
 class WlCargoAprovadoSelect(discord.ui.RoleSelect):
     def __init__(self, parent: "WhitelistAdminView"):
         super().__init__(placeholder="Selecione o cargo aprovado", min_values=1, max_values=1)
-        self.parent = parent
+        # NÃO usar self.parent: discord.ui.Item define 'parent' como property read-only
+        self.parent_view = parent
 
     async def callback(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -10605,7 +10606,7 @@ class WlCargoAprovadoSelect(discord.ui.RoleSelect):
 class WlCargoRespSelect(discord.ui.RoleSelect):
     def __init__(self, parent: "WhitelistAdminView"):
         super().__init__(placeholder="Selecione os cargos responsáveis", min_values=1, max_values=10)
-        self.parent = parent
+        self.parent_view = parent
 
     async def callback(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -10622,7 +10623,7 @@ class WlCargoRespRemoveSelect(discord.ui.Select):
     def __init__(self, parent: "WhitelistAdminView", options: list):
         super().__init__(placeholder="Selecione para remover", min_values=1,
                          max_values=len(options), options=options)
-        self.parent = parent
+        self.parent_view = parent
 
     async def callback(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -46680,8 +46681,19 @@ async def tempo_slash(interaction: discord.Interaction, usuario: discord.Member 
         lw_mut     = data.get("last_week_muted_seconds", 0),
         lw_range   = _vt_week_range(lw_s) if lw_s else "sem semana anterior",
     )
+    # Progresso na escada de cargos (Movimentação de Call), se ativa
+    _mc_set = get_settings(gid)
+    _eff = _mc_effective(
+        data.get("week_seconds", 0) + extra,
+        data.get("week_muted_seconds", 0) + exmut,
+        _mc_set.get("mc_muted_weight", 25),
+    )
+    _prog = _mc_progress_text(interaction.guild, _mc_set, target, _eff)
     if card:
-        _msg = await interaction.followup.send(file=discord.File(card, filename="tempo.png"))
+        _kw = {"file": discord.File(card, filename="tempo.png")}
+        if _prog:
+            _kw["content"] = _prog
+        _msg = await interaction.followup.send(**_kw)
         async def _del():
             await asyncio.sleep(60)
             try:
@@ -46690,7 +46702,10 @@ async def tempo_slash(interaction: discord.Interaction, usuario: discord.Member 
                 pass
         asyncio.create_task(_del())
     else:
-        await interaction.followup.send(content=f"⏱️ **{target.display_name}** — Total: `{_fmt_vt(data.get('total_seconds', 0) + extra)}`")
+        _txt = f"⏱️ **{target.display_name}** — Total: `{_fmt_vt(data.get('total_seconds', 0) + extra)}`"
+        if _prog:
+            _txt += f"\n{_prog}"
+        await interaction.followup.send(content=_txt)
 
 
 # ── n!tempo ───────────────────────────────────────────────────────────────────
@@ -46719,8 +46734,19 @@ async def tempo_cmd(ctx: commands.Context, usuario: discord.Member = None):
             lw_mut     = data.get("last_week_muted_seconds", 0),
             lw_range   = _vt_week_range(lw_s) if lw_s else "sem semana anterior",
         )
+    # Progresso na escada de cargos (Movimentação de Call), se ativa
+    _mc_set = get_settings(gid)
+    _eff = _mc_effective(
+        data.get("week_seconds", 0) + extra,
+        data.get("week_muted_seconds", 0) + exmut,
+        _mc_set.get("mc_muted_weight", 25),
+    )
+    _prog = _mc_progress_text(ctx.guild, _mc_set, target, _eff)
     if card:
-        _msg = await ctx.send(file=discord.File(card, filename="tempo.png"))
+        _kw = {"file": discord.File(card, filename="tempo.png")}
+        if _prog:
+            _kw["content"] = _prog
+        _msg = await ctx.send(**_kw)
         async def _del():
             await asyncio.sleep(60)
             try:
@@ -46729,7 +46755,10 @@ async def tempo_cmd(ctx: commands.Context, usuario: discord.Member = None):
                 pass
         asyncio.create_task(_del())
     else:
-        await ctx.send(content=f"⏱️ **{target.display_name}** — Total: `{_fmt_vt(data.get('total_seconds', 0) + extra)}`")
+        _txt = f"⏱️ **{target.display_name}** — Total: `{_fmt_vt(data.get('total_seconds', 0) + extra)}`"
+        if _prog:
+            _txt += f"\n{_prog}"
+        await ctx.send(content=_txt)
 
 
 # =============================================================================
@@ -46757,6 +46786,41 @@ def _mc_current_tier_index(member: discord.Member, tiers: list) -> int:
         if t.get("role") in role_ids:
             idx = i
     return idx
+
+
+def _mc_progress_text(guild, settings: dict, member, eff_week: float) -> str | None:
+    """Linha de progresso da escada para mostrar no /tempo: cargo atual e quanto
+    falta pra bater a meta do próximo. None se o sistema estiver off/sem cargos."""
+    if not settings.get("mc_enabled"):
+        return None
+    tiers = _mc_tiers_sorted(settings)
+    if not tiers or not isinstance(member, discord.Member):
+        return None
+
+    def _rmention(idx: int) -> str:
+        rid = tiers[idx].get("role")
+        r = guild.get_role(rid) if guild else None
+        return r.mention if r else f"<@&{rid}>"
+
+    cur = _mc_current_tier_index(member, tiers)
+    cur_txt = _rmention(cur) if cur >= 0 else "`Nenhum`"
+    nxt = cur + 1
+    peso = settings.get("mc_muted_weight", 25)
+
+    if nxt >= len(tiers):
+        return (f"<:vender_cargo:1518272029604970719> **Cargo atual:** {cur_txt} — "
+                f"<a:online:1518271945550856295> **nível máximo!**")
+
+    meta = tiers[nxt].get("meta", 0)
+    falta = meta - eff_week
+    if falta <= 0:
+        return (f"<:vender_cargo:1518272029604970719> **Cargo atual:** {cur_txt} · "
+                f"**Próximo:** {_rmention(nxt)}\n"
+                f"-# <a:online:1518271945550856295> Meta batida! Você sobe em instantes.")
+    return (f"<:vender_cargo:1518272029604970719> **Cargo atual:** {cur_txt} · "
+            f"**Próximo:** {_rmention(nxt)}\n"
+            f"-# <:mov_call:1518271964077232150> Faltam `{_fmt_vt(falta)}` de tempo efetivo "
+            f"nesta semana (meta `{_fmt_vt(meta)}` · mutado conta `{peso}%`)")
 
 
 async def _mc_set_tier(member: discord.Member, tiers: list, target_idx: int):
@@ -47083,10 +47147,11 @@ class MovCallView(discord.ui.View):
 class McRoleSelect(discord.ui.RoleSelect):
     def __init__(self, parent: "MovCallView"):
         super().__init__(placeholder="Selecione o cargo", min_values=1, max_values=1)
-        self.parent = parent
+        # NÃO usar self.parent: discord.ui.Item define 'parent' como property read-only
+        self.parent_view = parent
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(McMetaModal(self.parent, self.values[0].id))
+        await interaction.response.send_modal(McMetaModal(self.parent_view, self.values[0].id))
 
 
 class McMetaModal(discord.ui.Modal):
@@ -47137,7 +47202,7 @@ class McRemoveSelect(discord.ui.Select):
     def __init__(self, parent: "MovCallView", options: list):
         super().__init__(placeholder="Selecione para remover", min_values=1,
                          max_values=len(options), options=options)
-        self.parent = parent
+        self.parent_view = parent
 
     async def callback(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -47146,8 +47211,8 @@ class McRemoveSelect(discord.ui.Select):
         save_settings_to_disk()
         try:
             await interaction.response.edit_message(
-                embed=build_movcall_embed(self.parent.author, settings),
-                view=MovCallView(self.parent.author))
+                embed=build_movcall_embed(self.parent_view.author, settings),
+                view=MovCallView(self.parent_view.author))
         except discord.HTTPException:
             pass
         await interaction.followup.send(embed=_notif_embed(
