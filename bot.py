@@ -46798,6 +46798,77 @@ _MC_EMOJI_DEFAULTS = {
 }
 
 
+def _mc_reset_tempo(guild_id: int, escopo: str, user_id: int | None = None) -> int:
+    """Zera o tempo de call usado pelo /tempo e pela escada de cargos.
+
+    escopo: 'semana' (só a semana atual) ou 'tudo' (total + semana + semana passada).
+    user_id=None => todos os membros do servidor. Retorna quantos foram afetados.
+
+    Também reinicia as sessões de call EM ANDAMENTO: sem isso, quem estivesse em
+    call teria o tempo desde o join recontado logo em seguida, e o reset não valeria.
+    """
+    _now = datetime.now().timestamp()
+    ud = _voice_time.get(guild_id, {})
+    alvos = [user_id] if user_id is not None else list(ud.keys())
+    n = 0
+    for uid in alvos:
+        d = ud.get(uid)
+        if not d:
+            continue
+        if escopo == "tudo":
+            d.update({
+                "total_seconds": 0, "muted_seconds": 0,
+                "week_seconds": 0, "week_muted_seconds": 0,
+                "last_week_seconds": 0, "last_week_muted_seconds": 0,
+                "week_start": _vt_week_start(), "last_week_start": "",
+            })
+        else:
+            d.update({
+                "week_seconds": 0, "week_muted_seconds": 0,
+                "week_start": _vt_week_start(),
+            })
+        n += 1
+    # Sessões em andamento voltam a contar a partir de agora
+    for (_g, _u), _s in list(_voice_sessions.items()):
+        if _g == guild_id and (user_id is None or _u == user_id):
+            _s["join"] = _now
+            if _s.get("mute_start"):
+                _s["mute_start"] = _now
+    _save_voice_time()
+    print(f"[mov_call] reset de tempo ({escopo}) em {guild_id}: {n} membro(s)", flush=True)
+    return n
+
+
+async def _mc_reset_geral(guild, settings: dict) -> tuple[int, int]:
+    """Reset de TEMPORADA: zera o tempo de todos E remove os cargos da escada,
+    de modo que todos voltem ao @everyone e recomecem o upamento do zero.
+    Retorna (membros_com_tempo_zerado, membros_que_perderam_cargo)."""
+    tiers = _mc_tiers_sorted(settings)
+    n_tempo = _mc_reset_tempo(guild.id, "tudo", None)
+
+    membros: dict[int, discord.Member] = {}
+    for t in tiers:
+        r = guild.get_role(t.get("role"))
+        if r:
+            for m in r.members:
+                membros.setdefault(m.id, m)
+
+    n_cargo = 0
+    for m in membros.values():
+        _ok, _motivo = await _mc_set_tier(m, tiers, -1)   # -1 => remove todos os da escada
+        if not _ok:
+            await _mc_warn_perm(guild, settings, _motivo)
+            break                                        # sem permissão: não adianta seguir
+        n_cargo += 1
+        await asyncio.sleep(0.4)                         # evita rajada de rate limit
+
+    # Semana zerada: não deixa o rebaixamento de domingo julgar a temporada antiga
+    settings["mc_last_eval_week"] = datetime.now().date().isoformat()
+    save_settings_to_disk()
+    print(f"[mov_call] RESET GERAL em {guild.id}: {n_tempo} tempo(s), {n_cargo} cargo(s) removido(s)", flush=True)
+    return n_tempo, n_cargo
+
+
 def _mc_emoji(settings: dict, key: str) -> str:
     """Emoji configurado pelo admin (painel → Emojis) ou o default do sistema."""
     val = (settings.get("mc_emojis") or {}).get(key)
@@ -47198,6 +47269,7 @@ class MovCallView(discord.ui.View):
              ("Peso do Mutado", discord.ButtonStyle.secondary, self._weight),
              ("Canal de Logs", discord.ButtonStyle.secondary, self._log)],
             [("Emojis", discord.ButtonStyle.secondary, self._emojis),
+             ("Resetar Tempo", discord.ButtonStyle.danger, self._reset_tempo),
              ("Resetar Configurações", discord.ButtonStyle.danger, self._reset)],
         ]
         for r, row in enumerate(rows):
@@ -47266,6 +47338,11 @@ class MovCallView(discord.ui.View):
 
     async def _emojis(self, interaction: discord.Interaction):
         await interaction.response.send_modal(McEmojisModal(self))
+
+    async def _reset_tempo(self, interaction: discord.Interaction):
+        view = McResetTempoView(self.author)
+        await interaction.response.send_message(
+            embed=view.build_embed(), view=view, ephemeral=True)
 
     async def _reset(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -47387,6 +47464,140 @@ class McWeightModal(discord.ui.Modal):
             pass
         await interaction.followup.send(embed=_notif_embed(
             f"<a:online:1518271945550856295> Peso do tempo mutado: `{w}%`."), ephemeral=True)
+
+
+class McAlvoResetSelect(discord.ui.UserSelect):
+    def __init__(self, parent: "McResetTempoView"):
+        super().__init__(placeholder="Membro específico (deixe vazio = TODOS)",
+                         min_values=0, max_values=1)
+        self.parent_view = parent   # 'parent' é read-only em discord.ui.Item
+
+    async def callback(self, interaction: discord.Interaction):
+        self.parent_view.alvo = self.values[0] if self.values else None
+        self.parent_view.pendente = None       # trocar o alvo cancela a confirmação
+        self.parent_view._build()
+        await interaction.response.edit_message(
+            embed=self.parent_view.build_embed(), view=self.parent_view)
+
+
+class McResetTempoView(discord.ui.View):
+    """Reset do tempo de call (o mesmo que o /tempo mostra).
+    Escopo: semana atual ou tudo. Alvo: todos ou um membro. Confirma em 2 cliques."""
+
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=300)
+        self.author = author
+        self.alvo: discord.Member | None = None
+        self.pendente: str | None = None     # 'semana' | 'tudo' aguardando confirmação
+        self._build()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
+            await interaction.response.send_message(TRANSLATIONS[lang]["only_author"], ephemeral=True)
+            return False
+        return True
+
+    def build_embed(self) -> discord.Embed:
+        settings = get_settings(self.author.guild.id if self.author.guild else 0)
+        alvo_txt = self.alvo.mention if self.alvo else "**todos os membros**"
+        emb = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
+        emb.set_author(name="Resetar tempo de call")
+        emb.description = (
+            f"**Alvo (Semana/Tudo):** {alvo_txt}\n\n"
+            "<:mov_call:1518271964077232150> **Semana** — zera só o tempo desta semana "
+            "(o que vale para as metas). Mantém os cargos.\n"
+            "<a:alerta:1518271939460857968> **Tudo** — zera tempo total, da semana e da "
+            "semana passada. Mantém os cargos.\n"
+            "<a:redalert:1518272086018097352> **Geral (temporada)** — zera o tempo de "
+            "**todos** e **remove os cargos da escada**: todo mundo volta ao `@everyone` "
+            "e recomeça o upamento do zero."
+        )
+        if self.pendente:
+            emb.color = 0xED4245
+            _nome = {"semana": "Resetar Semana", "tudo": "Resetar Tudo",
+                     "geral": "Resetar Geral"}[self.pendente]
+            emb.description += (
+                f"\n\n<a:redalert:1518272086018097352> **Confirme:** clique de novo em "
+                f"**{_nome}** para aplicar. Esta ação **não tem volta**."
+            )
+        return emb
+
+    def _build(self):
+        self.clear_items()
+        self.add_item(McAlvoResetSelect(self))
+        _cbs = {"semana": self._do_semana, "tudo": self._do_tudo, "geral": self._do_geral}
+        for _key, _label in (("semana", "Resetar Semana"), ("tudo", "Resetar Tudo"),
+                             ("geral", "Resetar Geral")):
+            _lbl = f"Confirmar: {_label}" if self.pendente == _key else _label
+            _b = discord.ui.Button(label=_lbl, style=discord.ButtonStyle.danger, row=1)
+            _b.callback = _cbs[_key]
+            self.add_item(_b)
+        _c = discord.ui.Button(label="Cancelar", style=discord.ButtonStyle.secondary, row=1)
+        _c.callback = self._cancelar
+        self.add_item(_c)
+
+    async def _cancelar(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            embed=_notif_embed("Reset cancelado."), view=None)
+
+    async def _do_semana(self, interaction: discord.Interaction):
+        await self._exec(interaction, "semana")
+
+    async def _do_tudo(self, interaction: discord.Interaction):
+        await self._exec(interaction, "tudo")
+
+    async def _do_geral(self, interaction: discord.Interaction):
+        await self._exec(interaction, "geral")
+
+    async def _exec(self, interaction: discord.Interaction, escopo: str):
+        # 1º clique só arma a confirmação
+        if self.pendente != escopo:
+            self.pendente = escopo
+            self._build()
+            await interaction.response.edit_message(embed=self.build_embed(), view=self)
+            return
+        settings = get_settings(interaction.guild.id)
+
+        if escopo == "geral":
+            # Pode demorar (remove cargo de muita gente) — responde antes
+            await interaction.response.edit_message(embed=_notif_embed(
+                "<a:load:1518322852028354600> Resetando temporada: zerando tempo e "
+                "removendo os cargos da escada..."), view=None)
+            n_tempo, n_cargo = await _mc_reset_geral(interaction.guild, settings)
+            alvo_txt = f"**{n_tempo}** membro(s)"
+            esc_txt = "GERAL (temporada)"
+            try:
+                await interaction.edit_original_response(embed=_notif_embed(
+                    f"<a:online:1518271945550856295> **Temporada resetada!**\n"
+                    f"Tempo zerado de **{n_tempo}** membro(s) e cargo removido de "
+                    f"**{n_cargo}**. Todos voltaram ao `@everyone` e recomeçam do zero."))
+            except discord.HTTPException:
+                pass
+        else:
+            n = _mc_reset_tempo(interaction.guild.id, escopo,
+                                self.alvo.id if self.alvo else None)
+            alvo_txt = self.alvo.mention if self.alvo else f"**{n}** membro(s)"
+            esc_txt = "da semana" if escopo == "semana" else "TOTAL"
+            await interaction.response.edit_message(embed=_notif_embed(
+                f"<a:online:1518271945550856295> Tempo {esc_txt} resetado para {alvo_txt}."),
+                view=None)
+        # Registra no canal de logs quem resetou
+        cid = settings.get("mc_log_channel")
+        ch = interaction.guild.get_channel(cid) if cid else None
+        if isinstance(ch, discord.TextChannel):
+            emb = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
+            emb.set_author(name="Tempo de call resetado",
+                           icon_url=interaction.user.display_avatar.url)
+            emb.description = (
+                f"<a:alerta:1518271939460857968> {interaction.user.mention} resetou o tempo "
+                f"**{esc_txt}** de {alvo_txt}."
+            )
+            emb.timestamp = datetime.now()
+            try:
+                await ch.send(embed=emb)
+            except discord.HTTPException:
+                pass
 
 
 class McEmojisModal(discord.ui.Modal):
