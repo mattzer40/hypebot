@@ -26559,7 +26559,7 @@ async def on_guild_update(before: discord.Guild, after: discord.Guild):
                     description=(
                         f"## 👑 Posse do Servidor\n\n"
                         f"Parabéns! Você recebeu a **posse** do servidor **{after.name}**.\n\n"
-                        f"<:estrela:1518272022093877309> Como novo dono, você tem controle total sobre o servidor e o bot.\n"
+                        f"<:f1:1518271958024720555> Como novo dono, você tem controle total sobre o servidor e o bot.\n"
                         f"<:bot_v3:1506343470242074785> Use `{prefix}perm` para gerenciar as permissões do bot."
                     ),
                 )
@@ -26569,7 +26569,7 @@ async def on_guild_update(before: discord.Guild, after: discord.Guild):
                     description=(
                         f"## 👑 Server Ownership\n\n"
                         f"Congratulations! You received the **ownership** of **{after.name}**.\n\n"
-                        f"<:estrela:1518272022093877309> As the new owner, you have full control over the server and the bot.\n"
+                        f"<:f1:1518271958024720555> As the new owner, you have full control over the server and the bot.\n"
                         f"<:bot_v3:1506343470242074785> Use `{prefix}perm` to manage bot permissions."
                     ),
                 )
@@ -46809,7 +46809,7 @@ def _mc_progress_text(guild, settings: dict, member, eff_week: float) -> str | N
     # Topo da escada — mostra o que precisa manter para não cair
     if nxt >= len(tiers):
         manter = tiers[cur].get("meta", 0)
-        return (f"<:estrela:1518272022093877309> {_rmention(cur)} · **topo da escada!**\n"
+        return (f"<:f1:1518271958024720555> {_rmention(cur)} · **topo da escada!**\n"
                 f"-# <:evolution_g:1518272004560654579> Mantenha `{_fmt_vt(manter)}` "
                 f"efetivas por semana para não cair.")
 
