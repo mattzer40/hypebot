@@ -43,7 +43,8 @@ CLIENTS_DIR    = DATA_DIR / "clientes"
 CLIENTS_DIR.mkdir(exist_ok=True)
 BACKUPS_DIR    = DATA_DIR / "backups"          # histórico versionado das configs
 BACKUPS_DIR.mkdir(exist_ok=True)
-_BACKUP_KEEP   = 50                            # quantas versões manter por cliente
+_BACKUP_KEEP   = 50                            # quantas versões recentes manter por cliente
+_BACKUP_KEEP_DAILY = 60                        # + 1 versão por dia (histórico longo)
 
 # ── Auto-download default_avatar.png se não existir ───────────────────────────
 _DEFAULT_AVATAR_URL = os.environ.get(
@@ -902,8 +903,40 @@ def _atomic_write_text(path, text: str) -> None:
     os.replace(tmp, path)
 
 
+# Chaves de ESTADO DE RUNTIME que vivem dentro do bot_settings.json mas NÃO são
+# config do /menu (dono de call, likes de post, contadores...). Elas mudam sozinhas
+# a cada poucos segundos; se entrarem no fingerprint, o dedup quebra e o backup
+# versiona a cada 30s — o histórico de 50 versões passa a cobrir só ~25 minutos.
+# Ignoradas SÓ no fingerprint: o snapshot salvo continua tendo o arquivo inteiro.
+_VOLATILE_KEYS = {
+    "active_call_owners", "active_call_panels",          # dono de call (join/leave)
+    "ig_post_likes", "ig_post_links", "ig_post_like_base",  # likes/links dos posts
+    "ig_last_highlight",
+    "ticket_total_count",                                # contador de tickets
+    "limite_ban_counts", "limite_ban_last_reset",
+    "gifs_autopostador_sent", "gifs_autopostador_last_posted",
+    "calendar_last_check",
+    "wl_pending",                                        # fichas pendentes da whitelist
+    "backup_data", "backup_last_timestamp",
+}
+
+
+def _strip_volatile(data):
+    """Remove as chaves de runtime de cada guild para o fingerprint refletir só config."""
+    if not isinstance(data, dict):
+        return data
+    out = {}
+    for gid, gset in data.items():
+        if isinstance(gset, dict):
+            out[gid] = {k: v for k, v in gset.items() if k not in _VOLATILE_KEYS}
+        else:
+            out[gid] = gset
+    return out
+
+
 def _settings_fingerprint(raw: str):
-    """Hash estável do conteúdo (None se vazio/inválido)."""
+    """Hash estável do conteúdo (None se vazio/inválido).
+    Ignora estado de runtime — versiona só mudança real de config do /menu."""
     try:
         data = json.loads(raw)
     except Exception:
@@ -911,7 +944,7 @@ def _settings_fingerprint(raw: str):
     if not data:
         return None
     import hashlib
-    norm = json.dumps(data, ensure_ascii=False, sort_keys=True)
+    norm = json.dumps(_strip_volatile(data), ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(norm.encode("utf-8")).hexdigest()
 
 
@@ -957,15 +990,27 @@ def backup_client_settings(cid: str, reason: str = "auto", force: bool = False):
 
 
 def _prune_backups(cid: str) -> None:
+    """Retenção em camadas: mantém as N versões mais recentes E a mais antiga de
+    cada dia (últimos _BACKUP_KEEP_DAILY dias). Sem isso, um cliente com muita
+    atividade perdia todo o histórico antigo e só sobravam minutos de backup."""
     cdir = BACKUPS_DIR / cid
     if not cdir.exists():
         return
     snaps = sorted(cdir.glob("*.json"), key=lambda p: p.name)
-    for old in snaps[:-_BACKUP_KEEP]:
-        try:
-            old.unlink()
-        except Exception:
-            pass
+    if len(snaps) <= _BACKUP_KEEP:
+        return
+    keep = set(snaps[-_BACKUP_KEEP:])            # as mais recentes
+    per_day: dict = {}
+    for p in snaps:
+        per_day.setdefault(p.name[:8], p)        # 1ª do dia (nome = YYYYMMDD-...)
+    for day in sorted(per_day)[-_BACKUP_KEEP_DAILY:]:
+        keep.add(per_day[day])                   # + 1 por dia (histórico longo)
+    for p in snaps:
+        if p not in keep:
+            try:
+                p.unlink()
+            except Exception:
+                pass
 
 
 def list_backups(cid: str) -> list:
