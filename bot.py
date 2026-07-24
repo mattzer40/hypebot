@@ -47010,7 +47010,7 @@ async def _mc_log(guild, settings: dict, member, kind: str, tiers: list, idx: in
 
     def _tier_txt(i) -> str:
         if i is None or not (0 <= i < len(tiers)):
-            return "`Nenhum`"
+            return "`@everyone`"
         r = guild.get_role(tiers[i].get("role"))
         return r.mention if r else f"<@&{tiers[i].get('role')}>"
 
