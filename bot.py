@@ -5306,6 +5306,60 @@ def _emoji_bank_write(name: str, anim: str, data: bytes | None) -> None:
         print(f"[emoji_bank] falha ao salvar '{name}': {_e}", flush=True)
 
 
+def _free_disk_space():
+    """EMERGÊNCIA (disco cheio — Errno 28): libera espaço no /data deletando SÓ caches
+    REGENERÁVEIS — emoji_bank (os Application Emojis já estão no Discord, o banco é só
+    fonte de re-criação) e o cache de imagens por URL. NUNCA toca em uploads permanentes
+    (`up_*`), settings, backups nem panelimg. Roda no boot antes de tudo."""
+    import shutil as _sh
+    def _du_mb(p):
+        _t = 0
+        try:
+            for _r, _d, _fs in os.walk(p):
+                for _f in _fs:
+                    try:
+                        _t += os.path.getsize(os.path.join(_r, _f))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return _t // (1024 * 1024)
+    try:
+        _root = os.path.dirname(_CLIENT_DIR) or _CLIENT_DIR
+        print(f"[disk] antes: /data ~{_du_mb('/data')}MB | raiz clientes ~{_du_mb(_root)}MB", flush=True)
+        _dirs = []
+        try:
+            for _e in os.listdir(_root):
+                _p = os.path.join(_root, _e)
+                if os.path.isdir(_p):
+                    _dirs.append(_p)
+        except Exception:
+            pass
+        if _CLIENT_DIR not in _dirs:
+            _dirs.append(_CLIENT_DIR)
+        _freed = 0
+        for _cd in _dirs:
+            _eb = os.path.join(_cd, "emoji_bank")
+            if os.path.isdir(_eb):
+                _freed += _du_mb(_eb)
+                _sh.rmtree(_eb, ignore_errors=True)
+            _pic = os.path.join(_cd, "panel_img_cache")
+            if os.path.isdir(_pic):
+                try:
+                    for _f in os.listdir(_pic):
+                        if not _f.startswith("up_"):  # mantém uploads permanentes
+                            try:
+                                os.remove(os.path.join(_pic, _f))
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+        print(f"[disk] liberado ~{_freed}MB (emoji_bank) + cache de imagens por URL | "
+              f"depois: /data ~{_du_mb('/data')}MB", flush=True)
+    except Exception as _e:
+        print(f"[disk] erro: {_e}", flush=True)
+
+
 async def _setup_all_emojis() -> None:
     """Cria Application Emojis para TODOS os emojis usados no bot (globals + inline strings).
     Application Emojis funcionam em qualquer servidor, sem depender de guild membership.
@@ -5361,27 +5415,9 @@ async def _setup_all_emojis() -> None:
     except Exception as _ex:
         print(f"[emoji] fetch_application_emojis: {_ex}", flush=True)
 
-    # 2b. Popula o BANCO LOCAL (/data) a partir dos Application Emojis JÁ criados —
-    #     fonte própria do bot, não depende do HYPE. Só baixa os que faltam no banco,
-    #     então roda pesado só no 1º boot depois desta atualização.
-    _to_bank = [_ae for _ae in _existing_aes
-                if _ae.name in all_emojis and _emoji_bank_read(_ae.name) is None]
-    if _to_bank:
-        print(f"[emoji_bank] exportando {len(_to_bank)} emojis para o banco local...", flush=True)
-        import aiohttp as _aiohttp_bank
-        try:
-            async with _aiohttp_bank.ClientSession() as _bsess:
-                for _ae in _to_bank:
-                    try:
-                        async with _bsess.get(str(_ae.url)) as _br:
-                            if _br.status == 200:
-                                _anim_b = "a" if getattr(_ae, "animated", False) else ""
-                                _emoji_bank_write(_ae.name, _anim_b, await _br.read())
-                    except Exception:
-                        pass
-                    await asyncio.sleep(0.1)
-        except Exception as _bex:
-            print(f"[emoji_bank] erro ao exportar: {_bex}", flush=True)
+    # 2b. Export pro BANCO LOCAL DESLIGADO — estava enchendo o /data (Errno 28, No space
+    #     left on device). Os Application Emojis já estão criados no Discord (persistem
+    #     sozinhos), então o banco de imagens não é necessário no dia a dia.
 
     # 3. Cria Application Emojis para os que ainda faltam.
     #    Fonte PRIMÁRIA: BANCO LOCAL (/data/emoji_bank) — não depende de servidor.
@@ -30020,9 +30056,11 @@ async def on_ready():
     # on_ready dispara em reconexões — só inicia tasks uma vez (primeira conexão)
     if not getattr(bot, "_tasks_started", False):
         bot._tasks_started = True
+        _free_disk_space()  # EMERGÊNCIA: libera /data cheio (Errno 28) antes de tudo
         asyncio.create_task(_setup_success_emoji())
         asyncio.create_task(_setup_all_emojis())
-        asyncio.create_task(_collect_all_guild_emojis_to_bank())
+        # Coleta de emojis DESLIGADA — estava enchendo o /data (No space left on device).
+        # asyncio.create_task(_collect_all_guild_emojis_to_bank())
         asyncio.create_task(_autopostador_loop())
         asyncio.create_task(_settings_watchdog_loop())
         _load_embed_drafts()
