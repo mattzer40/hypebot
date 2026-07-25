@@ -47097,7 +47097,10 @@ async def _mc_check_member(guild, settings: dict, member: discord.Member, tiers:
         # Não aplicou o cargo — avisa o admin em vez de logar promoção falsa
         await _mc_warn_perm(guild, settings, _motivo)
         return
-    await _mc_log(guild, settings, member, "promovido", tiers, alvo, old_idx=cur)
+    # No log, mostra o cargo de ORIGEM: o que ele tinha (cur) ou, se não tinha
+    # nenhum, o degrau logo abaixo do novo (progressão natural na escada).
+    _origem = cur if cur >= 0 else (alvo - 1)
+    await _mc_log(guild, settings, member, "promovido", tiers, alvo, old_idx=_origem)
 
 
 async def _mc_eval_guild_weekly(guild, settings: dict):
