@@ -5119,19 +5119,24 @@ def _register_bot_role_action(member_id: int, role_id: int, action: str,
         # limpeza leve de entradas velhas (evita crescer sem limite)
         if len(bot_role_requester) > 500:
             for k, (_, t) in list(bot_role_requester.items()):
-                if now - t > 120:
+                if now - t > 400:
                     bot_role_requester.pop(k, None)
 
 
 def _get_role_action_requester(member_id: int, role_id: int, action: str) -> int | None:
-    """Quem pediu a ação (se o bot a fez a pedido de um humano), dentro de 60s."""
+    """Quem pediu a ação (se o bot a fez a pedido de um humano — groles, castigo,
+    verificação…), dentro de 5 min. CONSOME a entrada ao encontrar: cada pedido
+    atribui exatamente 1 log. A janela é longa porque o evento do groles costuma ser
+    engolido pelo early-exit do on_member_update e o log só aparece mais tarde (quando
+    o cache atualiza) — com só 60s o log caía no bot (@nata) em vez de quem usou o groles."""
     v = bot_role_requester.get((member_id, role_id, action))
     if not v:
         return None
     rid, ts = v
-    if datetime.now().timestamp() - ts > 60:
+    if datetime.now().timestamp() - ts > 300:
         bot_role_requester.pop((member_id, role_id, action), None)
         return None
+    bot_role_requester.pop((member_id, role_id, action), None)  # consume-on-use
     return rid
 
 
@@ -19584,6 +19589,65 @@ _AUDIT_STYLE = {
     "voice": _C_BLUE, "sec_cargos": _C_RED, "sec_antiraid": _C_RED, "sec_url": _C_RED,
 }
 
+# Emoji por tipo de evento no cabeçalho do log (a pedido do cliente — antes era sem
+# emoji). Todos são emojis do próprio bot (banco), então sempre renderizam.
+_AUDIT_EMOJI = {
+    "ban": "<a:redalert:1518272086018097352>", "unban": "<a:online:1518271945550856295>",
+    "kick": "<a:alerta:1518271939460857968>",
+    "role_create": "<a:online:1518271945550856295>", "role_delete": "<a:alerta:1518271939460857968>",
+    "role_update": "<:ferramentas_:1518271998613131274>",
+    "member_role_add": "<a:verificadoverde:1518272098290892810>",
+    "member_role_remove": "<a:alerta:1518271939460857968>",
+    "channel_create": "<:servidor_:1518271981189992638>", "channel_delete": "<a:alerta:1518271939460857968>",
+    "channel_update": "<:ferramentas_:1518271998613131274>",
+    "timeout": "<:bot_v3:1506343470242074785>", "voice_mute": "<:mov_call:1518271964077232150>",
+    "bot_add": "<:Bot:1518272060860928072>",
+    "join": "<:comunidade_:1518272016971595807>", "leave": "<:comunidade_:1518272016971595807>",
+    "msg_delete": "<:Mov_chat:1518271970008105031>", "msg_edit": "<:Mov_chat:1518271970008105031>",
+    "voice": "<:mov_call:1518271964077232150>",
+    "sec_cargos": "<:seguranca:1518271987393232936>", "sec_antiraid": "<:seguranca:1518271987393232936>",
+    "sec_url": "<:seguranca:1518271987393232936>",
+}
+
+
+def _audit_layout_from_embed(embed: discord.Embed, emoji: str | None = None):
+    """Converte um embed de log num card Components V2 — com LINHA NATIVA (Separator),
+    container colorido e cabeçalho com emoji. Deixa todas as logs com o visual novo.
+    Preserva título, autor, descrição, campos, thumbnail e rodapé do embed original."""
+    color = embed.colour.value if embed.colour else 0x2B2D31
+    items: list = []
+    _title = embed.title or (embed.author.name if embed.author else None)
+    _author_line = None
+    if embed.author and embed.author.name and embed.title:
+        _author_line = f"-# {embed.author.name}"
+    _thumb = embed.thumbnail.url if embed.thumbnail else None
+    if _title:
+        _head = f"{(emoji + '  ') if emoji else ''}**{_title}**"
+        if _author_line:
+            _head += f"\n{_author_line}"
+        if _thumb:
+            items.append(discord.ui.Section(
+                discord.ui.TextDisplay(_head),
+                accessory=discord.ui.Thumbnail(_thumb)))
+        else:
+            items.append(discord.ui.TextDisplay(_head))
+        items.append(discord.ui.Separator(visible=True))  # linha nativa
+    if embed.description:
+        items.append(discord.ui.TextDisplay(embed.description[:4000]))
+    for f in embed.fields:
+        items.append(discord.ui.TextDisplay(f"**{f.name}**\n{f.value}"[:4000]))
+    _foot = embed.footer.text if embed.footer else None
+    _ts = embed.timestamp
+    if _foot or _ts:
+        items.append(discord.ui.Separator(visible=True))  # linha nativa
+        _ft = _foot or ""
+        if _ts:
+            _ft += ("  •  " if _foot else "") + f"<t:{int(_ts.timestamp())}:f>"
+        items.append(discord.ui.TextDisplay(f"-# {_ft}"))
+    layout = discord.ui.LayoutView(timeout=None)
+    layout.add_item(discord.ui.Container(*items, accent_colour=color))
+    return layout
+
 
 async def _audit_log(guild, event_key, *, title=None, description=None, color=None,
                      fields=None, author_name=None, author_icon=None, thumbnail=None,
@@ -19626,7 +19690,14 @@ async def _audit_log(guild, event_key, *, title=None, description=None, color=No
                 embed.add_field(name=f[0], value=f[1], inline=(f[2] if len(f) > 2 else False))
             embed.set_footer(text=_footer_name(guild, settings))
             embed.timestamp = datetime.now()
-        await ch.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        # Visual novo: renderiza como card Components V2 (linha nativa + emoji). Se algo
+        # der errado na conversão/envio V2, cai no embed clássico — log é best-effort.
+        try:
+            _layout = _audit_layout_from_embed(embed, emoji=_AUDIT_EMOJI.get(event_key))
+            await ch.send(view=_layout, allowed_mentions=discord.AllowedMentions.none())
+        except Exception as _ve:
+            print(f"[audit_log] V2 falhou ({event_key}): {_ve} — fallback embed", flush=True)
+            await ch.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     except Exception as _e:
         print(f"[audit_log] {event_key}: {_e}", flush=True)
 
