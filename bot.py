@@ -45120,6 +45120,81 @@ async def restaurar_lox_cmd(ctx: commands.Context):
     asyncio.create_task(_run_restaurar_lox(ctx.channel.id, ctx.author.id, ctx.guild))
 
 
+# ── Trancar / Destrancar canal de texto (permissão: trancar_destrancar) ───────
+
+async def _lock_channel(ctx: commands.Context, trancar: bool) -> None:
+    if ctx.guild is None:
+        return
+    settings = get_settings(ctx.guild.id)
+    _is_owner_admin = bool(
+        ctx.author.id == ctx.guild.owner_id
+        or getattr(ctx.author.guild_permissions, "administrator", False))
+    if not (_is_owner_admin or _has_perm_category(ctx.author, "trancar_destrancar", settings)):
+        await ctx.reply(
+            f"{ctx.author.mention}, você não tem permissão para trancar/destrancar canais.",
+            allowed_mentions=discord.AllowedMentions(users=False), delete_after=10)
+        return
+    ch = ctx.channel
+    if not isinstance(ch, discord.TextChannel):
+        await ctx.reply(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> Este comando só funciona em canais de texto."),
+            delete_after=8)
+        return
+    me = ctx.guild.me
+    if not (me and ch.permissions_for(me).manage_channels):
+        await ctx.reply(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> O bot precisa da permissão **Gerenciar Canais** "
+            "neste canal para trancar/destrancar."), delete_after=10)
+        return
+    try:
+        ow = ch.overwrites_for(ctx.guild.default_role)
+        ow.send_messages = False if trancar else None
+        if trancar:
+            await ch.set_permissions(ctx.guild.default_role, overwrite=ow,
+                                     reason=f"Trancado por {ctx.author} ({ctx.author.id})")
+        else:
+            if ow.is_empty():
+                await ch.set_permissions(ctx.guild.default_role, overwrite=None,
+                                         reason=f"Destrancado por {ctx.author} ({ctx.author.id})")
+            else:
+                await ch.set_permissions(ctx.guild.default_role, overwrite=ow,
+                                         reason=f"Destrancado por {ctx.author} ({ctx.author.id})")
+    except discord.Forbidden:
+        await ctx.reply(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> Sem permissão para alterar o canal (verifique "
+            "**Gerenciar Canais** e a hierarquia do cargo do bot)."), delete_after=10)
+        return
+    except discord.HTTPException as _e:
+        await ctx.reply(embed=_notif_embed(
+            f"<a:alerta:1518271939460857968> Erro ao alterar o canal: `{_e}`"), delete_after=10)
+        return
+    if trancar:
+        emb = discord.Embed(color=0xED4245, description=(
+            f"<:seguranca:1518271987393232936> **Canal trancado** por {ctx.author.mention}.\n"
+            "-# O @everyone não pode mais enviar mensagens aqui."))
+    else:
+        emb = discord.Embed(color=0x57F287, description=(
+            f"<a:online:1518271945550856295> **Canal destrancado** por {ctx.author.mention}.\n"
+            "-# O @everyone já pode enviar mensagens novamente."))
+    emb.set_footer(text=_footer_name(ctx.guild, settings))
+    emb.timestamp = datetime.now()
+    try:
+        await ctx.message.delete()
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+        pass
+    await ch.send(embed=emb)
+
+
+@bot.command(name="lock", aliases=["trancar"])
+async def lock_cmd(ctx: commands.Context):
+    await _lock_channel(ctx, trancar=True)
+
+
+@bot.command(name="unlock", aliases=["destrancar"])
+async def unlock_cmd(ctx: commands.Context):
+    await _lock_channel(ctx, trancar=False)
+
+
 @bot.command(name="nuke")
 async def nuke_cmd(ctx: commands.Context, *, motivo: str = ""):
     """Nuke — recria o canal (deleta e clona) com confirmação."""
