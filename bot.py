@@ -9034,7 +9034,7 @@ class TicketMenuGerenciarOpcaoView(discord.ui.View):
         settings = get_settings(interaction.guild.id)
         panel = _find_panel(settings, self.panel_id) or {}
         view  = TicketOpcaoInternaV2View(self.author, panel, self.panel_id, self.opcao_id)
-        await interaction.response.send_message(view=view, ephemeral=True)
+        await interaction.response.send_message(view=view, ephemeral=True, files=view._preview_files)
 
 
 class TicketMenuOpcoesSelect(discord.ui.Select):
@@ -9504,12 +9504,12 @@ class TicketPainelLeiaView(discord.ui.View):
     async def _embed_painel(self, interaction: discord.Interaction):
         panel = _find_panel(get_settings(interaction.guild.id), self.panel_id) or {}
         view = TicketPanelV2View(self.author, panel, self.panel_id)
-        await interaction.response.send_message(view=view, ephemeral=True)
+        await interaction.response.send_message(view=view, ephemeral=True, files=view._preview_files)
 
     async def _embed_interna(self, interaction: discord.Interaction):
         panel = _find_panel(get_settings(interaction.guild.id), self.panel_id) or {}
         view = TicketInternaV2View(self.author, panel, self.panel_id)
-        await interaction.response.send_message(view=view, ephemeral=True)
+        await interaction.response.send_message(view=view, ephemeral=True, files=view._preview_files)
 
     async def _enviar_painel(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -11292,7 +11292,7 @@ class IgVerifView(discord.ui.View):
 
     async def _cfg_embed(self, interaction: discord.Interaction):
         view = IgVerifPanelV2BuilderView(self.author)
-        await interaction.response.send_message(view=view, ephemeral=True)
+        await interaction.response.send_message(view=view, ephemeral=True, files=view._preview_files)
 
     async def _reset(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -11943,7 +11943,10 @@ async def _handle_verif_check(interaction: discord.Interaction) -> None:
     # Aplica cargos
     member = guild.get_member(user.id) if guild else None
     add_roles: list[int] = settings.get("verif_add_roles", [])
-    rm_roles:  list[int] = settings.get("verif_remove_roles", [])
+    # Cargos do upamento (Movimentação de Call) são IMUNES à Verificação de URL —
+    # senão o bot promove e a verificação reboca o cargo em loop (a "duplicação").
+    _mc_tier_ids = {t.get("role") for t in (settings.get("mc_tiers") or []) if t.get("role")}
+    rm_roles:  list[int] = [rid for rid in settings.get("verif_remove_roles", []) if rid not in _mc_tier_ids]
     _removed_role_objs: list[discord.Role] = []
 
     if bio_has_url:
@@ -12093,8 +12096,11 @@ async def _varredura_verif(guild: discord.Guild, settings: dict) -> None:
             _log_ch = None
     print(f"[varredura] log_ch_id={log_ch_id} log_ch={_log_ch}", flush=True)
 
-    # Somente membros que possuem pelo menos um dos cargos de remoção
-    _role_objs = [r for rid in rm_roles if (r := guild.get_role(rid))]
+    # Somente membros que possuem pelo menos um dos cargos de remoção.
+    # Cargos da Movimentação de Call (upamento) NUNCA são removidos pela Verificação
+    # de URL — senão o bot promove e a varredura reboca o cargo em loop (duplicação).
+    _mc_tier_ids = {t.get("role") for t in (settings.get("mc_tiers") or []) if t.get("role")}
+    _role_objs = [r for rid in rm_roles if rid not in _mc_tier_ids and (r := guild.get_role(rid))]
     if not _role_objs:
         return
 
@@ -41002,6 +41008,36 @@ async def _store_uploaded_permanent(att) -> str:
     return att.url
 
 
+def _panel_v2_local_image_map(blocks: list) -> tuple[list, dict]:
+    """Versão SÍNCRONA para o PREVIEW do editor de painel V2. Resolve só as imagens
+    ENVIADAS (`panelimg:<arquivo>`) lendo o arquivo local do /data — sem rede. As
+    URLs http externas renderizam direto no preview (não precisam de anexo).
+    Devolve (files, url_map) onde url_map: 'panelimg:...' → 'attachment://arquivo'.
+    Sem isso, imagens enviadas por upload ficavam invisíveis no editor."""
+    files: list = []
+    url_map: dict = {}
+    idx = 0
+    for u in _panel_v2_image_urls(blocks):
+        if not (isinstance(u, str) and u.startswith("panelimg:")):
+            continue
+        _p = _panel_img_store_path(u.split(":", 1)[1])
+        try:
+            if not (os.path.exists(_p) and os.path.getsize(_p) > 100):
+                continue
+            with open(_p, "rb") as _cf:
+                _data = _cf.read()
+        except Exception:
+            continue
+        _base = u.split(":", 1)[1]
+        if "." not in _base:
+            _base += ".png"
+        _name = f"{idx}_{_base}"[:60]
+        idx += 1
+        files.append(discord.File(io.BytesIO(_data), filename=_name))
+        url_map[u] = f"attachment://{_name}"
+    return files, url_map
+
+
 async def _cache_uploaded_attachment(att) -> str:
     """Baixa os bytes de um anexo RECÉM-upado (URL ainda válida, inclusive as de
     `ephemeral-attachments`, que expiram em minutos) e grava no cache de imagens
@@ -41255,7 +41291,8 @@ class PanelV2TextModal(_ModalV2):
             blocks.append(block)
             msg = t["panelv2_block_added"]
         new_view = self.parent_view._rebuild()
-        await interaction.response.edit_message(view=new_view)
+        await interaction.response.edit_message(
+            view=new_view, attachments=getattr(new_view, "_preview_files", None) or [])
         await interaction.followup.send(embed=_notif_embed(msg), ephemeral=True)
 
 
@@ -41313,7 +41350,8 @@ class PanelV2GalleryModal(_ModalV2):
             blocks.append(block)
             msg = t["panelv2_block_added"]
         new_view = self.parent_view._rebuild()
-        await interaction.response.edit_message(view=new_view)
+        await interaction.response.edit_message(
+            view=new_view, attachments=getattr(new_view, "_preview_files", None) or [])
         await interaction.followup.send(embed=_notif_embed(msg), ephemeral=True)
 
 
@@ -41412,7 +41450,8 @@ class PanelV2SeparatorModal(_ModalV2):
                     blocks.append(block)
             msg = t["panelv2_block_added"]
         new_view = self.parent_view._rebuild()
-        await interaction.response.edit_message(view=new_view)
+        await interaction.response.edit_message(
+            view=new_view, attachments=getattr(new_view, "_preview_files", None) or [])
         await interaction.followup.send(embed=_notif_embed(msg), ephemeral=True)
 
 
@@ -41507,7 +41546,8 @@ class PanelV2AddSelect(discord.ui.Select):
             self.parent_view.panel.clear()
             self.parent_view.panel.update(_empty_panel_v2())
             new_view = self.parent_view._rebuild()
-            await interaction.response.edit_message(view=new_view)
+            await interaction.response.edit_message(
+                view=new_view, attachments=getattr(new_view, "_preview_files", None) or [])
             await interaction.followup.send(embed=_notif_embed(t["panelv2_reset_done"]), ephemeral=True)
 
 
@@ -41707,6 +41747,11 @@ class PanelV2BuilderView(discord.ui.LayoutView):
         blocks = self.panel.get("blocks") or []
         n = len(blocks)
 
+        # Imagens ENVIADAS (panelimg:) precisam ser anexadas para aparecer no preview.
+        # Lê os arquivos locais (sync) e monta o image_map attachment://; os arquivos
+        # ficam em self._preview_files para serem passados no send/edit da mensagem.
+        self._preview_files, _preview_imgmap = _panel_v2_local_image_map(blocks)
+
         # ── Header do editor ──────────────────────────────────────────────────
         header_container = discord.ui.Container(
             discord.ui.TextDisplay(f"**Editor de Painel V2** • {n} bloco(s)"),
@@ -41721,7 +41766,7 @@ class PanelV2BuilderView(discord.ui.LayoutView):
                 accent_colour=color,
             ))
         else:
-            for item in _build_v2_panel_items(blocks, color):
+            for item in _build_v2_panel_items(blocks, color, image_map=_preview_imgmap):
                 self.add_item(item)
 
         # ── ActionRow: Adicionar item ──────────────────────────────────────────
@@ -41766,17 +41811,18 @@ class PanelV2BuilderView(discord.ui.LayoutView):
 
     async def _refresh(self, interaction: discord.Interaction):
         new_view = self._rebuild()
+        _atts = getattr(new_view, "_preview_files", None) or []
         try:
             if interaction.response.is_done():
                 # Interação já respondida (ex: defer prévio) — edita a resposta original.
-                await interaction.edit_original_response(view=new_view)
+                await interaction.edit_original_response(view=new_view, attachments=_atts)
             else:
                 # Interação ainda não respondida (submit de modal, callback de select) —
                 # edit_original_response falharia (não há "resposta original" ainda),
                 # o que impedia o painel de atualizar e derrubava o followup.send()
                 # seguinte com "Algo deu errado". response.edit_message() edita a
                 # mensagem do painel diretamente E conta como a resposta da interação.
-                await interaction.response.edit_message(view=new_view)
+                await interaction.response.edit_message(view=new_view, attachments=_atts)
         except (discord.HTTPException, discord.NotFound):
             pass
 
@@ -41794,7 +41840,7 @@ class PanelV2BuilderView(discord.ui.LayoutView):
             accent_colour=settings.get("embed_color", 0x5865F2),
         ))
         try:
-            await interaction.response.edit_message(view=saved_layout)
+            await interaction.response.edit_message(view=saved_layout, attachments=[])
         except discord.HTTPException:
             await interaction.response.defer()
 
@@ -41859,7 +41905,7 @@ class TicketPanelV2View(PanelV2BuilderView):
             accent_colour=settings.get("embed_color", 0x5865F2),
         ))
         try:
-            await interaction.response.edit_message(view=saved_layout)
+            await interaction.response.edit_message(view=saved_layout, attachments=[])
         except discord.HTTPException:
             await interaction.response.defer()
 
@@ -41888,7 +41934,7 @@ class TicketInternaV2View(PanelV2BuilderView):
             accent_colour=settings.get("embed_color", 0x5865F2),
         ))
         try:
-            await interaction.response.edit_message(view=saved_layout)
+            await interaction.response.edit_message(view=saved_layout, attachments=[])
         except discord.HTTPException:
             await interaction.response.defer()
 
@@ -41923,7 +41969,7 @@ class TicketOpcaoInternaV2View(PanelV2BuilderView):
             accent_colour=settings.get("embed_color", 0x5865F2),
         ))
         try:
-            await interaction.response.edit_message(view=saved_layout)
+            await interaction.response.edit_message(view=saved_layout, attachments=[])
         except discord.HTTPException:
             await interaction.response.defer()
 
@@ -42009,12 +42055,12 @@ async def painelv2_cmd(ctx: commands.Context, *args: str):
             await ctx.message.delete()
         except (discord.Forbidden, discord.NotFound):
             pass
-        await ctx.send(view=view)
+        await ctx.send(view=view, files=view._preview_files)
         return
 
     # n!painelv2 — novo painel em branco
     view = PanelV2BuilderView(ctx.author)
-    await ctx.send(view=view)
+    await ctx.send(view=view, files=view._preview_files)
 
 
 # =============================================================================
@@ -45170,11 +45216,11 @@ async def _lock_channel(ctx: commands.Context, trancar: bool) -> None:
         return
     if trancar:
         emb = discord.Embed(color=0xED4245, description=(
-            f"<:seguranca:1518271987393232936> **Canal trancado** por {ctx.author.mention}.\n"
+            f"**Canal trancado** por {ctx.author.mention}.\n"
             "-# O @everyone não pode mais enviar mensagens aqui."))
     else:
         emb = discord.Embed(color=0x57F287, description=(
-            f"<a:online:1518271945550856295> **Canal destrancado** por {ctx.author.mention}.\n"
+            f"**Canal destrancado** por {ctx.author.mention}.\n"
             "-# O @everyone já pode enviar mensagens novamente."))
     emb.set_footer(text=_footer_name(ctx.guild, settings))
     emb.timestamp = datetime.now()
@@ -45589,7 +45635,7 @@ async def embed_cmd(ctx: commands.Context, *args: str):
                     edit_message_id=msg.id,
                     edit_channel=target_channel,
                 )
-                await ctx.send(view=v2view)
+                await ctx.send(view=v2view, files=v2view._preview_files)
                 return
             # embed com separadores — extrai conteúdo dos componentes V2 para o draft
             _v2_data = _extract_panel_from_v2_message(msg)
@@ -46086,7 +46132,8 @@ async def ban_slash(interaction: discord.Interaction, usuario: discord.Member, m
     # ── Executar o ban ────────────────────────────────────────────────────────
     _mod_dm_mark(interaction.guild.id, membro.id, "ban")  # dedup: listener não reenvia DM
     try:
-        await membro.ban(reason=f"[{ban_id}] {user} — {motivo}", delete_message_days=0)
+        # delete_message_days=7 → apaga as mensagens antigas do usuário ao banir (máximo da API)
+        await membro.ban(reason=f"[{ban_id}] {user} — {motivo}", delete_message_days=7)
     except (discord.Forbidden, discord.HTTPException) as e:
         await interaction.followup.send(f"<a:alerta:1518271939460857968> Erro: `{e}`", ephemeral=True)
         return
@@ -46422,7 +46469,8 @@ async def ban_cmd(ctx: commands.Context, usuario: str = None, *, args: str = "")
 
     _mod_dm_mark(ctx.guild.id, membro.id, "ban")  # dedup: listener não reenvia DM
     try:
-        await ctx.guild.ban(membro, reason=f"[{ban_id}] {user} — {motivo}", delete_message_days=0)
+        # delete_message_days=7 → apaga as mensagens antigas do usuário ao banir (máximo da API)
+        await ctx.guild.ban(membro, reason=f"[{ban_id}] {user} — {motivo}", delete_message_days=7)
     except (discord.Forbidden, discord.HTTPException) as e:
         await ctx.reply(f"<a:alerta:1518271939460857968> Erro: `{e}`")
         return
