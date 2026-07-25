@@ -6002,32 +6002,31 @@ class MainMenuV2Layout(discord.ui.LayoutView):
         color = settings.get("embed_color", 0x5865F2)
         t = TRANSLATIONS.get(lang, TRANSLATIONS["pt-br"])
         bot_av = bot.user.display_avatar.url if bot.user else None
+        _gname = getattr(guild, "name", None) or (bot.user.display_name if bot.user else "NATA")
+        _lg = discord.SeparatorSpacing.large
         items: list = []
-        _head = (f"<:seguranca:1518271987393232936> **{t['central_title']}**\n"
-                 "-# Central de configurações do bot")
+        # Cabeçalho — título grande + subtítulo, com o avatar do bot ao lado.
+        _head = (f"## <:seguranca:1518271987393232936>  {t['central_title']}\n"
+                 f"-# {_gname} • painel de controle do bot")
         if bot_av:
             items.append(discord.ui.Section(discord.ui.TextDisplay(_head),
                                             accessory=discord.ui.Thumbnail(bot_av)))
         else:
             items.append(discord.ui.TextDisplay(_head))
-        items.append(discord.ui.Separator(visible=True))
+        items.append(discord.ui.Separator(visible=True, spacing=_lg))
         items.append(discord.ui.TextDisplay(
-            "<a:online:1518271945550856295> Selecione uma **categoria** no menu abaixo para configurar."))
-        items.append(discord.ui.Separator(visible=True))
-        _info = ""
+            "<a:online:1518271945550856295>  Escolha uma **categoria** no menu abaixo para começar."))
+        items.append(discord.ui.Separator(visible=True, spacing=_lg))
+        # Infos em linhas limpas (label • valor). rstrip(':') evita "Expira em::".
+        _rows = []
         if author is not None:
-            _info += f"<:comunidade_:1518272016971595807> **{t['administrator']}:** {author.mention}\n"
-        _info += (f"<:financeiro_:1518272010688397432> **{t['expires_in']}:** `{_fmt_expira(lang)}`\n"
-                  f"<:entretenimento_:1518271992191779038> **{t['important']}:** "
-                  f"[{t['support_server']}](https://discord.gg/hypebot)")
-        items.append(discord.ui.TextDisplay(_info))
-        banner = settings.get("embed_banner_url") or os.environ.get("DEFAULT_EMBED_BANNER", "")
-        if banner:
-            items.append(discord.ui.Separator(visible=True))
-            try:
-                items.append(discord.ui.MediaGallery(discord.MediaGalleryItem(media=banner)))
-            except Exception:
-                pass
+            _rows.append(f"<:comunidade_:1518272016971595807>  **{t['administrator'].rstrip(':')}**"
+                         f"  ·  {author.mention}")
+        _rows.append(f"<:financeiro_:1518272010688397432>  **{t['expires_in'].rstrip(':')}**"
+                     f"  ·  `{_fmt_expira(lang)}`")
+        _rows.append(f"<:entretenimento_:1518271992191779038>  **{t['important'].rstrip(':')}**"
+                     f"  ·  [{t['support_server']}](https://discord.gg/hypebot)")
+        items.append(discord.ui.TextDisplay("\n".join(_rows)))
         self.add_item(discord.ui.Container(*items, accent_colour=color))
         self.add_item(discord.ui.ActionRow(MainMenuV2Select(lang=lang)))
         if self.author_id and _dev_guild_override.get(self.author_id):
