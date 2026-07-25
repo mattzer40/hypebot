@@ -4854,6 +4854,12 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("mc_tiers", [])              # [{"role": int, "meta": int_segundos}]
     settings.setdefault("mc_muted_weight", 25)       # % que o tempo mutado vale
     settings.setdefault("mc_exempt_roles", [])       # cargos isentos (não sobem/caem)
+    # ── Loja de tempo (resgatar recompensas por tempo em call) ──────────────
+    settings.setdefault("mc_shop_enabled", False)
+    settings.setdefault("mc_shop_items", [])         # [{id,nome,custo(seg),desc,estoque(-1=ilim),resgatados}]
+    settings.setdefault("mc_shop_channel", None)     # canal onde caem os resgates (staff)
+    settings.setdefault("mc_shop_spent", {})         # {user_id: segundos já gastos}
+    settings.setdefault("mc_shop_embed", {"title": None, "description": None, "color": None})
     settings.setdefault("mc_log_channel", None)
     settings.setdefault("mc_last_eval_week", "")     # controle da avaliação semanal
     settings.setdefault("mc_emojis", {})             # {up, down, ok, top} personalizados
@@ -47294,8 +47300,9 @@ class MovCallView(discord.ui.View):
              ("Canal de Logs", discord.ButtonStyle.secondary, self._log)],
             [("Cargos Isentos", discord.ButtonStyle.secondary, self._isentos),
              ("Emojis", discord.ButtonStyle.secondary, self._emojis),
-             ("Resetar Tempo", discord.ButtonStyle.danger, self._reset_tempo)],
-            [("Resetar Configurações", discord.ButtonStyle.danger, self._reset)],
+             ("Loja de Tempo", discord.ButtonStyle.success, self._loja)],
+            [("Resetar Tempo", discord.ButtonStyle.danger, self._reset_tempo),
+             ("Resetar Configurações", discord.ButtonStyle.danger, self._reset)],
         ]
         for r, row in enumerate(rows):
             for label, style, cb in row:
@@ -47364,6 +47371,11 @@ class MovCallView(discord.ui.View):
     async def _emojis(self, interaction: discord.Interaction):
         await interaction.response.send_modal(McEmojisModal(self))
 
+    async def _loja(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        embed = build_mc_shop_embed(self.author, settings)
+        await interaction.response.send_message(embed=embed, view=McShopView(self.author), ephemeral=True)
+
     async def _isentos(self, interaction: discord.Interaction):
         view = discord.ui.View(timeout=180)
         view.add_item(McIsentosSelect(self))
@@ -47385,6 +47397,11 @@ class MovCallView(discord.ui.View):
         settings["mc_last_eval_week"] = ""
         settings["mc_emojis"] = {}
         settings["mc_exempt_roles"] = []
+        # Loja: zera a config, mas MANTÉM mc_shop_spent (saldo já gasto pelos membros)
+        settings["mc_shop_enabled"] = False
+        settings["mc_shop_items"] = []
+        settings["mc_shop_channel"] = None
+        settings["mc_shop_embed"] = {"title": None, "description": None, "color": None}
         save_settings_to_disk()
         await self._refresh(interaction)
         await interaction.followup.send(embed=_notif_embed(
@@ -47655,6 +47672,437 @@ class McResetTempoView(discord.ui.View):
                 await ch.send(embed=emb)
             except discord.HTTPException:
                 pass
+
+
+# =============================================================================
+# LOJA DE TEMPO — resgatar recompensas gastando tempo em call (entrega manual)
+# Saldo = tempo TOTAL acumulado − o que já foi resgatado. Não afeta o upamento.
+# =============================================================================
+
+def _mc_shop_balance(gid: int, member) -> float:
+    """Saldo resgatável (segundos) = tempo total acumulado − já gasto na loja."""
+    data = _get_user_vt(gid, member.id)
+    _vt_rotate(data)
+    sess = _voice_sessions.get((gid, member.id))
+    extra = (datetime.now().timestamp() - sess["join"]) if sess else 0
+    total = data.get("total_seconds", 0) + extra
+    spent = (get_settings(gid).get("mc_shop_spent") or {}).get(str(member.id), 0)
+    return max(0.0, total - spent)
+
+
+def _mc_shop_item(settings: dict, item_id: str) -> dict | None:
+    return next((i for i in settings.get("mc_shop_items", []) if i.get("id") == item_id), None)
+
+
+def _mc_shop_estoque_txt(item: dict) -> str:
+    est = item.get("estoque", -1)
+    if est is None or est < 0:
+        return "ilimitado"
+    return f"{max(0, est - item.get('resgatados', 0))}/{est}"
+
+
+def build_mc_shop_embed(author: discord.Member, settings: dict) -> discord.Embed:
+    guild = author.guild
+    emb = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
+    emb.set_author(name="Loja de Tempo — Movimentação de Call")
+    on = settings.get("mc_shop_enabled", False)
+    status = ("<a:online:1518271945550856295> `(Ativada)`" if on
+              else "<a:alerta:1518271939460857968> `(Desativada)`")
+    ch = _wl_ch_mention(guild, settings.get("mc_shop_channel"))
+    itens = settings.get("mc_shop_items", [])
+    if itens:
+        linhas = []
+        for i, it in enumerate(itens[:20], 1):
+            linhas.append(f"`{i}.` **{it.get('nome')}** — `{_fmt_vt(it.get('custo', 0))}` "
+                          f"· estoque: `{_mc_shop_estoque_txt(it)}` · resgatados: `{it.get('resgatados', 0)}`")
+        itens_val = "\n".join(linhas)
+    else:
+        itens_val = "`Nenhum item cadastrado`"
+    emb.add_field(
+        name="<:vender_cargo:1518272029604970719>  Configuração",
+        value=(f"┃ **Status:** {status}\n"
+               f"**Canal de Resgates (staff):** {ch}\n"
+               f"**Itens:** `{len(itens)}`"),
+        inline=False,
+    )
+    emb.add_field(name="<:tickets:1518271952526250155>  Itens", value=itens_val[:1024], inline=False)
+    emb.add_field(
+        name="<:entretenimento_:1518271992191779038>  Como funciona",
+        value=("O membro clica em **Resgatar** no painel e gasta o **tempo total** que "
+               "acumulou em call. Cada resgate cai no **canal de resgates** para a staff "
+               "entregar. O saldo é o tempo total **menos** o que já foi resgatado — "
+               "**não** afeta os cargos do upamento."),
+        inline=False,
+    )
+    emb.set_footer(text=_footer_name(guild, settings))
+    emb.timestamp = datetime.now()
+    return emb
+
+
+class McShopView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=300)
+        self.author = author
+        self._build()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            lang = get_settings(interaction.guild.id if interaction.guild else 0)["language"]
+            await interaction.response.send_message(TRANSLATIONS[lang]["only_author"], ephemeral=True)
+            return False
+        return True
+
+    def _build(self):
+        self.clear_items()
+        settings = get_settings(self.author.guild.id if self.author.guild else 0)
+        on = settings.get("mc_shop_enabled", False)
+        rows = [
+            [("Voltar", discord.ButtonStyle.primary, self._back),
+             ("Desativar" if on else "Ativar", discord.ButtonStyle.danger if on else discord.ButtonStyle.success, self._toggle),
+             ("Adicionar Item", discord.ButtonStyle.secondary, self._add)],
+            [("Remover Item", discord.ButtonStyle.secondary, self._rem),
+             ("Canal de Resgates", discord.ButtonStyle.secondary, self._canal),
+             ("Configurar Embed", discord.ButtonStyle.secondary, self._embed)],
+            [("Enviar Painel", discord.ButtonStyle.success, self._enviar)],
+        ]
+        for r, row in enumerate(rows):
+            for label, style, cb in row:
+                emoji = _button_emoji(style) if style != discord.ButtonStyle.primary else None
+                b = discord.ui.Button(label=label, style=style, row=r, emoji=emoji)
+                b.callback = cb
+                self.add_item(b)
+
+    async def _refresh(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=build_mc_shop_embed(self.author, settings), view=McShopView(self.author))
+
+    async def _back(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=build_movcall_embed(self.author, settings), view=MovCallView(self.author))
+
+    async def _toggle(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["mc_shop_enabled"] = not settings.get("mc_shop_enabled", False)
+        save_settings_to_disk()
+        await self._refresh(interaction)
+
+    async def _add(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(McShopItemModal(self))
+
+    async def _rem(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        itens = settings.get("mc_shop_items", [])
+        if not itens:
+            await interaction.response.send_message(embed=_notif_embed("Nenhum item para remover."), ephemeral=True)
+            return
+        options = [discord.SelectOption(label=f"{it.get('nome')} ({_fmt_vt(it.get('custo', 0))})"[:100],
+                                        value=it.get("id")) for it in itens[:25]]
+        view = discord.ui.View(timeout=180)
+        view.add_item(McShopRemoveSelect(self, options))
+        await interaction.response.send_message(
+            embed=_notif_embed("Selecione o item para **remover** da loja."), view=view, ephemeral=True)
+
+    async def _canal(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(McShopChannelModal(self))
+
+    async def _embed(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(McShopEmbedModal(self))
+
+    async def _enviar(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        if not settings.get("mc_shop_items"):
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Cadastre ao menos 1 item antes de enviar o painel."), ephemeral=True)
+            return
+        channel = interaction.channel
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Use este botão no canal onde o painel deve ficar."), ephemeral=True)
+            return
+        embed, view = _mc_shop_public(settings, interaction.guild)
+        try:
+            await channel.send(embed=embed, view=view)
+        except discord.HTTPException as e:
+            await interaction.response.send_message(embed=_notif_embed(f"<a:alerta:1518271939460857968> Falha: `{e}`"), ephemeral=True)
+            return
+        await interaction.response.send_message(embed=_notif_embed(
+            f"<a:online:1518271945550856295> Painel da loja enviado em {channel.mention}."), ephemeral=True)
+
+
+class McShopItemModal(discord.ui.Modal):
+    def __init__(self, parent: "McShopView"):
+        super().__init__(title="Adicionar item à loja", timeout=300)
+        self.parent_view = parent
+        self.i_nome = discord.ui.TextInput(label="Nome do item", required=True, max_length=80,
+                                           placeholder="Ex: 1 dia de VIP")
+        self.i_custo = discord.ui.TextInput(label="Custo em horas de call (ex: 10 ou 7.5)",
+                                            required=True, max_length=8, placeholder="10")
+        self.i_desc = discord.ui.TextInput(label="Descrição (opcional)", required=False,
+                                           style=discord.TextStyle.paragraph, max_length=300)
+        self.i_estoque = discord.ui.TextInput(label="Estoque (vazio = ilimitado)", required=False,
+                                              max_length=6, placeholder="Ex: 5")
+        for it in (self.i_nome, self.i_custo, self.i_desc, self.i_estoque):
+            self.add_item(it)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        raw = self.i_custo.value.strip().replace(",", ".")
+        try:
+            horas = float(raw)
+            if horas <= 0:
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Custo inválido. Informe as horas (ex: 10)."), ephemeral=True)
+            return
+        est_raw = self.i_estoque.value.strip()
+        estoque = -1
+        if est_raw:
+            if not est_raw.isdigit():
+                await interaction.response.send_message(embed=_notif_embed(
+                    "<a:alerta:1518271939460857968> Estoque inválido. Use um número ou deixe vazio."), ephemeral=True)
+                return
+            estoque = int(est_raw)
+        import secrets as _sec
+        item = {
+            "id": _sec.token_hex(4),
+            "nome": self.i_nome.value.strip()[:80],
+            "custo": int(horas * 3600),
+            "desc": self.i_desc.value.strip() or None,
+            "estoque": estoque,
+            "resgatados": 0,
+        }
+        settings.setdefault("mc_shop_items", []).append(item)
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_mc_shop_embed(self.parent_view.author, settings), view=McShopView(self.parent_view.author))
+        except discord.HTTPException:
+            pass
+        await interaction.followup.send(embed=_notif_embed(
+            f"<a:online:1518271945550856295> Item **{item['nome']}** criado (`{_fmt_vt(item['custo'])}`)."), ephemeral=True)
+
+
+class McShopRemoveSelect(discord.ui.Select):
+    def __init__(self, parent: "McShopView", options: list):
+        super().__init__(placeholder="Selecione para remover", min_values=1,
+                         max_values=len(options), options=options)
+        self.parent_view = parent
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        rem = set(self.values)
+        settings["mc_shop_items"] = [i for i in settings.get("mc_shop_items", []) if i.get("id") not in rem]
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_mc_shop_embed(self.parent_view.author, settings), view=McShopView(self.parent_view.author))
+        except discord.HTTPException:
+            pass
+        await interaction.followup.send(embed=_notif_embed(
+            f"<a:alerta:1518271939460857968> {len(rem)} item(ns) removido(s)."), ephemeral=True)
+
+
+class McShopChannelModal(discord.ui.Modal):
+    def __init__(self, parent: "McShopView"):
+        super().__init__(title="Canal de Resgates", timeout=300)
+        self.parent_view = parent
+        s = get_settings(parent.author.guild.id if parent.author.guild else 0)
+        self.inp = discord.ui.TextInput(
+            label="ID do canal de resgates (staff)", required=False,
+            default=str(s.get("mc_shop_channel") or ""), placeholder="ID do canal", max_length=25)
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        raw = self.inp.value.strip().lstrip("<#").rstrip(">")
+        if not raw:
+            settings["mc_shop_channel"] = None
+        elif raw.isdigit() and isinstance(interaction.guild.get_channel(int(raw)), discord.TextChannel):
+            settings["mc_shop_channel"] = int(raw)
+        else:
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> ID inválido. Use o ID de um canal de texto."), ephemeral=True)
+            return
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_mc_shop_embed(self.parent_view.author, settings), view=McShopView(self.parent_view.author))
+        except discord.HTTPException:
+            pass
+        await interaction.followup.send(embed=_notif_embed(
+            "<a:online:1518271945550856295> Canal de resgates atualizado."), ephemeral=True)
+
+
+class McShopEmbedModal(discord.ui.Modal):
+    def __init__(self, parent: "McShopView"):
+        super().__init__(title="Embed do painel da loja", timeout=300)
+        self.parent_view = parent
+        d = get_settings(parent.author.guild.id if parent.author.guild else 0).get("mc_shop_embed", {})
+        self.i_title = discord.ui.TextInput(label="Título", required=False, default=d.get("title") or "", max_length=256)
+        self.i_desc = discord.ui.TextInput(label="Descrição", required=False, style=discord.TextStyle.paragraph,
+                                           default=d.get("description") or "", max_length=2000)
+        self.i_color = discord.ui.TextInput(label="Cor (hex, ex: #5865F2)", required=False,
+                                            default=(f"#{d['color']:06X}" if isinstance(d.get("color"), int) else ""), max_length=10)
+        for it in (self.i_title, self.i_desc, self.i_color):
+            self.add_item(it)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        d = settings.setdefault("mc_shop_embed", {"title": None, "description": None, "color": None})
+        d["title"] = self.i_title.value.strip() or None
+        d["description"] = self.i_desc.value.strip() or None
+        cv = self.i_color.value.strip().lstrip("#")
+        d["color"] = int(cv, 16) if cv.isalnum() and len(cv) <= 6 and _is_hex(cv) else None
+        save_settings_to_disk()
+        try:
+            await interaction.response.edit_message(
+                embed=build_mc_shop_embed(self.parent_view.author, settings), view=McShopView(self.parent_view.author))
+        except discord.HTTPException:
+            pass
+        await interaction.followup.send(embed=_notif_embed(
+            "<a:online:1518271945550856295> Embed da loja atualizado."), ephemeral=True)
+
+
+def _is_hex(s: str) -> bool:
+    try:
+        int(s, 16); return True
+    except ValueError:
+        return False
+
+
+def _mc_shop_public(settings: dict, guild):
+    d = settings.get("mc_shop_embed", {})
+    color = d.get("color") if isinstance(d.get("color"), int) else settings.get("embed_color", 0x2B2D31)
+    icon = (guild.icon.url if guild and guild.icon else None) or (bot.user.display_avatar.url if bot.user else None)
+    emb = discord.Embed(color=color)
+    emb.title = d.get("title") or "<:vender_cargo:1518272029604970719> Loja de Tempo"
+    linhas = []
+    for it in settings.get("mc_shop_items", [])[:20]:
+        _e = _mc_shop_estoque_txt(it)
+        _extra = f" · estoque: `{_e}`" if it.get("estoque", -1) >= 0 else ""
+        linhas.append(f"**{it.get('nome')}** — `{_fmt_vt(it.get('custo', 0))}`{_extra}"
+                      + (f"\n-# {it.get('desc')}" if it.get('desc') else ""))
+    corpo = ("\n".join(linhas) or "_Nenhum item disponível._")
+    emb.description = (d.get("description") or
+                      "Troque seu **tempo em call** por recompensas! Clique em **Resgatar** abaixo.") + "\n\n" + corpo
+    if icon:
+        emb.set_thumbnail(url=icon)
+    view = discord.ui.View(timeout=None)
+    view.add_item(discord.ui.Button(label="Resgatar", style=discord.ButtonStyle.success,
+                                    emoji="<:vender_cargo:1518272029604970719>", custom_id="mc_shop_open"))
+    return emb, view
+
+
+async def _handle_mc_shop_open(interaction: discord.Interaction):
+    settings = get_settings(interaction.guild.id)
+    if not settings.get("mc_shop_enabled", False):
+        await interaction.response.send_message(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> A loja está desativada no momento."), ephemeral=True)
+        return
+    itens = settings.get("mc_shop_items", [])
+    if not itens:
+        await interaction.response.send_message(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> Nenhum item disponível na loja."), ephemeral=True)
+        return
+    saldo = _mc_shop_balance(interaction.guild.id, interaction.user)
+    emb = discord.Embed(color=settings.get("embed_color", 0x2B2D31))
+    emb.set_author(name="Loja de Tempo", icon_url=interaction.user.display_avatar.url)
+    emb.description = (f"<:mov_call:1518271964077232150> Seu saldo: **{_fmt_vt(saldo)}**\n"
+                       "Escolha um item no menu abaixo para resgatar.")
+    options = []
+    for it in itens[:25]:
+        est = it.get("estoque", -1)
+        esgotado = est >= 0 and it.get("resgatados", 0) >= est
+        _desc = f"{_fmt_vt(it.get('custo', 0))}"
+        if esgotado:
+            _desc += " · ESGOTADO"
+        elif saldo < it.get("custo", 0):
+            _desc += " · saldo insuficiente"
+        options.append(discord.SelectOption(label=it.get("nome", "?")[:100], description=_desc[:100],
+                                            value=it.get("id")))
+    view = discord.ui.View(timeout=120)
+    view.add_item(McShopBuySelect(options))
+    await interaction.response.send_message(embed=emb, view=view, ephemeral=True)
+
+
+class McShopBuySelect(discord.ui.Select):
+    def __init__(self, options: list):
+        super().__init__(placeholder="Selecione o que resgatar...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        item = _mc_shop_item(settings, self.values[0])
+        if not item:
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Item indisponível."), ephemeral=True)
+            return
+        member = interaction.user
+        custo = item.get("custo", 0)
+        est = item.get("estoque", -1)
+        if est >= 0 and item.get("resgatados", 0) >= est:
+            await interaction.response.send_message(embed=_notif_embed(
+                "<a:alerta:1518271939460857968> Esse item está **esgotado**."), ephemeral=True)
+            return
+        saldo = _mc_shop_balance(interaction.guild.id, member)
+        if saldo < custo:
+            await interaction.response.send_message(embed=_notif_embed(
+                f"<a:alerta:1518271939460857968> Saldo insuficiente. Você tem `{_fmt_vt(saldo)}` "
+                f"e o item custa `{_fmt_vt(custo)}`."), ephemeral=True)
+            return
+        # Debita e registra
+        spent = settings.setdefault("mc_shop_spent", {})
+        spent[str(member.id)] = spent.get(str(member.id), 0) + custo
+        item["resgatados"] = item.get("resgatados", 0) + 1
+        save_settings_to_disk()
+        novo_saldo = _mc_shop_balance(interaction.guild.id, member)
+        await interaction.response.edit_message(embed=_notif_embed(
+            f"<a:online:1518271945550856295> Você resgatou **{item['nome']}**!\n"
+            f"-# Custo: `{_fmt_vt(custo)}` · Saldo restante: `{_fmt_vt(novo_saldo)}`\n"
+            "Aguarde a equipe entregar."), view=None)
+        # Pedido para a staff
+        cid = settings.get("mc_shop_channel")
+        ch = interaction.guild.get_channel(cid) if cid else None
+        if isinstance(ch, discord.TextChannel):
+            claim = discord.Embed(color=0xF4A300)
+            claim.set_author(name="Novo resgate — aguardando entrega", icon_url=member.display_avatar.url)
+            claim.set_thumbnail(url=member.display_avatar.url)
+            claim.description = (
+                f"**Membro:** {member.mention} (`{member}`)\n"
+                f"**Item:** {item['nome']}\n"
+                f"**Custo:** `{_fmt_vt(custo)}`\n"
+                f"**Saldo restante:** `{_fmt_vt(novo_saldo)}`"
+            )
+            if item.get("desc"):
+                claim.description += f"\n**Detalhes:** {item['desc']}"
+            claim.timestamp = datetime.now()
+            _v = discord.ui.View(timeout=None)
+            _v.add_item(discord.ui.Button(label="Marcar Entregue", style=discord.ButtonStyle.success,
+                                          custom_id="mc_claim_done"))
+            try:
+                await ch.send(embed=claim, view=_v)
+            except discord.HTTPException:
+                pass
+
+
+async def _handle_mc_claim_done(interaction: discord.Interaction):
+    user = interaction.user
+    if not (isinstance(user, discord.Member) and
+            (user.guild_permissions.administrator or user.guild_permissions.manage_guild)):
+        await interaction.response.send_message(embed=_notif_embed(
+            "<a:alerta:1518271939460857968> Apenas a staff pode marcar como entregue."), ephemeral=True)
+        return
+    msg = interaction.message
+    emb = msg.embeds[0] if msg and msg.embeds else discord.Embed()
+    emb.color = 0x57F287
+    emb.set_author(name="Resgate entregue")
+    emb.description = (emb.description or "") + f"\n\n<a:online:1518271945550856295> **Entregue por** {user.mention}"
+    try:
+        await interaction.response.edit_message(embed=emb, view=None)
+    except discord.HTTPException:
+        pass
 
 
 class McEmojisModal(discord.ui.Modal):
@@ -50774,6 +51222,27 @@ async def on_interaction(interaction: discord.Interaction):
         return
 
     # ── Whitelist: painel público (Verificar / Tenho código) ───────────────────
+    # ── Loja de Tempo (Movimentação de Call) ──────────────────────────────────
+    if cid == "mc_shop_open":
+        try:
+            await _handle_mc_shop_open(interaction)
+        except Exception as _e:
+            print(f"[mc_shop_open] ERRO: {_e}", flush=True)
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.send_message(embed=_notif_embed(
+                        "<a:alerta:1518271939460857968> Erro ao abrir a loja."), ephemeral=True)
+                except Exception:
+                    pass
+        return
+
+    if cid == "mc_claim_done":
+        try:
+            await _handle_mc_claim_done(interaction)
+        except Exception as _e:
+            print(f"[mc_claim_done] ERRO: {_e}", flush=True)
+        return
+
     if cid == "wl_verify":
         try:
             await _handle_wl_verify(interaction)
