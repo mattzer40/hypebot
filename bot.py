@@ -47427,6 +47427,13 @@ def _mc_is_exempt(member, settings: dict) -> bool:
     return bool(ex & {r.id for r in member.roles})
 
 
+# Dedupe do LOG de promoção: (gid, uid) -> (tier_idx, ts_do_ultimo_log). Garante
+# "1 mensagem por subida real" — se o cargo oscilar por qualquer motivo e o membro
+# for re-promovido pro MESMO cargo, o cargo é restaurado mas NÃO loga de novo.
+_mc_promo_seen: dict[tuple[int, int], tuple[int, float]] = {}
+_MC_PROMO_DEDUP_SECONDS = 86400  # janela p/ considerar "mesma subida" (24h)
+
+
 async def _mc_check_member(guild, settings: dict, member: discord.Member, tiers: list):
     """Promoção em tempo real: coloca o membro DIRETO no cargo mais alto cuja meta
     semanal ele já bateu, numa única troca.
@@ -47463,6 +47470,17 @@ async def _mc_check_member(guild, settings: dict, member: discord.Member, tiers:
         # Não aplicou o cargo — avisa o admin em vez de logar promoção falsa
         await _mc_warn_perm(guild, settings, _motivo)
         return
+    # Dedupe: só loga se for uma subida NOVA (cargo diferente do último já logado).
+    # Se o cargo oscilou e o membro voltou pro MESMO alvo, o cargo foi restaurado
+    # acima, mas não spamamos a mesma mensagem. Renova o timestamp p/ nunca reaparecer
+    # enquanto o loop continuar; expira sozinho após 24h de calmaria.
+    _key = (guild.id, member.id)
+    _prev = _mc_promo_seen.get(_key)
+    _nowts = datetime.now().timestamp()
+    if _prev and _prev[0] == alvo and (_nowts - _prev[1]) < _MC_PROMO_DEDUP_SECONDS:
+        _mc_promo_seen[_key] = (alvo, _nowts)  # mesma subida — restaura cargo, não loga
+        return
+    _mc_promo_seen[_key] = (alvo, _nowts)
     # No log, mostra o cargo de ORIGEM: o que ele tinha (cur) ou, se não tinha
     # nenhum, o degrau logo abaixo do novo (progressão natural na escada).
     _origem = cur if cur >= 0 else (alvo - 1)
@@ -47517,6 +47535,7 @@ async def _mc_eval_guild_weekly(guild, settings: dict):
                 await _mc_warn_perm(guild, settings, _motivo)
                 continue
             await _mc_log(guild, settings, m, "rebaixado", tiers, cur - 1, old_idx=cur)
+            _mc_promo_seen.pop((guild.id, m.id), None)  # reset dedupe: nova subida futura loga
             n += 1
             await asyncio.sleep(0.5)  # evita rajada de rate limit
     _save_voice_time()
