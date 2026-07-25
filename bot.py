@@ -4860,7 +4860,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("mc_shop_items", [])         # [{id,nome,custo(seg),desc,estoque(-1=ilim),resgatados}]
     settings.setdefault("mc_shop_channel", None)     # canal onde caem os resgates (staff)
     settings.setdefault("mc_shop_spent", {})         # {user_id: segundos já gastos}
-    settings.setdefault("mc_shop_embed", {"title": None, "description": None, "color": None})
+    settings.setdefault("mc_shop_embed", {"title": None, "description": None, "color": None, "thumbnail": None})
     settings.setdefault("mc_log_channel", None)
     settings.setdefault("mc_last_eval_week", "")     # controle da avaliação semanal
     settings.setdefault("mc_emojis", {})             # {up, down, ok, top} personalizados
@@ -5255,6 +5255,40 @@ async def _setup_success_emoji() -> None:
     print("[emoji] fallback <a:online:1518271945550856295>", flush=True)
 
 
+# ── Banco local de emojis (/data) — guarda as imagens dos emojis do bot para não
+#    depender do servidor HYPE. Depois do 1º boot bem-sucedido, (re)criar qualquer
+#    Application Emoji lê a imagem daqui, mesmo que o HYPE esteja fora ou tenha mudado.
+_EMOJI_BANK_DIR = os.path.join(_CLIENT_DIR, "emoji_bank")
+
+
+def _emoji_bank_read(name: str) -> bytes | None:
+    """Lê a imagem de um emoji do banco local. None se não existe/está corrompido."""
+    for _ext in ("gif", "png", "webp", "jpg", "jpeg"):
+        _p = os.path.join(_EMOJI_BANK_DIR, f"{name}.{_ext}")
+        try:
+            if os.path.exists(_p) and os.path.getsize(_p) > 100:
+                with open(_p, "rb") as _f:
+                    return _f.read()
+        except Exception:
+            pass
+    return None
+
+
+def _emoji_bank_write(name: str, anim: str, data: bytes | None) -> None:
+    """Salva a imagem de um emoji no banco local (só se ainda não existe)."""
+    if not data or len(data) < 100:
+        return
+    _ext = "gif" if anim == "a" else "png"
+    try:
+        os.makedirs(_EMOJI_BANK_DIR, exist_ok=True)
+        _p = os.path.join(_EMOJI_BANK_DIR, f"{name}.{_ext}")
+        if not os.path.exists(_p):
+            with open(_p, "wb") as _f:
+                _f.write(data)
+    except Exception as _e:
+        print(f"[emoji_bank] falha ao salvar '{name}': {_e}", flush=True)
+
+
 async def _setup_all_emojis() -> None:
     """Cria Application Emojis para TODOS os emojis usados no bot (globals + inline strings).
     Application Emojis funcionam em qualquer servidor, sem depender de guild membership.
@@ -5301,39 +5335,69 @@ async def _setup_all_emojis() -> None:
 
     # 2. Busca Application Emojis já existentes para este bot
     resolved: dict[str, str] = {}  # name → "<a?:name:new_id>"
+    _existing_aes: list = []
     try:
-        for _ae in await bot.fetch_application_emojis():
+        _existing_aes = list(await bot.fetch_application_emojis())
+        for _ae in _existing_aes:
             resolved[_ae.name] = str(_ae)
         print(f"[emoji] {len(resolved)} Application Emojis já existentes", flush=True)
     except Exception as _ex:
         print(f"[emoji] fetch_application_emojis: {_ex}", flush=True)
 
+    # 2b. Popula o BANCO LOCAL (/data) a partir dos Application Emojis JÁ criados —
+    #     fonte própria do bot, não depende do HYPE. Só baixa os que faltam no banco,
+    #     então roda pesado só no 1º boot depois desta atualização.
+    _to_bank = [_ae for _ae in _existing_aes
+                if _ae.name in all_emojis and _emoji_bank_read(_ae.name) is None]
+    if _to_bank:
+        print(f"[emoji_bank] exportando {len(_to_bank)} emojis para o banco local...", flush=True)
+        import aiohttp as _aiohttp_bank
+        try:
+            async with _aiohttp_bank.ClientSession() as _bsess:
+                for _ae in _to_bank:
+                    try:
+                        async with _bsess.get(str(_ae.url)) as _br:
+                            if _br.status == 200:
+                                _anim_b = "a" if getattr(_ae, "animated", False) else ""
+                                _emoji_bank_write(_ae.name, _anim_b, await _br.read())
+                    except Exception:
+                        pass
+                    await asyncio.sleep(0.1)
+        except Exception as _bex:
+            print(f"[emoji_bank] erro ao exportar: {_bex}", flush=True)
+
     # 3. Cria Application Emojis para os que ainda faltam.
-    #    Fonte PRIMÁRIA: servidor de armazenamento de emojis (HYPE) — o emoji lá tem
-    #    sempre um ID válido, então busca por NOME e baixa a imagem atual.
+    #    Fonte PRIMÁRIA: BANCO LOCAL (/data/emoji_bank) — não depende de servidor.
+    #    Depois: servidor de armazenamento HYPE (busca por NOME, baixa imagem atual).
     #    Fallback: CDN pelo ID antigo hardcoded (pode ter morrido → 404).
+    #    Toda imagem baixada do HYPE/CDN é gravada no banco pra nunca mais depender deles.
     missing = {_n: _v for _n, _v in all_emojis.items() if _n not in resolved}
     if missing:
         _store_guild = bot.get_guild(_HYPE_GUILD_ID)
         _store_emojis = {e.name: e for e in (_store_guild.emojis if _store_guild else [])}
         print(f"[emoji] criando {len(missing)} Application Emojis "
-              f"(armazenamento HYPE: {'disponível, '+str(len(_store_emojis))+' emojis' if _store_guild else 'indisponível — bot não está no servidor'})...",
+              f"(banco local + armazenamento HYPE: {'disponível, '+str(len(_store_emojis))+' emojis' if _store_guild else 'indisponível — bot não está no servidor'})...",
               flush=True)
         import aiohttp as _aiohttp_ae
         async with _aiohttp_ae.ClientSession() as _sess:
             for _name, (_anim, _oid) in missing.items():
                 _img = None
                 _src = ""
-                # 1) Servidor de armazenamento (fonte confiável)
-                _se = _store_emojis.get(_name)
-                if _se is not None:
-                    try:
-                        async with _sess.get(str(_se.url)) as _r:
-                            if _r.status == 200:
-                                _img = await _r.read()
-                                _src = "HYPE"
-                    except Exception:
-                        _img = None
+                # 0) BANCO LOCAL (/data) — fonte primária, independe do HYPE
+                _img = _emoji_bank_read(_name)
+                if _img is not None:
+                    _src = "banco"
+                # 1) Servidor de armazenamento HYPE (fonte confiável)
+                if _img is None:
+                    _se = _store_emojis.get(_name)
+                    if _se is not None:
+                        try:
+                            async with _sess.get(str(_se.url)) as _r:
+                                if _r.status == 200:
+                                    _img = await _r.read()
+                                    _src = "HYPE"
+                        except Exception:
+                            _img = None
                 # 2) Fallback: CDN pelo ID antigo
                 if _img is None:
                     _ext = "gif" if _anim == "a" else "png"
@@ -5344,11 +5408,14 @@ async def _setup_all_emojis() -> None:
                                 _img = await _r.read()
                                 _src = "CDN"
                             else:
-                                print(f"[emoji] '{_name}': ausente no HYPE + CDN HTTP {_r.status} — pulando", flush=True)
+                                print(f"[emoji] '{_name}': ausente no banco + HYPE + CDN HTTP {_r.status} — pulando", flush=True)
                     except Exception as _ex:
                         print(f"[emoji] '{_name}': erro download: {_ex}", flush=True)
                 if _img is None:
                     continue
+                # Grava no banco local (se veio do HYPE/CDN) pra próximas vezes não dependerem deles
+                if _src != "banco":
+                    _emoji_bank_write(_name, _anim, _img)
                 try:
                     _new = await bot.create_application_emoji(name=_name, image=_img)
                     resolved[_name] = str(_new)
@@ -47966,10 +48033,19 @@ def build_mc_shop_embed(author: discord.Member, settings: dict) -> discord.Embed
         itens_val = "\n".join(linhas)
     else:
         itens_val = "`Nenhum item cadastrado`"
+    _thumb_cfg = settings.get("mc_shop_embed", {}).get("thumbnail")
+    if isinstance(_thumb_cfg, str) and _thumb_cfg.startswith("panelimg:"):
+        _thumb_txt = "`imagem enviada` <a:online:1518271945550856295>"
+    elif isinstance(_thumb_cfg, str) and _thumb_cfg.startswith("http"):
+        _thumb_txt = "`por link` <a:online:1518271945550856295>"
+        emb.set_thumbnail(url=_thumb_cfg)
+    else:
+        _thumb_txt = "`padrão (ícone do servidor)`"
     emb.add_field(
         name="<:vender_cargo:1518272029604970719>  Configuração",
         value=(f"┃ **Status:** {status}\n"
                f"**Canal de Resgates (staff):** {ch}\n"
+               f"**Thumbnail:** {_thumb_txt}\n"
                f"**Itens:** `{len(itens)}`"),
         inline=False,
     )
@@ -48069,9 +48145,9 @@ class McShopView(discord.ui.View):
             await interaction.response.send_message(embed=_notif_embed(
                 "<a:alerta:1518271939460857968> Use este botão no canal onde o painel deve ficar."), ephemeral=True)
             return
-        embed, view = _mc_shop_public(settings, interaction.guild)
+        embed, view, files = _mc_shop_public(settings, interaction.guild)
         try:
-            await channel.send(embed=embed, view=view)
+            await channel.send(embed=embed, view=view, files=files)
         except discord.HTTPException as e:
             await interaction.response.send_message(embed=_notif_embed(f"<a:alerta:1518271939460857968> Falha: `{e}`"), ephemeral=True)
             return
@@ -48187,7 +48263,7 @@ class McShopChannelModal(discord.ui.Modal):
             "<a:online:1518271945550856295> Canal de resgates atualizado."), ephemeral=True)
 
 
-class McShopEmbedModal(discord.ui.Modal):
+class McShopEmbedModal(_ModalV2):
     def __init__(self, parent: "McShopView"):
         super().__init__(title="Embed do painel da loja", timeout=300)
         self.parent_view = parent
@@ -48197,8 +48273,24 @@ class McShopEmbedModal(discord.ui.Modal):
                                            default=d.get("description") or "", max_length=2000)
         self.i_color = discord.ui.TextInput(label="Cor (hex, ex: #5865F2)", required=False,
                                             default=(f"#{d['color']:06X}" if isinstance(d.get("color"), int) else ""), max_length=10)
-        for it in (self.i_title, self.i_desc, self.i_color):
-            self.add_item(it)
+        self.thumb_upload = discord.ui.FileUpload(required=False, min_values=0, max_values=1)
+        _cur_thumb = d.get("thumbnail")
+        self.i_thumb_url = discord.ui.TextInput(
+            label="Thumbnail por link", required=False, max_length=400,
+            placeholder="https://...  (ou 'remover' para tirar)",
+            default=(_cur_thumb if isinstance(_cur_thumb, str) and _cur_thumb.startswith("http") else ""),
+        )
+        self.add_item(discord.ui.Label(text="Título", component=self.i_title))
+        self.add_item(discord.ui.Label(text="Descrição", component=self.i_desc))
+        self.add_item(discord.ui.Label(text="Cor (hex)", description="Ex: #5865F2", component=self.i_color))
+        self.add_item(discord.ui.Label(
+            text="Thumbnail (upload)",
+            description="Envie uma imagem — fica permanente (não expira).",
+            component=self.thumb_upload))
+        self.add_item(discord.ui.Label(
+            text="Thumbnail por link (alternativa)",
+            description="Cole um link, ou escreva 'remover' para tirar a thumbnail.",
+            component=self.i_thumb_url))
 
     async def on_submit(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
@@ -48207,6 +48299,14 @@ class McShopEmbedModal(discord.ui.Modal):
         d["description"] = self.i_desc.value.strip() or None
         cv = self.i_color.value.strip().lstrip("#")
         d["color"] = int(cv, 16) if cv.isalnum() and len(cv) <= 6 and _is_hex(cv) else None
+        # Thumbnail: upload tem prioridade; senão link; 'remover' limpa; vazio mantém o atual.
+        _url_val = (self.i_thumb_url.value or "").strip()
+        if self.thumb_upload.values:
+            d["thumbnail"] = await _store_uploaded_permanent(self.thumb_upload.values[0])
+        elif _url_val.lower() in ("remover", "remove", "none", "nenhum", "-"):
+            d["thumbnail"] = None
+        elif _url_val.startswith("http"):
+            d["thumbnail"] = _url_val
         save_settings_to_disk()
         try:
             await interaction.response.edit_message(
@@ -48229,6 +48329,7 @@ def _mc_shop_public(settings: dict, guild):
     color = d.get("color") if isinstance(d.get("color"), int) else settings.get("embed_color", 0x2B2D31)
     icon = (guild.icon.url if guild and guild.icon else None) or (bot.user.display_avatar.url if bot.user else None)
     itens = settings.get("mc_shop_items", [])[:25]
+    _files: list = []
 
     emb = discord.Embed(color=color)
     emb.title = d.get("title") or "<:vender_cargo:1518272029604970719>  L O J A   D E   T E M P O"
@@ -48254,7 +48355,24 @@ def _mc_shop_public(settings: dict, guild):
         emb.add_field(name=f"{_emj}  {it.get('nome', '?')}"[:256], value=_val[:1024], inline=True)
     if not itens:
         emb.add_field(name="​", value="-# _Nenhum item disponível no momento._", inline=False)
-    if icon:
+    # Thumbnail configurável: upload permanente (panelimg) é anexado; link http usa a URL;
+    # sem thumbnail personalizada, cai no ícone do servidor.
+    _thumb = d.get("thumbnail")
+    _thumb_set = False
+    if isinstance(_thumb, str) and _thumb.startswith("panelimg:"):
+        _tp = _panel_img_store_path(_thumb.split(":", 1)[1])
+        try:
+            if os.path.exists(_tp) and os.path.getsize(_tp) > 100:
+                _fname = _thumb.split(":", 1)[1]
+                _files.append(discord.File(_tp, filename=_fname))
+                emb.set_thumbnail(url=f"attachment://{_fname}")
+                _thumb_set = True
+        except Exception:
+            _thumb_set = False
+    elif isinstance(_thumb, str) and _thumb.startswith("http"):
+        emb.set_thumbnail(url=_thumb)
+        _thumb_set = True
+    if not _thumb_set and icon:
         emb.set_thumbnail(url=icon)
     emb.set_footer(text=f"{_footer_name(guild, settings)} • toque em Resgatar para trocar seu tempo",
                    icon_url=icon)
@@ -48263,7 +48381,7 @@ def _mc_shop_public(settings: dict, guild):
     view = discord.ui.View(timeout=None)
     view.add_item(discord.ui.Button(label="Resgatar", style=discord.ButtonStyle.success,
                                     emoji="<:vender_cargo:1518272029604970719>", custom_id="mc_shop_open"))
-    return emb, view
+    return emb, view, _files
 
 
 async def _handle_mc_shop_open(interaction: discord.Interaction):
