@@ -40752,8 +40752,18 @@ def _build_v2_panel_items(blocks: list, color: int, _inner_action_row=None, imag
     """
     image_map = image_map or {}
 
-    def _img(u: str) -> str:
-        return image_map.get(u, u)
+    def _img(u):
+        """Resolve a mídia. 'panelimg:' só renderiza se estiver no image_map
+        (anexado); sem mapa (ex: preview) retorna None p/ não virar mídia inválida."""
+        if u in image_map:
+            return image_map[u]
+        if isinstance(u, str) and u.startswith("panelimg:"):
+            return None
+        return u
+
+    def _gal_items(images):
+        return [discord.MediaGalleryItem(media=_m)
+                for u in (images or [])[:10] if (_m := _img(u))]
 
     def _seg_to_items(seg: list) -> list:
         """Converte um segmento (entre separadores) em lista de items sem Container."""
@@ -40762,11 +40772,9 @@ def _build_v2_panel_items(blocks: list, color: int, _inner_action_row=None, imag
         # Galerias posicionadas no topo do segmento
         for i, b in enumerate(seg):
             if b.get("type") == "gallery" and b.get("position", "Topo") != "Rodape":
-                images = b.get("images") or []
-                if images:
-                    items.insert(len(topo_done), discord.ui.MediaGallery(
-                        *[discord.MediaGalleryItem(media=_img(u)) for u in images[:10]]
-                    ))
+                _gi = _gal_items(b.get("images"))
+                if _gi:
+                    items.insert(len(topo_done), discord.ui.MediaGallery(*_gi))
                     topo_done.add(i)
         # Resto dos blocos em ordem
         for i, b in enumerate(seg):
@@ -40779,20 +40787,19 @@ def _build_v2_panel_items(blocks: list, color: int, _inner_action_row=None, imag
                 bl   = (b.get("button_label") or "").strip()
                 bu   = (b.get("button_url") or "").strip()
                 td   = discord.ui.TextDisplay(txt)
+                _thm = _img(th) if th else None
                 if bl and bu:
                     items.append(discord.ui.Section(td, accessory=discord.ui.Button(
                         label=bl, style=discord.ButtonStyle.link, url=bu)))
-                elif th:
-                    items.append(discord.ui.Section(td, accessory=discord.ui.Thumbnail(_img(th))))
+                elif _thm:
+                    items.append(discord.ui.Section(td, accessory=discord.ui.Thumbnail(_thm)))
                 else:
                     items.append(td)
             elif btype == "gallery":
-                images = b.get("images") or []
-                if images:
+                _gi = _gal_items(b.get("images"))
+                if _gi:
                     items.append(discord.ui.Separator(visible=False))
-                    items.append(discord.ui.MediaGallery(
-                        *[discord.MediaGalleryItem(media=_img(u)) for u in images[:10]]
-                    ))
+                    items.append(discord.ui.MediaGallery(*_gi))
         return items
 
     all_items: list = []
@@ -40834,14 +40841,17 @@ def _panel_v2_image_urls(blocks: list) -> list:
     duplicatas — usada para casar com os anexos re-enviados."""
     urls: list = []
     seen: set = set()
+    def _ok(x):
+        return x and x not in seen and (
+            x.startswith("http://") or x.startswith("https://") or x.startswith("panelimg:"))
     for b in blocks or []:
         if b.get("type") == "gallery":
             for u in (b.get("images") or [])[:10]:
-                if u and u not in seen and (u.startswith("http://") or u.startswith("https://")):
+                if _ok(u):
                     seen.add(u); urls.append(u)
         elif b.get("type") == "text":
             th = (b.get("thumbnail") or "").strip()
-            if th and th not in seen and (th.startswith("http://") or th.startswith("https://")):
+            if _ok(th):
                 seen.add(th); urls.append(th)
     return urls
 
@@ -40883,35 +40893,48 @@ async def _panel_v2_attachments(blocks: list) -> tuple[list, dict]:
     async with _ah_pv.ClientSession() as _s:
         for u in _urls:
             _data = None
-            _cache = _panel_img_cache_path(u)
-            # 1) tenta o cache em disco (permanente)
-            try:
-                if os.path.exists(_cache) and os.path.getsize(_cache) > 100:
-                    with open(_cache, "rb") as _cf:
-                        _data = _cf.read()
-            except Exception:
-                _data = None
-            # 2) senão, baixa da URL e cacheia
-            if _data is None:
+            # 0) referência permanente 'panelimg:<arquivo>' → lê o arquivo local (nunca expira)
+            if isinstance(u, str) and u.startswith("panelimg:"):
+                _p = _panel_img_store_path(u.split(":", 1)[1])
                 try:
-                    async with _s.get(u) as _r:
-                        if _r.status != 200:
-                            continue
-                        _data = await _r.read()
-                    if _data and len(_data) > 100:
-                        try:
-                            with open(_cache, "wb") as _cf:
-                                _cf.write(_data)
-                        except Exception:
-                            pass
+                    if os.path.exists(_p) and os.path.getsize(_p) > 100:
+                        with open(_p, "rb") as _cf:
+                            _data = _cf.read()
                 except Exception:
+                    _data = None
+                if not _data:
                     continue
-            if not _data:
-                continue
-            _name = (_uparse(u).path.rsplit("/", 1)[-1] or f"img{idx}")
-            if "." not in _name:
-                _name += ".png"
-            _name = f"{idx}_{_name}"[:60]
+                _base = u.split(":", 1)[1]
+            else:
+                _cache = _panel_img_cache_path(u)
+                # 1) tenta o cache em disco (permanente)
+                try:
+                    if os.path.exists(_cache) and os.path.getsize(_cache) > 100:
+                        with open(_cache, "rb") as _cf:
+                            _data = _cf.read()
+                except Exception:
+                    _data = None
+                # 2) senão, baixa da URL e cacheia
+                if _data is None:
+                    try:
+                        async with _s.get(u) as _r:
+                            if _r.status != 200:
+                                continue
+                            _data = await _r.read()
+                        if _data and len(_data) > 100:
+                            try:
+                                with open(_cache, "wb") as _cf:
+                                    _cf.write(_data)
+                            except Exception:
+                                pass
+                    except Exception:
+                        continue
+                if not _data:
+                    continue
+                _base = (_uparse(u).path.rsplit("/", 1)[-1] or f"img{idx}")
+            if "." not in _base:
+                _base += ".png"
+            _name = f"{idx}_{_base}"[:60]
             idx += 1
             files.append(discord.File(io.BytesIO(_data), filename=_name))
             url_map[u] = f"attachment://{_name}"
@@ -40951,11 +40974,39 @@ async def _fetch_cached_bytes(url: str) -> bytes | None:
     return None
 
 
+def _panel_img_store_path(name: str) -> str:
+    """Caminho do arquivo PERMANENTE de uma imagem 'panelimg:<name>' no /data."""
+    return os.path.join(_PANEL_IMG_CACHE_DIR, name)
+
+
+async def _store_uploaded_permanent(att) -> str:
+    """Salva os bytes de um anexo RECÉM-upado num arquivo PERMANENTE no /data e
+    devolve a referência estável `panelimg:<arquivo>` — NUNCA depende da URL do
+    Discord (que expira, ainda mais as de ephemeral-attachments). Usado só nos
+    painéis V2 (ticket), cujo render resolve panelimg via image_map. Fallback:
+    se o download falhar, devolve att.url."""
+    try:
+        _b = await att.read()
+        if _b and len(_b) > 100:
+            import secrets as _sec
+            _ext = (getattr(att, "filename", "") or "img.png").rsplit(".", 1)[-1].lower()
+            if _ext not in ("png", "jpg", "jpeg", "gif", "webp"):
+                _ext = "png"
+            _name = f"up_{_sec.token_hex(10)}.{_ext}"
+            os.makedirs(_PANEL_IMG_CACHE_DIR, exist_ok=True)
+            with open(_panel_img_store_path(_name), "wb") as _cf:
+                _cf.write(_b)
+            return f"panelimg:{_name}"
+    except Exception as _e:
+        print(f"[panel_img] falha ao salvar upload: {_e}", flush=True)
+    return att.url
+
+
 async def _cache_uploaded_attachment(att) -> str:
     """Baixa os bytes de um anexo RECÉM-upado (URL ainda válida, inclusive as de
     `ephemeral-attachments`, que expiram em minutos) e grava no cache de imagens
-    do painel. Assim o painel consegue re-anexar a imagem depois mesmo com a URL
-    morta. Retorna att.url (referência guardada no bloco)."""
+    do painel. Retorna att.url (referência guardada no bloco). Usado nas
+    decorações (gifs), que renderizam pela URL direta."""
     try:
         _b = await att.read()
         if _b and len(_b) > 100:
@@ -41186,7 +41237,7 @@ class PanelV2TextModal(_ModalV2):
         t = TRANSLATIONS[settings["language"]]
         if self.thumb_upload.values:
             # Cacheia os bytes agora (URL do upload é ephemeral e expira em minutos)
-            thumb = await _cache_uploaded_attachment(self.thumb_upload.values[0])
+            thumb = await _store_uploaded_permanent(self.thumb_upload.values[0])
         else:
             thumb = self._existing.get("thumbnail")
         block = {
@@ -41223,7 +41274,11 @@ class PanelV2GalleryModal(_ModalV2):
             label=t["panelv2_input_gallery_links_label"],
             placeholder=t["panelv2_input_gallery_links_placeholder"],
             required=False, max_length=2000, style=discord.TextStyle.paragraph,
-            default="\n".join(existing.get("images", []) or []) or None,
+            # Só pré-preenche links http externos. Imagens ENVIADAS (panelimg:) NÃO
+            # aparecem aqui — são preservadas via fallback se nada novo for enviado,
+            # evitando re-injetar URL ephemeral morta.
+            default="\n".join(u for u in (existing.get("images") or [])
+                              if isinstance(u, str) and u.startswith("http")) or None,
         )
         self.links_inp = _links
         _pos_rg = discord.ui.RadioGroup(
@@ -41242,7 +41297,7 @@ class PanelV2GalleryModal(_ModalV2):
         settings = get_settings(interaction.guild.id)
         t = TRANSLATIONS[settings["language"]]
         # Cacheia os bytes AGORA (a URL do upload é ephemeral e expira em minutos)
-        uploaded = [await _cache_uploaded_attachment(a) for a in (self.files_upload.values or [])]
+        uploaded = [await _store_uploaded_permanent(a) for a in (self.files_upload.values or [])]
         typed    = [l.strip() for l in (self.links_inp.value or "").splitlines() if l.strip()]
         links    = (uploaded + typed)[:10] or self._existing.get("images", [])
         block = {
