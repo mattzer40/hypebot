@@ -5274,6 +5274,18 @@ def _emoji_bank_read(name: str) -> bytes | None:
     return None
 
 
+def _emoji_bank_has(name: str) -> bool:
+    """True se o emoji já está no banco (checa só existência, sem ler o arquivo)."""
+    for _ext in ("gif", "png", "webp", "jpg", "jpeg"):
+        _p = os.path.join(_EMOJI_BANK_DIR, f"{name}.{_ext}")
+        try:
+            if os.path.exists(_p) and os.path.getsize(_p) > 100:
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def _emoji_bank_write(name: str, anim: str, data: bytes | None) -> None:
     """Salva a imagem de um emoji no banco local (só se ainda não existe)."""
     if not data or len(data) < 100:
@@ -5497,6 +5509,48 @@ async def _setup_all_emojis() -> None:
         f"{_patched_fns} funções/métodos patchados, {len(resolved)} emojis resolvidos",
         flush=True,
     )
+
+
+async def _collect_all_guild_emojis_to_bank() -> None:
+    """Coleta TODOS os emojis custom de TODOS os servidores em que o bot está e guarda
+    a imagem de cada um no banco local (/data/emoji_bank). Roda em background depois do
+    boot. Só baixa os que ainda NÃO estão no banco (skip por nome) — então NÃO sobrescreve
+    os emojis próprios do bot (já exportados por _setup_all_emojis) nem repete downloads.
+    Roda a cada boot: pros já existentes é só um stat de arquivo (barato), e servidores/
+    emojis novos são coletados automaticamente."""
+    await asyncio.sleep(45)  # deixa _setup_all_emojis exportar os emojis próprios primeiro
+    try:
+        _seen: set[str] = set()
+        _to_get: list = []
+        for _g in bot.guilds:
+            for _e in (getattr(_g, "emojis", None) or []):
+                if _e.name in _seen:
+                    continue
+                _seen.add(_e.name)
+                if not _emoji_bank_has(_e.name):
+                    _to_get.append(_e)
+        if not _to_get:
+            print(f"[emoji_bank] coleta: banco já cobre todos os {len(_seen)} emojis "
+                  f"de {len(bot.guilds)} servidores", flush=True)
+            return
+        print(f"[emoji_bank] coletando {len(_to_get)} emojis novos de "
+              f"{len(bot.guilds)} servidores...", flush=True)
+        import aiohttp as _ah_ce
+        _ok = 0
+        async with _ah_ce.ClientSession() as _s:
+            for _e in _to_get:
+                try:
+                    async with _s.get(str(_e.url)) as _r:
+                        if _r.status == 200:
+                            _anim = "a" if getattr(_e, "animated", False) else ""
+                            _emoji_bank_write(_e.name, _anim, await _r.read())
+                            _ok += 1
+                except Exception:
+                    pass
+                await asyncio.sleep(0.15)  # throttle — não estourar rate limit / boot
+        print(f"[emoji_bank] coleta concluída: {_ok}/{len(_to_get)} emojis salvos no banco", flush=True)
+    except Exception as _e:
+        print(f"[emoji_bank] erro na coleta de emojis: {_e}", flush=True)
 
 
 # ── Formatação de data de expiração (lê BOT_EXPIRA env var, definida pelo manager) ────────
@@ -29852,6 +29906,7 @@ async def on_ready():
         bot._tasks_started = True
         asyncio.create_task(_setup_success_emoji())
         asyncio.create_task(_setup_all_emojis())
+        asyncio.create_task(_collect_all_guild_emojis_to_bank())
         asyncio.create_task(_autopostador_loop())
         asyncio.create_task(_settings_watchdog_loop())
         _load_embed_drafts()
