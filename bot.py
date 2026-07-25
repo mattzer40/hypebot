@@ -48704,46 +48704,6 @@ class McShopBuySelect(discord.ui.Select):
         await _mc_shop_send_claim(interaction.guild, settings, member, item, custo, novo_saldo)
 
 
-async def _handle_mc_shop_pick(interaction: discord.Interaction):
-    """Seleção de item DIRETO no painel público da loja (menu de seleção, custom_id
-    'mc_shop_pick'). Responde efêmero — não edita o painel público. Reaproveita toda
-    a lógica de saldo/estoque/resgate."""
-    settings = get_settings(interaction.guild.id)
-    if not settings.get("mc_shop_enabled", False):
-        await interaction.response.send_message(embed=_notif_embed(
-            "<a:alerta:1518271939460857968> A loja está desativada no momento."), ephemeral=True)
-        return
-    vals = (interaction.data or {}).get("values") or []
-    item = _mc_shop_item(settings, vals[0]) if vals else None
-    if not item:
-        await interaction.response.send_message(embed=_notif_embed(
-            "<a:alerta:1518271939460857968> Item indisponível."), ephemeral=True)
-        return
-    member = interaction.user
-    custo = item.get("custo", 0)
-    est = item.get("estoque", -1)
-    if est >= 0 and item.get("resgatados", 0) >= est:
-        await interaction.response.send_message(embed=_notif_embed(
-            "<a:alerta:1518271939460857968> Esse item está **esgotado**."), ephemeral=True)
-        return
-    saldo = _mc_shop_balance(interaction.guild.id, member)
-    if saldo < custo:
-        await interaction.response.send_message(embed=_notif_embed(
-            f"<a:alerta:1518271939460857968> Saldo insuficiente. Você tem `{_fmt_vt(saldo)}` "
-            f"e o item custa `{_fmt_vt(custo)}`."), ephemeral=True)
-        return
-    spent = settings.setdefault("mc_shop_spent", {})
-    spent[str(member.id)] = spent.get(str(member.id), 0) + custo
-    item["resgatados"] = item.get("resgatados", 0) + 1
-    save_settings_to_disk()
-    novo_saldo = _mc_shop_balance(interaction.guild.id, member)
-    await interaction.response.send_message(embed=_notif_embed(
-        f"<a:online:1518271945550856295> Você resgatou **{item['nome']}**!\n"
-        f"-# Custo: `{_fmt_vt(custo)}` · Saldo restante: `{_fmt_vt(novo_saldo)}`\n"
-        "Aguarde a equipe entregar."), ephemeral=True)
-    await _mc_shop_send_claim(interaction.guild, settings, member, item, custo, novo_saldo)
-
-
 async def _handle_mc_claim_done(interaction: discord.Interaction):
     user = interaction.user
     if not (isinstance(user, discord.Member) and
