@@ -38659,42 +38659,94 @@ class DonoCallPanelView(discord.ui.View):
         await interaction.response.send_message(embed=_e, ephemeral=True)
 
 
+async def _dc_permitir_resolver(guild, raw: str):
+    """Resolve um membro a partir de texto (ID ou @menção), buscando na API se não
+    estiver no cache. Retorna o Member ou None."""
+    raw = (raw or "").strip()
+    _digs = "".join(c for c in raw if c.isdigit())
+    if not _digs:
+        return None
+    _uid = int(_digs)
+    m = guild.get_member(_uid)
+    if m:
+        return m
+    try:
+        return await guild.fetch_member(_uid)   # não depende do cache
+    except (discord.NotFound, discord.HTTPException):
+        return None
+
+
+async def _dc_permitir_aplicar(interaction, channel_id: int, member) -> None:
+    """Autoriza o membro a entrar na call e responde. member já resolvido (Member)."""
+    ch = interaction.guild.get_channel(channel_id)
+    if not isinstance(ch, discord.VoiceChannel):
+        await interaction.response.send_message(
+            "<a:alerta:1518271939460857968> Canal da call não encontrado.", ephemeral=True)
+        return
+    if member is None:
+        await interaction.response.send_message(
+            "<a:alerta:1518271939460857968> Membro não encontrado. Confira o ID/@ e tente de novo.",
+            ephemeral=True)
+        return
+    try:
+        await ch.set_permissions(
+            member, connect=True, send_messages=True,
+            reason="Dono de Call — entrada autorizada pelo dono")
+    except Exception:
+        await interaction.response.send_message(
+            "<a:alerta:1518271939460857968> Sem permissão para alterar o canal.", ephemeral=True)
+        return
+    _ok_embed = discord.Embed(
+        description=(
+            f"<a:verificadoverde:1518272098290892810> **{member.mention} pode entrar na call!**\n"
+            f"<:mov_call:1518271964077232150> **Canal** › {ch.mention}"
+        ),
+        color=0x2ECC71,
+    )
+    try:
+        await interaction.response.edit_message(embed=_ok_embed, view=None)
+    except discord.HTTPException:
+        await interaction.response.send_message(embed=_ok_embed, ephemeral=True)
+
+
+class _DonoCallPermitirModal(discord.ui.Modal):
+    def __init__(self, channel_id: int):
+        super().__init__(title="Permitir entrada por ID/@", timeout=120)
+        self.channel_id = channel_id
+        self.inp = discord.ui.TextInput(
+            label="ID ou @menção do membro", required=True, max_length=100,
+            placeholder="Ex: 123456789012345678 ou <@123...>")
+        self.add_item(self.inp)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        member = await _dc_permitir_resolver(interaction.guild, self.inp.value)
+        await _dc_permitir_aplicar(interaction, self.channel_id, member)
+
+
 class _DonoCallPermitirView(discord.ui.View):
     def __init__(self, channel_id: int):
-        super().__init__(timeout=60)
+        super().__init__(timeout=120)
         self.channel_id = channel_id
         select = discord.ui.UserSelect(
-            placeholder="Selecione quem permitir entrar...",
+            placeholder="Pesquise/selecione quem permitir entrar...",
             min_values=1,
             max_values=1,
         )
         select.callback = self._on_select
         self.add_item(select)
+        _btn = discord.ui.Button(label="Buscar por ID/@", style=discord.ButtonStyle.secondary, row=1)
+        _btn.callback = self._on_id
+        self.add_item(_btn)
 
     async def _on_select(self, interaction: discord.Interaction):
-        member = interaction.guild.get_member(self.children[0].values[0].id)
-        ch = interaction.guild.get_channel(self.channel_id)
-        if not isinstance(ch, discord.VoiceChannel) or not member:
-            await interaction.response.send_message("<a:alerta:1518271939460857968> Erro ao processar.", ephemeral=True)
-            return
-        try:
-            await ch.set_permissions(
-                member,
-                connect=True,
-                send_messages=True,
-                reason="Dono de Call — entrada autorizada pelo dono",
-            )
-        except Exception:
-            await interaction.response.send_message("<a:alerta:1518271939460857968> Sem permissão para alterar o canal.", ephemeral=True)
-            return
-        _ok_embed = discord.Embed(
-            description=(
-                f"<a:verificadoverde:1518272098290892810> **{member.mention} pode entrar na call!**\n"
-                f"<:mov_call:1518271964077232150> **Canal** › {ch.mention}"
-            ),
-            color=0x2ECC71,
-        )
-        await interaction.response.edit_message(embed=_ok_embed, view=None)
+        # values[0] já vem resolvido na interação — não usar get_member (falha no cache).
+        member = self.children[0].values[0]
+        if not isinstance(member, discord.Member):
+            member = await _dc_permitir_resolver(interaction.guild, str(member.id))
+        await _dc_permitir_aplicar(interaction, self.channel_id, member)
+
+    async def _on_id(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(_DonoCallPermitirModal(self.channel_id))
 
 
 # ── Funções auxiliares de painel ──────────────────────────────────────────────
