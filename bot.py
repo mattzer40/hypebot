@@ -47837,7 +47837,8 @@ def build_mc_shop_embed(author: discord.Member, settings: dict) -> discord.Embed
     if itens:
         linhas = []
         for i, it in enumerate(itens[:20], 1):
-            linhas.append(f"`{i}.` **{it.get('nome')}** — `{_fmt_vt(it.get('custo', 0))}` "
+            _pe = f"{it['emoji']} " if it.get("emoji") else ""
+            linhas.append(f"`{i}.` {_pe}**{it.get('nome')}** — `{_fmt_vt(it.get('custo', 0))}` "
                           f"· estoque: `{_mc_shop_estoque_txt(it)}` · resgatados: `{it.get('resgatados', 0)}`")
         itens_val = "\n".join(linhas)
     else:
@@ -47967,7 +47968,9 @@ class McShopItemModal(discord.ui.Modal):
                                            style=discord.TextStyle.paragraph, max_length=300)
         self.i_estoque = discord.ui.TextInput(label="Estoque (vazio = ilimitado)", required=False,
                                               max_length=6, placeholder="Ex: 5")
-        for it in (self.i_nome, self.i_custo, self.i_desc, self.i_estoque):
+        self.i_emoji = discord.ui.TextInput(label="Emoji do item (opcional)", required=False,
+                                            max_length=60, placeholder="Ex: 🎬  ou  <:netflix:123...>")
+        for it in (self.i_nome, self.i_custo, self.i_desc, self.i_estoque, self.i_emoji):
             self.add_item(it)
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -47997,6 +48000,7 @@ class McShopItemModal(discord.ui.Modal):
             "desc": self.i_desc.value.strip() or None,
             "estoque": estoque,
             "resgatados": 0,
+            "emoji": self.i_emoji.value.strip() or None,
         }
         settings.setdefault("mc_shop_items", []).append(item)
         save_settings_to_disk()
@@ -48101,19 +48105,38 @@ def _mc_shop_public(settings: dict, guild):
     d = settings.get("mc_shop_embed", {})
     color = d.get("color") if isinstance(d.get("color"), int) else settings.get("embed_color", 0x2B2D31)
     icon = (guild.icon.url if guild and guild.icon else None) or (bot.user.display_avatar.url if bot.user else None)
+    itens = settings.get("mc_shop_items", [])[:25]
+
     emb = discord.Embed(color=color)
-    emb.title = d.get("title") or "<:vender_cargo:1518272029604970719> Loja de Tempo"
-    linhas = []
-    for it in settings.get("mc_shop_items", [])[:20]:
-        _e = _mc_shop_estoque_txt(it)
-        _extra = f" · estoque: `{_e}`" if it.get("estoque", -1) >= 0 else ""
-        linhas.append(f"**{it.get('nome')}** — `{_fmt_vt(it.get('custo', 0))}`{_extra}"
-                      + (f"\n-# {it.get('desc')}" if it.get('desc') else ""))
-    corpo = ("\n".join(linhas) or "_Nenhum item disponível._")
-    emb.description = (d.get("description") or
-                      "Troque seu **tempo em call** por recompensas! Clique em **Resgatar** abaixo.") + "\n\n" + corpo
+    emb.title = d.get("title") or "<:vender_cargo:1518272029604970719>  L O J A   D E   T E M P O"
+    _intro = d.get("description") or "Troque suas **horas em call** por recompensas exclusivas."
+    emb.description = (
+        f"{_intro}\n"
+        f"-# <:mov_call:1518271964077232150> Você paga com o **tempo total** que acumulou em call.\n"
+        "**═══════════════════════**"
+    )
+    for it in itens:
+        _emj   = (it.get("emoji") or "<:vender_cargo:1518272029604970719>").strip()
+        _custo = _fmt_vt(it.get("custo", 0))
+        est = it.get("estoque", -1)
+        if est is None or est < 0:
+            _est = "<a:online:1518271945550856295> Disponível"
+        else:
+            _rest = max(0, est - it.get("resgatados", 0))
+            _est = (f"<a:online:1518271945550856295> `{_rest}` em estoque"
+                    if _rest > 0 else "<:disslike:1518272066506330232> **Esgotado**")
+        _val = f"<:mov_call:1518271964077232150> Custo: **`{_custo}`**\n{_est}"
+        if it.get("desc"):
+            _val += f"\n-# {it['desc']}"
+        emb.add_field(name=f"{_emj}  {it.get('nome', '?')}"[:256], value=_val[:1024], inline=True)
+    if not itens:
+        emb.add_field(name="​", value="-# _Nenhum item disponível no momento._", inline=False)
     if icon:
         emb.set_thumbnail(url=icon)
+    emb.set_footer(text=f"{_footer_name(guild, settings)} • toque em Resgatar para trocar seu tempo",
+                   icon_url=icon)
+    emb.timestamp = datetime.now()
+
     view = discord.ui.View(timeout=None)
     view.add_item(discord.ui.Button(label="Resgatar", style=discord.ButtonStyle.success,
                                     emoji="<:vender_cargo:1518272029604970719>", custom_id="mc_shop_open"))
@@ -48145,8 +48168,14 @@ async def _handle_mc_shop_open(interaction: discord.Interaction):
             _desc += " · ESGOTADO"
         elif saldo < it.get("custo", 0):
             _desc += " · saldo insuficiente"
+        _emj = None
+        if it.get("emoji"):
+            try:
+                _emj = discord.PartialEmoji.from_str(it["emoji"].strip())
+            except Exception:
+                _emj = None
         options.append(discord.SelectOption(label=it.get("nome", "?")[:100], description=_desc[:100],
-                                            value=it.get("id")))
+                                            value=it.get("id"), emoji=_emj))
     view = discord.ui.View(timeout=120)
     view.add_item(McShopBuySelect(options))
     await interaction.response.send_message(embed=emb, view=view, ephemeral=True)
