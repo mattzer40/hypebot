@@ -5920,6 +5920,103 @@ class MenuView(discord.ui.View):
 
 
 
+# ── Painel principal em Components V2 (novo /menu premium) ────────────────────
+# Isolado do MenuView clássico (que continua sendo usado pelos "Voltar" das subtelas).
+# As categorias abrem numa mensagem própria (ephemeral) porque V2 não pode ser
+# convertido pra embed clássico na mesma mensagem — por isso as subtelas continuam
+# 100% funcionais como estão, sem risco.
+class MainMenuV2Select(discord.ui.Select):
+    def __init__(self, lang: str = "pt-br"):
+        _t = TRANSLATIONS.get(lang, TRANSLATIONS["pt-br"])
+        super().__init__(custom_id="hype_main_menu_v2", placeholder=_t["placeholder"],
+                         min_values=1, max_values=1,
+                         options=list(MenuSelect(lang=lang).options))
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id if interaction.guild else 0)
+        sel = self.values[0]
+        _panels = {
+            "aparencia": (build_appearance_embed, AppearanceView),
+            "seguranca": (build_security_embed, SecurityView),
+            "servidor": (build_servidor_embed, ServidorView),
+            "tickets": (build_tickets_embed, TicketsView),
+            "comunidade": (build_comunidade_embed, ComunidadeView),
+            "entretenimento": (build_entretenimento_embed, EntretenimentoView),
+            "gifs": (build_gifs_embed, GifsView),
+            "vender_vip": (build_vendas_embed, VendasView),
+            "mov_call": (build_movcall_embed, MovCallView),
+        }
+        entry = _panels.get(sel)
+        # Reseta o menu principal (pra poder re-selecionar a mesma categoria) e abre a
+        # categoria numa mensagem própria (ephemeral) — V2 não vira embed na mesma msg.
+        try:
+            await interaction.response.edit_message(
+                view=MainMenuV2Layout(interaction.user, lang=settings["language"]))
+            _send = interaction.followup.send
+        except Exception:
+            _send = interaction.response.send_message
+        if entry:
+            _fn, _vc = entry
+            await _send(embed=_fn(interaction.user, settings), view=_vc(interaction.user), ephemeral=True)
+        else:
+            _labels = {o.value: o.label for o in self.options}
+            await _send(
+                f"{TRANSLATIONS[settings['language']]['coming_soon']} (**{_labels.get(sel, sel)}**)",
+                ephemeral=True)
+
+
+class MainMenuV2Layout(discord.ui.LayoutView):
+    def __init__(self, author: "discord.Member | None" = None, lang: str = "pt-br"):
+        super().__init__(timeout=None)
+        self.author_id = getattr(author, "id", 0) or 0
+        guild = getattr(author, "guild", None)
+        settings = get_settings(guild.id if guild else 0)
+        color = settings.get("embed_color", 0x5865F2)
+        t = TRANSLATIONS.get(lang, TRANSLATIONS["pt-br"])
+        bot_av = bot.user.display_avatar.url if bot.user else None
+        items: list = []
+        _head = (f"<:seguranca:1518271987393232936> **{t['central_title']}**\n"
+                 "-# Central de configurações do bot")
+        if bot_av:
+            items.append(discord.ui.Section(discord.ui.TextDisplay(_head),
+                                            accessory=discord.ui.Thumbnail(bot_av)))
+        else:
+            items.append(discord.ui.TextDisplay(_head))
+        items.append(discord.ui.Separator(visible=True))
+        items.append(discord.ui.TextDisplay(
+            "<a:online:1518271945550856295> Selecione uma **categoria** no menu abaixo para configurar."))
+        items.append(discord.ui.Separator(visible=True))
+        _info = ""
+        if author is not None:
+            _info += f"<:comunidade_:1518272016971595807> **{t['administrator']}:** {author.mention}\n"
+        _info += (f"<:financeiro_:1518272010688397432> **{t['expires_in']}:** `{_fmt_expira(lang)}`\n"
+                  f"<:entretenimento_:1518271992191779038> **{t['important']}:** "
+                  f"[{t['support_server']}](https://discord.gg/hypebot)")
+        items.append(discord.ui.TextDisplay(_info))
+        banner = settings.get("embed_banner_url") or os.environ.get("DEFAULT_EMBED_BANNER", "")
+        if banner:
+            items.append(discord.ui.Separator(visible=True))
+            try:
+                items.append(discord.ui.MediaGallery(discord.MediaGalleryItem(media=banner)))
+            except Exception:
+                pass
+        self.add_item(discord.ui.Container(*items, accent_colour=color))
+        self.add_item(discord.ui.ActionRow(MainMenuV2Select(lang=lang)))
+        if self.author_id and _dev_guild_override.get(self.author_id):
+            _dev = discord.ui.Button(label="Dev Panel", style=discord.ButtonStyle.secondary,
+                                     emoji="🔧", custom_id="menu_v2_dev")
+            self.add_item(discord.ui.ActionRow(_dev))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        settings = get_settings(interaction.guild.id if interaction.guild else 0)
+        if self.author_id != 0 and interaction.user.id != self.author_id:
+            if not is_authorized(interaction.user, settings):
+                await interaction.response.send_message(
+                    TRANSLATIONS[settings["language"]]["only_author"], ephemeral=True)
+                return False
+        return True
+
+
 class AppearanceView(discord.ui.View):
     def __init__(self, author: discord.Member):
         super().__init__(timeout=600)
@@ -30003,6 +30100,7 @@ async def on_ready():
     for _view_cls, _view_name in [
         (_GifsConversorPublicSelect, "GifsConversorPublicSelect"),
         (lambda: MenuView(author_id=0),           "MenuView"),
+        (lambda: MainMenuV2Layout(),              "MainMenuV2Layout"),
         (GifsView,                                "GifsView"),
         (_FecharCanalView,                        "FecharCanalView"),
         (TicketThreadView,                        "TicketThreadView"),
@@ -33944,8 +34042,15 @@ async def menu(ctx: commands.Context):
             await ctx.reply(TRANSLATIONS[lang]["not_authorized"], delete_after=8)
             return
         await _warm_avatar(ctx.author, ctx.guild)
-        embed = build_main_embed(ctx.author, lang)
-        await ctx.send(embed=embed, view=MenuView(ctx.author.id, lang=lang))
+        try:
+            _v2 = MainMenuV2Layout(ctx.author, lang=lang)
+        except Exception as _mv2e:
+            print(f"[menu v2] build falhou, fallback clássico: {_mv2e}", flush=True)
+            _v2 = None
+        if _v2 is not None:
+            await ctx.send(view=_v2)
+        else:
+            await ctx.send(embed=build_main_embed(ctx.author, lang), view=MenuView(ctx.author.id, lang=lang))
     finally:
         if token is not None:
             _dev_guild_ctx.reset(token)
@@ -34099,8 +34204,15 @@ async def menu_slash(interaction: discord.Interaction):
             await interaction.response.send_message(TRANSLATIONS[lang]["not_authorized"], ephemeral=True)
             return
         await _warm_avatar(interaction.user, interaction.guild)
-        embed = build_main_embed(interaction.user, lang)
-        await interaction.response.send_message(embed=embed, view=MenuView(interaction.user.id, lang=lang), ephemeral=True)
+        try:
+            _v2 = MainMenuV2Layout(interaction.user, lang=lang)
+        except Exception as _mv2e:
+            print(f"[menu v2] build falhou, fallback clássico: {_mv2e}", flush=True)
+            _v2 = None
+        if _v2 is not None:
+            await interaction.response.send_message(view=_v2, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=build_main_embed(interaction.user, lang), view=MenuView(interaction.user.id, lang=lang), ephemeral=True)
     except Exception as _e:
         import traceback
         traceback.print_exc()
@@ -48251,9 +48363,9 @@ class McShopView(discord.ui.View):
             await interaction.response.send_message(embed=_notif_embed(
                 "<a:alerta:1518271939460857968> Use este botão no canal onde o painel deve ficar."), ephemeral=True)
             return
-        embed, view, files = _mc_shop_public(settings, interaction.guild)
+        layout, files = _mc_shop_public(settings, interaction.guild)
         try:
-            await channel.send(embed=embed, view=view, files=files)
+            await channel.send(view=layout, files=files)
         except discord.HTTPException as e:
             await interaction.response.send_message(embed=_notif_embed(f"<a:alerta:1518271939460857968> Falha: `{e}`"), ephemeral=True)
             return
@@ -48472,76 +48584,94 @@ def _is_hex(s: str) -> bool:
 
 
 def _mc_shop_public(settings: dict, guild):
+    """Painel público da Loja em Components V2 — visual premium: header com thumbnail,
+    linha nativa, itens limpos (1 por linha, sem quebra feia), banner e menu de seleção.
+    Devolve (layout, files)."""
     d = settings.get("mc_shop_embed", {})
     color = d.get("color") if isinstance(d.get("color"), int) else settings.get("embed_color", 0x2B2D31)
     icon = (guild.icon.url if guild and guild.icon else None) or (bot.user.display_avatar.url if bot.user else None)
     itens = settings.get("mc_shop_items", [])[:25]
     _files: list = []
 
-    emb = discord.Embed(color=color)
-    emb.title = d.get("title") or "<:vender_cargo:1518272029604970719>  L O J A   D E   T E M P O"
+    _title = d.get("title") or "L O J A   D E   T E M P O"
     _intro = d.get("description") or "Troque suas **horas em call** por recompensas exclusivas."
-    # Lista explícita e LIMPA dos itens (sem grid de fields feio) — cada item numa linha.
-    _linhas = []
-    for it in itens:
-        _emj   = (it.get("emoji") or "<:vender_cargo:1518272029604970719>").strip()
-        _custo = _fmt_vt(it.get("custo", 0))
-        est = it.get("estoque", -1)
-        if est is None or est < 0:
-            _est = "<a:online:1518271945550856295> disponível"
-        else:
-            _rest = max(0, est - it.get("resgatados", 0))
-            _est = (f"<a:online:1518271945550856295> `{_rest}` restante(s)"
-                    if _rest > 0 else "<:disslike:1518272066506330232> **esgotado**")
-        _linha = f"{_emj} **{it.get('nome', '?')}**  ·  <:mov_call:1518271964077232150> `{_custo}`  ·  {_est}"
-        if it.get("desc"):
-            _linha += f"\n-# {it['desc']}"
-        _linhas.append(_linha)
-    _lista = "\n".join(_linhas) if _linhas else "-# _Nenhum item disponível no momento._"
-    emb.description = (
-        f"{_intro}\n"
-        f"-# <:mov_call:1518271964077232150> Você paga com o **tempo total** acumulado em call.\n"
-        "**━━━━━━━━━━━━━━━━━━━━━━━**\n"
-        f"{_lista}"
-    )[:4096]
-    # Thumbnail configurável: upload permanente (panelimg) é anexado; link http usa a URL;
-    # sem thumbnail personalizada, cai no ícone do servidor.
+    _header = (f"## <:vender_cargo:1518272029604970719>  {_title}\n"
+               f"{_intro}\n"
+               "-# <:mov_call:1518271964077232150> Você paga com o **tempo total** acumulado em call.")
+
+    # Thumbnail (upload permanente é anexado; link http direto; senão ícone do servidor)
+    _thumb_url = None
     _thumb = d.get("thumbnail")
-    _thumb_set = False
     if isinstance(_thumb, str) and _thumb.startswith("panelimg:"):
         _tp = _panel_img_store_path(_thumb.split(":", 1)[1])
         try:
             if os.path.exists(_tp) and os.path.getsize(_tp) > 100:
                 _fname = _thumb.split(":", 1)[1]
                 _files.append(discord.File(_tp, filename=_fname))
-                emb.set_thumbnail(url=f"attachment://{_fname}")
-                _thumb_set = True
+                _thumb_url = f"attachment://{_fname}"
         except Exception:
-            _thumb_set = False
+            _thumb_url = None
     elif isinstance(_thumb, str) and _thumb.startswith("http"):
-        emb.set_thumbnail(url=_thumb)
-        _thumb_set = True
-    if not _thumb_set and icon:
-        emb.set_thumbnail(url=icon)
-    # Banner configurável (imagem grande embaixo): upload permanente ou link http.
+        _thumb_url = _thumb
+    if not _thumb_url:
+        _thumb_url = icon
+
+    items_ui: list = []
+    if _thumb_url:
+        items_ui.append(discord.ui.Section(discord.ui.TextDisplay(_header),
+                                           accessory=discord.ui.Thumbnail(_thumb_url)))
+    else:
+        items_ui.append(discord.ui.TextDisplay(_header))
+    items_ui.append(discord.ui.Separator(visible=True))
+
+    # Itens — 1 por linha, formato enxuto (sem "restante(s)" que quebrava a linha).
+    _linhas = []
+    for i, it in enumerate(itens, 1):
+        _pe = (it.get("emoji") or "").strip() or f"`{i}.`"
+        _custo = _fmt_vt(it.get("custo", 0))
+        est = it.get("estoque", -1)
+        if est is None or est < 0:
+            _est = "<a:online:1518271945550856295> ilimitado"
+        else:
+            _rest = max(0, est - it.get("resgatados", 0))
+            _est = (f"<a:online:1518271945550856295> `{_rest}`"
+                    if _rest > 0 else "<:disslike:1518272066506330232> esgotado")
+        _linha = f"{_pe} **{it.get('nome', '?')}** — <:mov_call:1518271964077232150> `{_custo}`  ·  {_est}"
+        if it.get("desc"):
+            _linha += f"\n-# {it['desc']}"
+        _linhas.append(_linha)
+    items_ui.append(discord.ui.TextDisplay(
+        ("\n".join(_linhas) if _linhas else "-# _Nenhum item disponível no momento._")[:4000]))
+
+    # Banner (imagem grande no rodapé): upload permanente ou link http.
     _banner = d.get("banner")
+    _banner_url = None
     if isinstance(_banner, str) and _banner.startswith("panelimg:"):
         _bp = _panel_img_store_path(_banner.split(":", 1)[1])
         try:
             if os.path.exists(_bp) and os.path.getsize(_bp) > 100:
                 _bname = f"banner_{_banner.split(':', 1)[1]}"
                 _files.append(discord.File(_bp, filename=_bname))
-                emb.set_image(url=f"attachment://{_bname}")
+                _banner_url = f"attachment://{_bname}"
+        except Exception:
+            _banner_url = None
+    elif isinstance(_banner, str) and _banner.startswith("http"):
+        _banner_url = _banner
+    if _banner_url:
+        items_ui.append(discord.ui.Separator(visible=True))
+        try:
+            items_ui.append(discord.ui.MediaGallery(discord.MediaGalleryItem(media=_banner_url)))
         except Exception:
             pass
-    elif isinstance(_banner, str) and _banner.startswith("http"):
-        emb.set_image(url=_banner)
-    emb.set_footer(text=f"{_footer_name(guild, settings)} • escolha um item no menu para resgatar",
-                   icon_url=icon)
-    emb.timestamp = datetime.now()
 
-    # Menu de seleção com os itens (a pedido do cliente — em vez do botão Resgatar).
-    view = discord.ui.View(timeout=None)
+    items_ui.append(discord.ui.Separator(visible=True))
+    items_ui.append(discord.ui.TextDisplay(
+        f"-# {_footer_name(guild, settings)} • escolha um item no menu para resgatar"))
+
+    layout = discord.ui.LayoutView(timeout=None)
+    layout.add_item(discord.ui.Container(*items_ui, accent_colour=color))
+
+    # Menu de seleção com os itens.
     if itens:
         _opts = []
         for it in itens[:25]:
@@ -48556,13 +48686,10 @@ def _mc_shop_public(settings: dict, guild):
                     _oe = None
             _opts.append(discord.SelectOption(label=it.get("nome", "?")[:100],
                                               description=_od[:100], value=it.get("id"), emoji=_oe))
-        view.add_item(discord.ui.Select(placeholder="Selecione um item para resgatar...",
-                                        min_values=1, max_values=1, options=_opts,
-                                        custom_id="mc_shop_pick"))
-    else:
-        view.add_item(discord.ui.Button(label="Sem itens disponíveis", disabled=True,
-                                        style=discord.ButtonStyle.secondary, custom_id="mc_shop_none"))
-    return emb, view, _files
+        layout.add_item(discord.ui.ActionRow(discord.ui.Select(
+            placeholder="Selecione um item para resgatar...", min_values=1, max_values=1,
+            options=_opts, custom_id="mc_shop_pick")))
+    return layout, _files
 
 
 async def _handle_mc_shop_open(interaction: discord.Interaction):
@@ -51866,6 +51993,15 @@ async def on_interaction(interaction: discord.Interaction):
                         "<a:alerta:1518271939460857968> Erro ao resgatar."), ephemeral=True)
                 except Exception:
                     pass
+        return
+
+    if cid == "menu_v2_dev":
+        try:
+            embed = await _build_dev_embed()
+            await interaction.response.send_message(
+                embed=embed, view=DevPanelView(interaction.user.id), ephemeral=True)
+        except Exception as _e:
+            print(f"[menu_v2_dev] ERRO: {_e}", flush=True)
         return
 
     if cid == "mc_claim_done":
