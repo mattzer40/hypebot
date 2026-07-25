@@ -4854,6 +4854,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("mc_tiers", [])              # [{"role": int, "meta": int_segundos}]
     settings.setdefault("mc_muted_weight", 25)       # % que o tempo mutado vale
     settings.setdefault("mc_exempt_roles", [])       # cargos isentos (não sobem/caem)
+    settings.setdefault("mc_tier_since", {})         # {uid: {idx, week}} p/ prazo de 1 semana
     # ── Loja de tempo (resgatar recompensas por tempo em call) ──────────────
     settings.setdefault("mc_shop_enabled", False)
     settings.setdefault("mc_shop_items", [])         # [{id,nome,custo(seg),desc,estoque(-1=ilim),resgatados}]
@@ -46923,6 +46924,7 @@ async def _mc_reset_geral(guild, settings: dict) -> tuple[int, int]:
 
     # Semana zerada: não deixa o rebaixamento de domingo julgar a temporada antiga
     settings["mc_last_eval_week"] = datetime.now().date().isoformat()
+    settings["mc_tier_since"] = {}   # temporada zerada — ninguém carrega prazo antigo
     save_settings_to_disk()
     print(f"[mov_call] RESET GERAL em {guild.id}: {n_tempo} tempo(s), {n_cargo} cargo(s) removido(s)", flush=True)
     return n_tempo, n_cargo
@@ -47031,6 +47033,12 @@ async def _mc_set_tier(member: discord.Member, tiers: list, target_idx: int) -> 
     except discord.HTTPException as _e:
         print(f"[mov_call] set_tier erro ({member.id}): {_e}", flush=True)
         return False, f"erro do Discord: `{_e}`"
+    # Marca em qual semana o membro chegou neste cargo (prazo de 1 semana p/ rebaixar)
+    _ts_map = get_settings(guild.id).setdefault("mc_tier_since", {})
+    if 0 <= target_idx < len(tiers):
+        _ts_map[str(member.id)] = {"idx": target_idx, "week": _vt_week_start()}
+    else:
+        _ts_map.pop(str(member.id), None)
     return True, ""
 
 
@@ -47178,11 +47186,19 @@ async def _mc_eval_guild_weekly(guild, settings: dict):
                 membros[m.id] = m
     n = 0
     _now_ts = datetime.now().timestamp()
+    _this_week = _vt_week_start()
+    _ts_map = settings.setdefault("mc_tier_since", {})
     for m in membros.values():
         if _mc_is_exempt(m, settings):
             continue  # cargo isento — não é rebaixado
         cur = _mc_current_tier_index(m, tiers)
         if cur < 0:
+            continue
+        # Prazo de 1 semana: se o cargo foi SETADO na mão (sem registro / registro de
+        # outro tier) ou obtido NESTA semana, dá uma semana cheia antes de poder cair.
+        _rec = _ts_map.get(str(m.id))
+        if (not _rec) or _rec.get("idx") != cur or _rec.get("week") == _this_week:
+            _ts_map[str(m.id)] = {"idx": cur, "week": _this_week}
             continue
         data = _get_user_vt(guild.id, m.id)
         _vt_rotate(data)
@@ -47449,6 +47465,7 @@ class MovCallView(discord.ui.View):
         settings["mc_last_eval_week"] = ""
         settings["mc_emojis"] = {}
         settings["mc_exempt_roles"] = []
+        settings["mc_tier_since"] = {}
         # Loja: zera a config, mas MANTÉM mc_shop_spent (saldo já gasto pelos membros)
         settings["mc_shop_enabled"] = False
         settings["mc_shop_items"] = []
