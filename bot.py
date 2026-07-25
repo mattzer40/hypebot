@@ -5993,6 +5993,59 @@ class MainMenuV2Select(discord.ui.Select):
                 ephemeral=True)
 
 
+# Categorias implementadas do menu, como BOTÕES (mais visual que o menu suspenso).
+_MENU_V2_CATS = [
+    ("aparencia", "Aparência", "<:aparncia_:1518271975317962895>"),
+    ("seguranca", "Segurança", "<:seguranca:1518271987393232936>"),
+    ("servidor", "Servidor", "<:servidor_:1518271981189992638>"),
+    ("tickets", "Tickets", "<:tickets:1518271952526250155>"),
+    ("comunidade", "Comunidade", "<:comunidade_:1518272016971595807>"),
+    ("entretenimento", "Entretenimento", "<:entretenimento_:1518271992191779038>"),
+    ("gifs", "GIFs", "<:gifs:1518272035762081835>"),
+    ("vender_vip", "VIP/Cargo", "<:vender_cargo:1518272029604970719>"),
+    ("mov_call", "Mov. de Call", "<:mov_call:1518271964077232150>"),
+]
+
+
+async def _open_menu_category(interaction: discord.Interaction, value: str):
+    """Abre a categoria do menu numa mensagem própria (ephemeral). As subtelas seguem
+    clássicas (embed) — não dá pra editar V2→embed na mesma msg, então abrem à parte."""
+    settings = get_settings(interaction.guild.id if interaction.guild else 0)
+    _panels = {
+        "aparencia": (build_appearance_embed, AppearanceView),
+        "seguranca": (build_security_embed, SecurityView),
+        "servidor": (build_servidor_embed, ServidorView),
+        "tickets": (build_tickets_embed, TicketsView),
+        "comunidade": (build_comunidade_embed, ComunidadeView),
+        "entretenimento": (build_entretenimento_embed, EntretenimentoView),
+        "gifs": (build_gifs_embed, GifsView),
+        "vender_vip": (build_vendas_embed, VendasView),
+        "mov_call": (build_movcall_embed, MovCallView),
+    }
+    entry = _panels.get(value)
+    if entry:
+        _fn, _vc = entry
+        await interaction.response.send_message(
+            embed=_fn(interaction.user, settings), view=_vc(interaction.user), ephemeral=True)
+    else:
+        await interaction.response.send_message(
+            TRANSLATIONS[settings["language"]]["coming_soon"], ephemeral=True)
+
+
+class MenuV2CatButton(discord.ui.Button):
+    def __init__(self, value: str, label: str, emoji_str: str):
+        try:
+            _e = discord.PartialEmoji.from_str(emoji_str) if emoji_str else None
+        except Exception:
+            _e = None
+        super().__init__(label=label, style=discord.ButtonStyle.secondary, emoji=_e,
+                         custom_id=f"menu_v2_cat_{value}")
+        self.cat_value = value
+
+    async def callback(self, interaction: discord.Interaction):
+        await _open_menu_category(interaction, self.cat_value)
+
+
 class MainMenuV2Layout(discord.ui.LayoutView):
     def __init__(self, author: "discord.Member | None" = None, lang: str = "pt-br"):
         super().__init__(timeout=None)
@@ -6028,7 +6081,15 @@ class MainMenuV2Layout(discord.ui.LayoutView):
                      f"  ·  [{t['support_server']}](https://discord.gg/hypebot)")
         items.append(discord.ui.TextDisplay("\n".join(_rows)))
         self.add_item(discord.ui.Container(*items, accent_colour=color))
-        self.add_item(discord.ui.ActionRow(MainMenuV2Select(lang=lang)))
+        # Categorias como BOTÕES (3 por linha) — mais visual que o menu suspenso.
+        _brow = []
+        for _val, _lbl, _emj in _MENU_V2_CATS:
+            _brow.append(MenuV2CatButton(_val, _lbl, _emj))
+            if len(_brow) == 3:
+                self.add_item(discord.ui.ActionRow(*_brow))
+                _brow = []
+        if _brow:
+            self.add_item(discord.ui.ActionRow(*_brow))
         if self.author_id and _dev_guild_override.get(self.author_id):
             _dev = discord.ui.Button(label="Dev Panel", style=discord.ButtonStyle.secondary,
                                      emoji="🔧", custom_id="menu_v2_dev")
@@ -6630,7 +6691,7 @@ class AppearanceView(discord.ui.View):
         ask = discord.Embed(color=color)
         ask.set_author(name="Banner do Painel — NATA®", icon_url=icon_url)
         if icon_url:
-            ask.set_thumbnail(url=_avatar_url(author))
+            ask.set_thumbnail(url=_avatar_url(self.author))
         ask.add_field(
             name="<:aparncia_:1518271975317962895>  Como configurar:",
             value=(
