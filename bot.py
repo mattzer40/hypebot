@@ -5310,23 +5310,11 @@ def _free_disk_space():
     """EMERGÊNCIA (disco cheio — Errno 28): libera espaço no /data deletando SÓ caches
     REGENERÁVEIS — emoji_bank (os Application Emojis já estão no Discord, o banco é só
     fonte de re-criação) e o cache de imagens por URL. NUNCA toca em uploads permanentes
-    (`up_*`), settings, backups nem panelimg. Roda no boot antes de tudo."""
+    (`up_*`), settings, backups nem panelimg. RÁPIDO: não faz du do /data inteiro (isso
+    travava o boot num disco cheio) — só apaga os diretórios-alvo e conta arquivos."""
     import shutil as _sh
-    def _du_mb(p):
-        _t = 0
-        try:
-            for _r, _d, _fs in os.walk(p):
-                for _f in _fs:
-                    try:
-                        _t += os.path.getsize(os.path.join(_r, _f))
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-        return _t // (1024 * 1024)
     try:
         _root = os.path.dirname(_CLIENT_DIR) or _CLIENT_DIR
-        print(f"[disk] antes: /data ~{_du_mb('/data')}MB | raiz clientes ~{_du_mb(_root)}MB", flush=True)
         _dirs = []
         try:
             for _e in os.listdir(_root):
@@ -5337,11 +5325,14 @@ def _free_disk_space():
             pass
         if _CLIENT_DIR not in _dirs:
             _dirs.append(_CLIENT_DIR)
-        _freed = 0
+        _nbank = _ncache = 0
         for _cd in _dirs:
             _eb = os.path.join(_cd, "emoji_bank")
             if os.path.isdir(_eb):
-                _freed += _du_mb(_eb)
+                try:
+                    _nbank += len(os.listdir(_eb))
+                except Exception:
+                    pass
                 _sh.rmtree(_eb, ignore_errors=True)
             _pic = os.path.join(_cd, "panel_img_cache")
             if os.path.isdir(_pic):
@@ -5350,12 +5341,13 @@ def _free_disk_space():
                         if not _f.startswith("up_"):  # mantém uploads permanentes
                             try:
                                 os.remove(os.path.join(_pic, _f))
+                                _ncache += 1
                             except Exception:
                                 pass
                 except Exception:
                     pass
-        print(f"[disk] liberado ~{_freed}MB (emoji_bank) + cache de imagens por URL | "
-              f"depois: /data ~{_du_mb('/data')}MB", flush=True)
+        print(f"[disk] limpeza: {_nbank} emojis de banco + {_ncache} imagens de cache por URL "
+              f"apagados ({len(_dirs)} dirs). Uploads/settings/panelimg mantidos.", flush=True)
     except Exception as _e:
         print(f"[disk] erro: {_e}", flush=True)
 
