@@ -19632,9 +19632,14 @@ async def _audit_log(guild, event_key, *, title=None, description=None, color=No
                     author_icon = _av
                 if thumbnail is None:
                     thumbnail = _av
-            embed = discord.Embed(title=title, description=description, color=color)
+            # Cabeçalho premium SEM emoji: com subject (autor+foto), o título vira
+            # "Ação • Nome" no próprio autor (card de perfil). Sem subject, título normal.
+            embed = discord.Embed(description=description, color=color)
             if author_name:
-                embed.set_author(name=author_name, icon_url=author_icon)
+                _hdr = f"{title}  •  {author_name}" if title else author_name
+                embed.set_author(name=_hdr[:256], icon_url=author_icon)
+            else:
+                embed.title = title
             if thumbnail:
                 embed.set_thumbnail(url=thumbnail)
             for f in (fields or []):
@@ -19743,28 +19748,25 @@ async def _log_ban(guild, user, kind):
 
         gname = guild.name
         if is_ban:
-            color = _C_RED
-            titulo = f"{gname} — Usuário Banido {_E_BAN_RED}"
-            u_lbl, a_lbl, verbo = "Usuário Banido", "Autor do Banimento", "baniu"
+            color, titulo, verbo = _C_RED, "Usuário Banido", "baniu"
         else:
-            color = _C_GREEN
-            titulo = f"{gname} — Usuário Desbanido {_E_BAN_STAR}"
-            u_lbl, a_lbl, verbo = "Usuário Desbanido", "Autor do Desbanimento", "desbaniu"
+            color, titulo, verbo = _C_GREEN, "Usuário Desbanido", "desbaniu"
 
-        embed = discord.Embed(title=titulo, color=color)
-        embed.add_field(name=f"{_E_BAN_USER} {u_lbl}:",
-                        value=f"{user.mention}\n`{getattr(user, 'name', user)}`", inline=False)
-        if author_mention:
-            embed.add_field(name=f"{_E_BAN_MOD} {a_lbl}:",
-                            value=f"{author_mention}\n`{author_name or author_id}`", inline=False)
-        embed.add_field(name=f"{_E_BAN_MOTV} Motivo:",
-                        value=f"`{(reason or 'Nenhum motivo fornecido')[:400]}`", inline=False)
+        # Card premium SEM emoji: o usuário é o cabeçalho (nome + foto) e a foto grande;
+        # dados em campos limpos; contador do moderador no rodapé.
+        _uname = getattr(user, "display_name", None) or getattr(user, "name", None) or str(user)
         _av = getattr(getattr(user, "display_avatar", None), "url", None)
+        embed = discord.Embed(color=color)
+        embed.set_author(name=f"{titulo}  •  {_uname}", icon_url=_av)
         if _av:
             embed.set_thumbnail(url=_av)
+        embed.add_field(name="Usuário", value=f"{user.mention}\n`{getattr(user, 'name', user)}`", inline=True)
+        if author_mention:
+            embed.add_field(name="Responsável", value=f"{author_mention}\n`{author_name or author_id}`", inline=True)
+        embed.add_field(name="Motivo", value=f"```{(reason or 'Nenhum motivo fornecido')[:400]}```", inline=False)
         if author_id is not None and n:
             plural = "s" if n != 1 else ""
-            embed.set_footer(text=f"{author_name or ('ID ' + str(author_id))} já {verbo} {n} usuário{plural}.")
+            embed.set_footer(text=f"{gname}  •  {author_name or ('ID ' + str(author_id))} já {verbo} {n} usuário{plural}")
         else:
             embed.set_footer(text=_footer_name(guild, settings))
         embed.timestamp = datetime.now()
