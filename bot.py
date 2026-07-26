@@ -6033,12 +6033,9 @@ async def _open_menu_category(interaction: discord.Interaction, value: str):
 
 
 class MenuV2CatButton(discord.ui.Button):
-    def __init__(self, value: str, label: str, emoji_str: str):
-        try:
-            _e = discord.PartialEmoji.from_str(emoji_str) if emoji_str else None
-        except Exception:
-            _e = None
-        super().__init__(label=label, style=discord.ButtonStyle.secondary, emoji=_e,
+    def __init__(self, value: str, label: str, emoji_str: str = ""):
+        # Visual clean: botões SÓ texto, sem emoji (a pedido do cliente).
+        super().__init__(label=label, style=discord.ButtonStyle.secondary,
                          custom_id=f"menu_v2_cat_{value}")
         self.cat_value = value
 
@@ -6058,8 +6055,9 @@ class MainMenuV2Layout(discord.ui.LayoutView):
         _gname = getattr(guild, "name", None) or (bot.user.display_name if bot.user else "NATA")
         _lg = discord.SeparatorSpacing.large
         items: list = []
-        # Cabeçalho — título grande + subtítulo, com o avatar do bot ao lado.
-        _head = (f"## <:seguranca:1518271987393232936>  {t['central_title']}\n"
+        # Visual CLEAN (a pedido): só título + subtítulo (avatar ao lado), sem emoji e
+        # sem bloco de infos. Os botões abaixo, também sem emoji.
+        _head = (f"## {t['central_title']}\n"
                  f"-# {_gname} • painel de controle do bot")
         if bot_av:
             items.append(discord.ui.Section(discord.ui.TextDisplay(_head),
@@ -6067,24 +6065,12 @@ class MainMenuV2Layout(discord.ui.LayoutView):
         else:
             items.append(discord.ui.TextDisplay(_head))
         items.append(discord.ui.Separator(visible=True, spacing=_lg))
-        items.append(discord.ui.TextDisplay(
-            "<a:online:1518271945550856295>  Escolha uma **categoria** no menu abaixo para começar."))
-        items.append(discord.ui.Separator(visible=True, spacing=_lg))
-        # Infos em linhas limpas (label • valor). rstrip(':') evita "Expira em::".
-        _rows = []
-        if author is not None:
-            _rows.append(f"<:comunidade_:1518272016971595807>  **{t['administrator'].rstrip(':')}**"
-                         f"  ·  {author.mention}")
-        _rows.append(f"<:financeiro_:1518272010688397432>  **{t['expires_in'].rstrip(':')}**"
-                     f"  ·  `{_fmt_expira(lang)}`")
-        _rows.append(f"<:entretenimento_:1518271992191779038>  **{t['important'].rstrip(':')}**"
-                     f"  ·  [{t['support_server']}](https://discord.gg/hypebot)")
-        items.append(discord.ui.TextDisplay("\n".join(_rows)))
+        items.append(discord.ui.TextDisplay("Escolha uma **categoria** abaixo para configurar."))
         self.add_item(discord.ui.Container(*items, accent_colour=color))
-        # Categorias como BOTÕES (3 por linha) — mais visual que o menu suspenso.
+        # Categorias como BOTÕES de texto (3 por linha), sem emoji.
         _brow = []
         for _val, _lbl, _emj in _MENU_V2_CATS:
-            _brow.append(MenuV2CatButton(_val, _lbl, _emj))
+            _brow.append(MenuV2CatButton(_val, _lbl))
             if len(_brow) == 3:
                 self.add_item(discord.ui.ActionRow(*_brow))
                 _brow = []
