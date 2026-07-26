@@ -1712,8 +1712,8 @@ TRANSLATIONS = {
         "dono_call_status_abrir": "<a:online:1518271945550856295> Abrir Call",
         "dono_call_status_fechar": "<a:alerta:1518271939460857968> Fechar Call",
         "dono_call_status_field": "Status",
-        "dono_call_status_open": "<a:online:1518271945550856295> Aberto",
-        "dono_call_status_closed": "<a:alerta:1518271939460857968> Fechado",
+        "dono_call_status_open": "<a:hype_aberto:1518322974883713201> Aberto",
+        "dono_call_status_closed": "<a:hype_fechado:1518322981879677090> Fechado",
         "dono_call_limite_field": "Limite",
         "dono_call_limite_sem": "Sem limite",
         "dono_call_membros_field": "Membros",
@@ -3444,8 +3444,8 @@ TRANSLATIONS = {
         "dono_call_status_abrir": "<a:online:1518271945550856295> Open Call",
         "dono_call_status_fechar": "<a:alerta:1518271939460857968> Close Call",
         "dono_call_status_field": "Status",
-        "dono_call_status_open": "<a:online:1518271945550856295> Open",
-        "dono_call_status_closed": "<a:alerta:1518271939460857968> Closed",
+        "dono_call_status_open": "<a:hype_aberto:1518322974883713201> Open",
+        "dono_call_status_closed": "<a:hype_fechado:1518322981879677090> Closed",
         "dono_call_limite_field": "Limit",
         "dono_call_limite_sem": "No limit",
         "dono_call_membros_field": "Members",
@@ -38245,13 +38245,13 @@ def _build_call_panel_v2_payload(
     is_auto_kick = ch.id in _call_auto_kick
 
     if is_locked:
-        status_emoji = "<a:alerta:1518271939460857968>"
+        status_emoji = "<a:hype_fechado:1518322981879677090>"
         status_text  = "Fechado"
     elif is_auto_kick:
         status_emoji = "<a:alerta:1518271939460857968>"
         status_text  = "Privado"
     else:
-        status_emoji = "<a:online:1518271945550856295>"
+        status_emoji = "<a:hype_aberto:1518322974883713201>"
         status_text  = "Aberto"
 
     limite = ch.user_limit
