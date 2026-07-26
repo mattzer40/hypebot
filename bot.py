@@ -5705,32 +5705,22 @@ def build_main_embed(author: discord.Member, lang: str) -> discord.Embed:
     color = get_settings(guild_id)["embed_color"]
     embed = discord.Embed(color=color)
 
-    guild = getattr(author, "guild", None)
-    guild_icon = (guild.icon.url if guild and guild.icon else None)
-    bot_icon = (bot.user.display_avatar.url if bot.user else None)
-    icon_url = guild_icon or _avatar_url(author)
+    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed.set_author(name=t["central_title"], icon_url=icon_url)
-    embed.set_thumbnail(url=bot_icon or _avatar_url(author))
-
-    # Cabeçalho: boas-vindas + guia + divisor
-    embed.description = (
-        "<:seguranca:1518271987393232936> Bem-vindo(a) à **central de configurações**.\n"
-        "<a:online:1518271945550856295> Use o **menu abaixo** para navegar entre os sistemas.\n"
-        "**━━━━━━━━━━━━━━━━━━━━━━━**"
-    )
+    embed.set_thumbnail(url=_avatar_url(author))
 
     embed.add_field(
-        name=f"<:comunidade_:1518272016971595807>  {t['administrator']}",
-        value=f"{author.mention}\n-# `{author.name}`",
+        name=t["administrator"],
+        value=f"{author.mention}\n(`{author.name}`)",
         inline=True,
     )
     embed.add_field(
-        name=f"<:financeiro_:1518272010688397432>  {t['expires_in']}",
-        value=f"`{_fmt_expira(lang)}`",
+        name=t["expires_in"],
+        value=_fmt_expira(lang),
         inline=True,
     )
     embed.add_field(
-        name=f"<:entretenimento_:1518271992191779038>  {t['important']}",
+        name=t["important"],
         value=f"[{t['support_server']}](https://discord.gg/hypebot)",
         inline=False,
     )
@@ -30176,7 +30166,6 @@ async def on_ready():
     for _view_cls, _view_name in [
         (_GifsConversorPublicSelect, "GifsConversorPublicSelect"),
         (lambda: MenuView(author_id=0),           "MenuView"),
-        (lambda: MainMenuV2Layout(),              "MainMenuV2Layout"),
         (GifsView,                                "GifsView"),
         (_FecharCanalView,                        "FecharCanalView"),
         (TicketThreadView,                        "TicketThreadView"),
@@ -34118,15 +34107,8 @@ async def menu(ctx: commands.Context):
             await ctx.reply(TRANSLATIONS[lang]["not_authorized"], delete_after=8)
             return
         await _warm_avatar(ctx.author, ctx.guild)
-        try:
-            _v2 = MainMenuV2Layout(ctx.author, lang=lang)
-        except Exception as _mv2e:
-            print(f"[menu v2] build falhou, fallback clássico: {_mv2e}", flush=True)
-            _v2 = None
-        if _v2 is not None:
-            await ctx.send(view=_v2)
-        else:
-            await ctx.send(embed=build_main_embed(ctx.author, lang), view=MenuView(ctx.author.id, lang=lang))
+        embed = build_main_embed(ctx.author, lang)
+        await ctx.send(embed=embed, view=MenuView(ctx.author.id, lang=lang))
     finally:
         if token is not None:
             _dev_guild_ctx.reset(token)
@@ -34280,15 +34262,8 @@ async def menu_slash(interaction: discord.Interaction):
             await interaction.response.send_message(TRANSLATIONS[lang]["not_authorized"], ephemeral=True)
             return
         await _warm_avatar(interaction.user, interaction.guild)
-        try:
-            _v2 = MainMenuV2Layout(interaction.user, lang=lang)
-        except Exception as _mv2e:
-            print(f"[menu v2] build falhou, fallback clássico: {_mv2e}", flush=True)
-            _v2 = None
-        if _v2 is not None:
-            await interaction.response.send_message(view=_v2, ephemeral=True)
-        else:
-            await interaction.response.send_message(embed=build_main_embed(interaction.user, lang), view=MenuView(interaction.user.id, lang=lang), ephemeral=True)
+        embed = build_main_embed(interaction.user, lang)
+        await interaction.response.send_message(embed=embed, view=MenuView(interaction.user.id, lang=lang), ephemeral=True)
     except Exception as _e:
         import traceback
         traceback.print_exc()
