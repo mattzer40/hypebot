@@ -46306,7 +46306,7 @@ async def _dm_on_manual_kick(member: discord.Member):
     motivo="Motivo do banimento.",
     tempo="Duração (ex: 1h, 30m, 1h30m). Deixe vazio ou 0 para ban permanente.",
 )
-async def ban_slash(interaction: discord.Interaction, usuario: discord.Member, motivo: str, tempo: str = ""):
+async def ban_slash(interaction: discord.Interaction, usuario: discord.User, motivo: str, tempo: str = ""):
     if interaction.guild is None:
         return
     membro   = usuario
@@ -46319,7 +46319,7 @@ async def ban_slash(interaction: discord.Interaction, usuario: discord.Member, m
     if membro.id == interaction.guild.owner_id:
         await interaction.response.send_message("<a:alerta:1518271939460857968> **Não é possível banir o dono do servidor.**", ephemeral=True)
         return
-    if membro.top_role >= interaction.guild.me.top_role:
+    if isinstance(membro, discord.Member) and membro.top_role >= interaction.guild.me.top_role:
         await interaction.response.send_message("<a:alerta:1518271939460857968> **Cargo do membro é superior ao meu.**", ephemeral=True)
         return
 
@@ -46437,7 +46437,7 @@ async def ban_slash(interaction: discord.Interaction, usuario: discord.Member, m
     _mod_dm_mark(interaction.guild.id, membro.id, "ban")  # dedup: listener não reenvia DM
     try:
         # delete_message_days=7 → apaga as mensagens antigas do usuário ao banir (máximo da API)
-        await membro.ban(reason=f"[{ban_id}] {user} — {motivo}", delete_message_days=7)
+        await interaction.guild.ban(membro, reason=f"[{ban_id}] {user} — {motivo}", delete_message_days=7)
     except (discord.Forbidden, discord.HTTPException) as e:
         await interaction.followup.send(f"<a:alerta:1518271939460857968> Erro: `{e}`", ephemeral=True)
         return
