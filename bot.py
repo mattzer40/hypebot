@@ -7658,7 +7658,7 @@ class TicketConfigView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_select_log_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=_avatar_url(author))
+        embed.set_thumbnail(url=_avatar_url(interaction.user))
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _define_marcacao(self, interaction: discord.Interaction):
@@ -9958,7 +9958,7 @@ class TicketPerManagerView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_setar_categoria_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=_avatar_url(author))
+        embed.set_thumbnail(url=_avatar_url(interaction.user))
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _cargos_resp(self, interaction: discord.Interaction):
@@ -9970,7 +9970,7 @@ class TicketPerManagerView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_cargos_resp_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=_avatar_url(author))
+        embed.set_thumbnail(url=_avatar_url(interaction.user))
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _toggle_topico(self, interaction: discord.Interaction):
@@ -10038,7 +10038,7 @@ class TicketPerManagerView(discord.ui.View):
         icon_url = bot.user.display_avatar.url if bot.user else None
         embed = discord.Embed(description=t["ticket_select_log_prompt"], color=settings["embed_color"])
         embed.set_author(name=t["ticket_config_panel_title"], icon_url=icon_url)
-        embed.set_thumbnail(url=_avatar_url(author))
+        embed.set_thumbnail(url=_avatar_url(interaction.user))
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _editar_embed(self, interaction: discord.Interaction):
@@ -13797,7 +13797,7 @@ async def _gifs_pb_criar_canal(interaction: discord.Interaction) -> None:
     settings = get_settings(interaction.guild.id)
     cor      = settings.get("embed_color", 0x5865F2)
     bot_name = bot.user.display_name if bot.user else "HypeBot"
-    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
+    icon_url = (interaction.user.guild.icon.url if getattr(interaction.user, "guild", None) and interaction.user.guild.icon else None) or _avatar_url(interaction.user)
 
     if remaining > 0:
         emb = discord.Embed(
@@ -14100,7 +14100,7 @@ async def _gifs_criar_canal(interaction: discord.Interaction, service: str) -> N
     settings = get_settings(interaction.guild.id)
     cor      = settings.get("embed_color", 0x5865F2)
     bot_name = bot.user.display_name if bot.user else "HypeBot"
-    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
+    icon_url = (interaction.user.guild.icon.url if getattr(interaction.user, "guild", None) and interaction.user.guild.icon else None) or _avatar_url(interaction.user)
 
     if remaining > 0:
         emb = discord.Embed(
@@ -14717,7 +14717,7 @@ class GifsConversorView(discord.ui.View):
             color=cor,
         )
         emb.set_author(name=f"Central de Gifs — {bot_name}", icon_url=icon_url)
-        emb.set_thumbnail(url=_avatar_url(author))
+        emb.set_thumbnail(url=_avatar_url(interaction.user))
         if banner:
             emb.set_image(url=banner)
 
@@ -16918,7 +16918,7 @@ class _PostadoresRoleSelect(discord.ui.RoleSelect):
                 existing.append(r.id); added.append(r.mention)
         settings["gifs_postadores_allowed_roles"] = existing
         save_settings_to_disk()
-        embed = _build_gerenciar_roles_embed(interaction.user, settings)
+        embed = _build_gerenciar_user_embed(interaction.user, settings)
         await interaction.response.edit_message(embed=embed, view=_PostadoresRolesView(interaction.user))
         partes = []
         if added:   partes.append(f"{_e_success()} Adicionados: {', '.join(added)}")
@@ -44776,7 +44776,7 @@ async def call_limit_slash(interaction: discord.Interaction, numero: int):
     settings = get_settings(interaction.guild.id)
     t = TRANSLATIONS[settings["language"]]
     color = settings.get("embed_color", 0x2B2D31)
-    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
+    icon_url = (interaction.guild.icon.url if interaction.guild and interaction.guild.icon else None) or _avatar_url(interaction.user)
 
     if not isinstance(interaction.user, discord.Member) or not _has_call_limit_perm(interaction.user, settings):
         emb = _call_limit_embed(t["call_limit_no_perm"], 0xE53935, interaction.user, icon_url)
@@ -45632,7 +45632,7 @@ async def iatest_cmd(ctx: commands.Context, *, message: str = ""):
         ctx.author if isinstance(ctx.author, discord.Member) else None,
     )
 
-    icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
+    icon_url = (ctx.author.guild.icon.url if getattr(ctx.author, "guild", None) and ctx.author.guild.icon else None) or _avatar_url(ctx.author)
     waiting_embed = discord.Embed(
         color=settings["embed_color"],
         description=f"<:bot_v3:1506343470242074785> Consultando a IA (`{model}`)...",
