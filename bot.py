@@ -4692,6 +4692,8 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("limpeza_text_channels", [])
     settings.setdefault("limpeza_voice_delay_minutes", 1)
     settings.setdefault("limpeza_text_delay_minutes", 1)
+    settings.setdefault("limpeza_media_channels", [])        # canais onde imagem/vídeo somem
+    settings.setdefault("limpeza_media_delay_seconds", 30)   # em 30s por padrão
     settings.setdefault("castigo_enabled", False)
     settings.setdefault("castigo_manual_block", False)
     settings.setdefault("castigo_manual_roles", [])
@@ -30883,6 +30885,42 @@ async def _schedule_cleanup_message(message: discord.Message, delay: int = 60):
         pass
 
 
+_MEDIA_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".gifv", ".webp", ".bmp", ".apng",
+               ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v", ".flv", ".wmv")
+
+
+def _msg_has_media(message: discord.Message) -> bool:
+    """True se a mensagem tem imagem/vídeo (anexo enviado ou embed de mídia/gif)."""
+    for a in message.attachments:
+        ct = (getattr(a, "content_type", None) or "").lower()
+        if ct.startswith("image/") or ct.startswith("video/"):
+            return True
+        if (a.filename or "").lower().endswith(_MEDIA_EXTS):
+            return True
+    for e in message.embeds:
+        if getattr(e, "image", None) or getattr(e, "video", None) or getattr(e, "thumbnail", None):
+            return True
+    return False
+
+
+_MEDIA_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".gifv", ".webp", ".bmp", ".apng",
+               ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v", ".mpeg", ".mpg")
+
+
+def _msg_has_media(message: discord.Message) -> bool:
+    """True se a mensagem tem imagem ou vídeo (anexo enviado ou embed de mídia)."""
+    for _att in message.attachments:
+        _ct = (getattr(_att, "content_type", None) or "").lower()
+        if _ct.startswith("image/") or _ct.startswith("video/"):
+            return True
+        if (getattr(_att, "filename", "") or "").lower().endswith(_MEDIA_EXTS):
+            return True
+    for _e in message.embeds:
+        if _e.image or _e.video or (getattr(_e, "type", "") in ("image", "video", "gifv")):
+            return True
+    return False
+
+
 @bot.event
 async def on_message(message: discord.Message):
     if message.author.bot or message.guild is None:
@@ -31114,8 +31152,16 @@ async def on_message(message: discord.Message):
     if settings.get("limpeza_mensagem_enabled"):
         delay_seconds = None
 
+        # Imagem/vídeo nos canais de limpeza é apagado em 30s (a pedido do cliente),
+        # independente do delay geral do canal. Vale pros canais já configurados.
+        _lim_media_channels = (set(settings.get("limpeza_text_channels", []) or [])
+                               | set(settings.get("limpeza_mensagem_channels", []) or []))
+        if message.channel.id in _lim_media_channels and _msg_has_media(message):
+            delay_seconds = 30
+
         if (
-            settings.get("limpeza_voice_auto_all")
+            delay_seconds is None
+            and settings.get("limpeza_voice_auto_all")
             and isinstance(message.channel, discord.VoiceChannel)
         ):
             delay_seconds = settings.get("limpeza_voice_delay_minutes", 1) * 60
