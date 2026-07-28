@@ -30886,24 +30886,6 @@ async def _schedule_cleanup_message(message: discord.Message, delay: int = 60):
 
 
 _MEDIA_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".gifv", ".webp", ".bmp", ".apng",
-               ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v", ".flv", ".wmv")
-
-
-def _msg_has_media(message: discord.Message) -> bool:
-    """True se a mensagem tem imagem/vídeo (anexo enviado ou embed de mídia/gif)."""
-    for a in message.attachments:
-        ct = (getattr(a, "content_type", None) or "").lower()
-        if ct.startswith("image/") or ct.startswith("video/"):
-            return True
-        if (a.filename or "").lower().endswith(_MEDIA_EXTS):
-            return True
-    for e in message.embeds:
-        if getattr(e, "image", None) or getattr(e, "video", None) or getattr(e, "thumbnail", None):
-            return True
-    return False
-
-
-_MEDIA_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".gifv", ".webp", ".bmp", ".apng",
                ".mp4", ".mov", ".webm", ".mkv", ".avi", ".m4v", ".mpeg", ".mpg")
 
 
@@ -31152,12 +31134,14 @@ async def on_message(message: discord.Message):
     if settings.get("limpeza_mensagem_enabled"):
         delay_seconds = None
 
-        # Imagem/vídeo nos canais de limpeza é apagado em 30s (a pedido do cliente),
-        # independente do delay geral do canal. Vale pros canais já configurados.
-        _lim_media_channels = (set(settings.get("limpeza_text_channels", []) or [])
+        # Imagem/vídeo é apagado em 30s (a pedido do cliente), independente do delay geral.
+        # Vale pra lista dedicada (limpeza_media_channels) OU pros canais de limpeza já
+        # configurados. Delay configurável via limpeza_media_delay_seconds (padrão 30).
+        _lim_media_channels = (set(settings.get("limpeza_media_channels", []) or [])
+                               | set(settings.get("limpeza_text_channels", []) or [])
                                | set(settings.get("limpeza_mensagem_channels", []) or []))
         if message.channel.id in _lim_media_channels and _msg_has_media(message):
-            delay_seconds = 30
+            delay_seconds = int(settings.get("limpeza_media_delay_seconds", 30) or 30)
 
         if (
             delay_seconds is None
@@ -44852,6 +44836,111 @@ async def call_limit_slash(interaction: discord.Interaction, numero: int):
     else:
         emb = _call_limit_embed(t["call_limit_set"].format(n=numero), 0x2ECC71, interaction.user, icon_url, channel=voice.channel, n=numero)
     await interaction.response.send_message(embed=emb)
+
+
+# ── Puxar/Mover membro para um canal de voz (/puxar, !puxar/!mover) ───────────
+def _can_puxar(member, settings: dict) -> bool:
+    if not isinstance(member, discord.Member):
+        return False
+    if member.guild_permissions.administrator or member.guild_permissions.move_members:
+        return True
+    return _has_call_limit_perm(member, settings)
+
+
+def _resolve_voice_channel(guild: discord.Guild, query: str):
+    """Resolve canal de voz por menção/ID ou por NOME/NÚMERO (ex: '2', 'sala 2')."""
+    q = str(query).strip()
+    _id = q.lstrip("<#").rstrip(">")
+    if _id.isdigit():
+        ch = guild.get_channel(int(_id))
+        if isinstance(ch, (discord.VoiceChannel, discord.StageChannel)):
+            return ch
+    ql = q.lower()
+    for ch in guild.voice_channels:
+        if ch.name.lower() == ql:
+            return ch
+    for ch in guild.voice_channels:
+        if ql and ql in ch.name.lower():
+            return ch
+    return None
+
+
+def _puxar_embed(invoker, desc: str, color: int, extra=None) -> discord.Embed:
+    _icon = bot.user.display_avatar.url if bot.user else None
+    e = discord.Embed(color=color)
+    e.set_author(name=f"Puxar Membro  •  {invoker.display_name}", icon_url=invoker.display_avatar.url)
+    e.description = desc
+    for _n, _v in (extra or []):
+        e.add_field(name=_n, value=_v, inline=True)
+    e.set_footer(text=f"Solicitado por {invoker.name}", icon_url=_icon)
+    e.timestamp = datetime.now()
+    return e
+
+
+async def _puxar_member(guild: discord.Guild, invoker, target: discord.Member, dest):
+    """Move `target` para `dest`. Retorna (ok, embed limpo)."""
+    if target.voice is None or target.voice.channel is None:
+        return False, _puxar_embed(invoker, f"{target.mention} precisa estar conectado(a) em uma call para ser puxado(a).", 0xE53935)
+    if not guild.me.guild_permissions.move_members:
+        return False, _puxar_embed(invoker, "Não tenho a permissão **Mover Membros**.", 0xE53935)
+    if target.voice.channel.id == dest.id:
+        return False, _puxar_embed(invoker, f"{target.mention} já está em {dest.mention}.", 0xE53935)
+    try:
+        await target.move_to(dest, reason=f"Puxar por {invoker} ({invoker.id})")
+    except (discord.Forbidden, discord.HTTPException) as _e:
+        return False, _puxar_embed(invoker, f"Não consegui mover: `{_e}`", 0xE53935)
+    return True, _puxar_embed(invoker, "Membro puxado.", 0x2ECC71,
+                              extra=[("Membro", target.mention), ("Canal", dest.mention)])
+
+
+@bot.tree.command(name="puxar", description="Puxa um membro para o seu canal de voz (ou para uma sala).")
+@discord.app_commands.describe(usuario="Membro a puxar.", sala="Canal de destino (opcional; padrão = o seu).")
+async def puxar_slash(interaction: discord.Interaction, usuario: discord.Member, sala: discord.VoiceChannel = None):
+    if interaction.guild is None:
+        return
+    settings = get_settings(interaction.guild.id)
+    invoker = interaction.user
+    if not _can_puxar(invoker, settings):
+        await interaction.response.send_message(
+            embed=_puxar_embed(invoker, "Sem permissão para puxar membros.", 0xE53935), ephemeral=True)
+        return
+    dest = sala or (invoker.voice.channel if isinstance(invoker, discord.Member) and invoker.voice else None)
+    if dest is None:
+        await interaction.response.send_message(
+            embed=_puxar_embed(invoker, "Entre em uma call ou informe a sala de destino.", 0xE53935), ephemeral=True)
+        return
+    ok, emb = await _puxar_member(interaction.guild, invoker, usuario, dest)
+    await interaction.response.send_message(embed=emb, ephemeral=not ok)
+
+
+@bot.command(name="puxar", aliases=["mover", "pull"])
+async def puxar_cmd(ctx: commands.Context, membro: str = "", *, sala: str = ""):
+    if ctx.guild is None:
+        return
+    settings = get_settings(ctx.guild.id)
+    if not _can_puxar(ctx.author, settings):
+        await ctx.reply(embed=_puxar_embed(ctx.author, "Sem permissão para puxar membros.", 0xE53935), delete_after=8)
+        return
+    if not membro.strip():
+        await ctx.reply(embed=_puxar_embed(ctx.author, "Use: `puxar @membro [sala]`", 0xE53935), delete_after=8)
+        return
+    try:
+        target = await commands.MemberConverter().convert(ctx, membro.strip())
+    except commands.BadArgument:
+        await ctx.reply(embed=_puxar_embed(ctx.author, f"Membro `{membro.strip()}` não encontrado.", 0xE53935), delete_after=8)
+        return
+    if sala.strip():
+        dest = _resolve_voice_channel(ctx.guild, sala.strip())
+        if dest is None:
+            await ctx.reply(embed=_puxar_embed(ctx.author, f"Sala `{sala.strip()}` não encontrada.", 0xE53935), delete_after=8)
+            return
+    else:
+        dest = ctx.author.voice.channel if (isinstance(ctx.author, discord.Member) and ctx.author.voice) else None
+    if dest is None:
+        await ctx.reply(embed=_puxar_embed(ctx.author, "Entre em uma call ou informe a sala de destino.", 0xE53935), delete_after=8)
+        return
+    ok, emb = await _puxar_member(ctx.guild, ctx.author, target, dest)
+    await ctx.reply(embed=emb)
 
 
 _C_ALLOWED_USERS: set[int] = {
