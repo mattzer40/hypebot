@@ -4794,6 +4794,7 @@ def get_settings(guild_id: int) -> dict:
     # Anti Desconect (anti-abuso de voz: mute/disconnect/move em massa)
     settings.setdefault("antdesc_enabled", False)
     settings.setdefault("antdesc_roles", [])          # cargos da staff vigiada
+    settings.setdefault("antdesc_global", False)      # True = vigia TODOS (ignora cargos)
     settings.setdefault("antdesc_limit", 10)          # nº de ações
     settings.setdefault("antdesc_window", 15)         # janela em segundos
     settings.setdefault("antdesc_log_channel", None)
@@ -6680,7 +6681,7 @@ class AppearanceView(discord.ui.View):
             inline=False,
         )
         ask.add_field(
-            name="<:bot_v3:1506343470242074785>  Opções disponíveis:",
+            name="<:comunidade_:1518272016971595807>  Opções disponíveis:",
             value=(
                 "> `https://...` — define a imagem como banner\n"
                 "> `remover` — remove o banner atual\n"
@@ -13769,7 +13770,7 @@ def build_gifs_conversor_embed(author: discord.Member, settings: dict) -> discor
         inline=False,
     )
     embed.add_field(
-        name="<:bot_v3:1506343470242074785>  Observações",
+        name="<:comunidade_:1518272016971595807>  Observações",
         value=(
             "O canal da embed é onde será enviado a mensagem do conversor.\n"
             "Cargo sem limite é o cargo que poderá usar o conversor sem limites. "
@@ -14872,7 +14873,7 @@ def build_gifs_decoracoes_embed(author: discord.Member, settings: dict) -> disco
         inline=False,
     )
     embed.add_field(
-        name="<:bot_v3:1506343470242074785>  Observações",
+        name="<:comunidade_:1518272016971595807>  Observações",
         value=(
             "O canal de logs é onde será enviado os logs de uso do sistema.\n"
             "Cargos permitidos são os cargos que poderão usar o sistema de decorações no seu servidor."
@@ -19687,7 +19688,7 @@ def build_security_embed(author: discord.Member, settings: dict) -> discord.Embe
 
 SECURITY_MENU_1_OPTIONS = [
     ("Pagina Inicial", EMOJI_HOUSE, "home"),
-    ("Advertência", "<:bot_v3:1506343470242074785>", "advertencia"),
+    ("Advertência", "<:comunidade_:1518272016971595807>", "advertencia"),
     ("Ant Ban", "<:seguranca:1518271987393232936>", "ant_ban"),
     ("Ant Bot", "<:Bot:1518272060860928072>", "ant_bot"),
     ("Ant Fake", "<:seguranca:1518271987393232936>", "ant_fake"),
@@ -19695,10 +19696,10 @@ SECURITY_MENU_1_OPTIONS = [
     ("Ant Desconect", "<:mov_call:1518271964077232150>", "ant_desconect"),
     ("Ant Spam", "<:seguranca:1518271987393232936>", "ant_spam"),
     ("Avisos (Warns)", "<:tickets:1518271952526250155>", "avisos"),
-    ("Backup/Restore Automático", "<:bot_v4:1506344862679826483>", "backup"),
+    ("Backup/Restore Automático", "<:ferramentas_:1518271998613131274>", "backup"),
     ("Blacklist", "<:tickets:1518271952526250155>", "blacklist"),
     ("Bloqueio de Comandos", "<:seguranca:1518271987393232936>", "bloqueio_comandos"),
-    ("Castigo", "<:bot_v3:1506343470242074785>", "castigo"),
+    ("Castigo", "<:comunidade_:1518272016971595807>", "castigo"),
     ("Gerenciar Permissões", "<:seguranca:1518271987393232936>", "gerenciar_perm"),
     ("Limite De Banimentos", "<:seguranca:1518271987393232936>", "limite_bans"),
     ("Proteção de Cargos", "<:seguranca:1518271987393232936>", "protecao_cargos"),
@@ -19733,7 +19734,7 @@ AUDIT_LOG_CATEGORIES = [
         ("member_role_add", "Adicionar cargos"), ("member_role_remove", "Remover cargos")]},
     {"id": "canais", "label": "Canais", "emoji": "<:servidor_:1518271981189992638>", "events": [
         ("channel_create", "Criar canais"), ("channel_delete", "Deletar canais"), ("channel_update", "Atualizar canais")]},
-    {"id": "silenciados", "label": "Membros silenciados", "emoji": "<:bot_v3:1506343470242074785>", "events": [
+    {"id": "silenciados", "label": "Membros silenciados", "emoji": "<:comunidade_:1518272016971595807>", "events": [
         ("timeout", "Silenciados chat"), ("voice_mute", "Silenciados voz")]},
     {"id": "bots", "label": "Bots adicionados", "emoji": "<:Bot:1518272060860928072>", "events": [
         ("bot_add", "Bots adicionados")]},
@@ -20648,7 +20649,7 @@ def build_antban_embed(author: discord.Member, settings: dict) -> discord.Embed:
 
     embed.add_field(
         name=f"<:tickets:1518271952526250155>  {t['administrator_label']}",
-        value=f"<:bot_v3:1506343470242074785> {author.mention} ( `{author.id}` )",
+        value=f"<:comunidade_:1518272016971595807> {author.mention} ( `{author.id}` )",
         inline=False,
     )
 
@@ -25693,7 +25694,7 @@ _AR_CH_DELETE_LOCK = [0]  # quantas exclusões de canal o bot tem em andamento
 _AR_SHIELD   = "<:seguranca:1518271987393232936>"
 _AR_INFO     = "<:entretenimento_:1518271992191779038>"
 _AR_ADMIN    = "<:tickets:1518271952526250155>"
-_AR_MEMBER   = "<:bot_v3:1506343470242074785>"
+_AR_MEMBER   = "<:comunidade_:1518272016971595807>"
 _AR_LOG      = "<:Mov_chat:1518271970008105031>"
 _AR_TOOL     = "<:ferramentas_:1518271998613131274>"
 _AR_COMM     = "<:comunidade_:1518272016971595807>"
@@ -26879,7 +26880,7 @@ async def on_guild_update(before: discord.Guild, after: discord.Guild):
                         f"## 👑 Posse do Servidor\n\n"
                         f"Parabéns! Você recebeu a **posse** do servidor **{after.name}**.\n\n"
                         f"<:f1:1518271958024720555> Como novo dono, você tem controle total sobre o servidor e o bot.\n"
-                        f"<:bot_v3:1506343470242074785> Use `{prefix}perm` para gerenciar as permissões do bot."
+                        f"<:comunidade_:1518272016971595807> Use `{prefix}perm` para gerenciar as permissões do bot."
                     ),
                 )
             else:
@@ -26889,7 +26890,7 @@ async def on_guild_update(before: discord.Guild, after: discord.Guild):
                         f"## 👑 Server Ownership\n\n"
                         f"Congratulations! You received the **ownership** of **{after.name}**.\n\n"
                         f"<:f1:1518271958024720555> As the new owner, you have full control over the server and the bot.\n"
-                        f"<:bot_v3:1506343470242074785> Use `{prefix}perm` to manage bot permissions."
+                        f"<:comunidade_:1518272016971595807> Use `{prefix}perm` to manage bot permissions."
                     ),
                 )
             dm_embed.set_author(name=after.name, icon_url=guild_icon)
@@ -27560,7 +27561,7 @@ def build_blacklist_embed(author: discord.Member, settings: dict) -> discord.Emb
 
     embed.add_field(
         name=f"<:f1:1518271958024720555>  {t['administrator_label']}",
-        value=f"<:bot_v3:1506343470242074785> {author.mention} ( `{author.id}` )",
+        value=f"<:comunidade_:1518272016971595807> {author.mention} ( `{author.id}` )",
         inline=False,
     )
 
@@ -28761,7 +28762,7 @@ def build_antlink_embed(author: discord.Member, settings: dict) -> discord.Embed
 
     embed.add_field(
         name=f"<:f1:1518271958024720555>  {t['administrator_label']}",
-        value=f"<:bot_v3:1506343470242074785> {author.mention} ( `{author.id}` )",
+        value=f"<:comunidade_:1518272016971595807> {author.mention} ( `{author.id}` )",
         inline=False,
     )
 
@@ -31996,9 +31997,10 @@ async def _antdesc_detect(guild: discord.Guild, target: discord.Member, kind: st
     passou do limite na janela, pune tirando todos os cargos por 30min."""
     try:
         settings = get_settings(guild.id)
+        _global = settings.get("antdesc_global", False)
         monitored = set(settings.get("antdesc_roles", []))
-        if not monitored:
-            return
+        if not _global and not monitored:
+            return  # sem cargos e sem global → nada a vigiar
         await asyncio.sleep(0.5)  # deixa o audit log propagar
         action = _ANTDESC_ACTIONS[kind]
         import datetime as _dt
@@ -32020,10 +32022,11 @@ async def _antdesc_detect(guild: discord.Guild, target: discord.Member, kind: st
         actor_member = guild.get_member(actor.id)
         if actor_member is None or actor_member.bot:
             return
-        # Só vigia quem tem cargo monitorado; nunca pune o dono do servidor.
+        # No modo global vigia TODOS; senão, só quem tem cargo monitorado.
+        # Nunca pune o dono do servidor.
         if actor_member.id == guild.owner_id:
             return
-        if not (monitored & {r.id for r in actor_member.roles}):
+        if not _global and not (monitored & {r.id for r in actor_member.roles}):
             return
 
         key = (guild.id, actor.id)
@@ -40328,10 +40331,11 @@ def build_antdesc_embed(author: discord.Member, settings: dict) -> discord.Embed
         _ch = guild.get_channel(log_id)
         log_val = _ch.mention if _ch else "`Canal removido`"
 
+    _vig_txt = "`GLOBAL — todos (@everyone)`" if settings.get("antdesc_global") else f"`{n_cargos} cargo(s)`"
     embed.add_field(
         name="<:seguranca:1518271987393232936>  Configurações",
         value=(f"┃ **Status:** {status}\n"
-               f"<:comunidade_:1518272016971595807> **Cargos vigiados:** `{n_cargos}`\n"
+               f"<:comunidade_:1518272016971595807> **Vigiando:** {_vig_txt}\n"
                f"<:ferramentas_:1518271998613131274> **Limite de ações:** `{limite} ação(ões) em {janela} segundos`\n"
                f"<:mov_call:1518271964077232150> **Logs:** {log_val}"),
         inline=False,
@@ -40447,7 +40451,10 @@ class AntDescView(discord.ui.View):
             ("Configurar Logs", discord.ButtonStyle.secondary, self._logs),
             ("Limite de Ações", discord.ButtonStyle.secondary, self._limite),
         ]
+        _global_on = settings.get("antdesc_global", False)
         row1 = [
+            ("Vigiar Todos: ON" if _global_on else "Vigiar Todos: OFF",
+             discord.ButtonStyle.success if _global_on else discord.ButtonStyle.secondary, self._toggle_global),
             ("Listar Configurações", discord.ButtonStyle.secondary, self._listar),
             ("Resetar Configurações", discord.ButtonStyle.danger, self._reset),
         ]
@@ -40475,6 +40482,19 @@ class AntDescView(discord.ui.View):
         await interaction.followup.send(
             embed=_notif_embed(f"<a:online:1518271945550856295> Anti Desconect {estado} com sucesso!"),
             ephemeral=True)
+
+    async def _toggle_global(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["antdesc_global"] = not settings.get("antdesc_global", False)
+        save_settings_to_disk()
+        embed = build_antdesc_embed(self.author, settings)
+        await interaction.response.edit_message(embed=embed, view=AntDescView(self.author))
+        if settings["antdesc_global"]:
+            _txt = "Anti Desconect agora vigia **TODOS** (@everyone) — os cargos vigiados são ignorados."
+        else:
+            _txt = "Anti Desconect voltou a vigiar **só os cargos configurados**."
+        await interaction.followup.send(
+            embed=_notif_embed(f"<a:online:1518271945550856295> {_txt}"), ephemeral=True)
 
     async def _cargos(self, interaction: discord.Interaction):
         await interaction.response.send_message(
@@ -45816,7 +45836,7 @@ async def iatest_cmd(ctx: commands.Context, *, message: str = ""):
     icon_url = (ctx.author.guild.icon.url if getattr(ctx.author, "guild", None) and ctx.author.guild.icon else None) or _avatar_url(ctx.author)
     waiting_embed = discord.Embed(
         color=settings["embed_color"],
-        description=f"<:bot_v3:1506343470242074785> Consultando a IA (`{model}`)...",
+        description=f"<:comunidade_:1518272016971595807> Consultando a IA (`{model}`)...",
     )
     waiting_embed.set_author(name="🤖 IA — NATA®", icon_url=icon_url)
     msg = await ctx.reply(embed=waiting_embed)
