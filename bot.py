@@ -32181,11 +32181,16 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                             else:
                                 asyncio.create_task(_dm_kicked_from_call(member, ch, _owner_member, locked=False))
                 elif not _cur_owner:
-                    dc_allowed = set(settings.get("dono_call_allowed_roles", []))
-                    member_roles = {r.id for r in member.roles}
-                    if not dc_allowed or (dc_allowed & member_roles):
-                        _call_owners[ch.id] = member.id
-                        asyncio.create_task(_send_call_panel(ch, member))
+                    # Só vira dono quem chegou PRIMEIRO (sozinho) na call. Se já tem
+                    # alguém na call quando o membro entra, o recém-chegado NÃO recebe o
+                    # painel — nem se tiver o cargo. O painel é de quem já estava.
+                    _outros = [m for m in ch.members if not m.bot and m.id != member.id]
+                    if not _outros:
+                        dc_allowed = set(settings.get("dono_call_allowed_roles", []))
+                        member_roles = {r.id for r in member.roles}
+                        if not dc_allowed or (dc_allowed & member_roles):
+                            _call_owners[ch.id] = member.id
+                            asyncio.create_task(_send_call_panel(ch, member))
 
             # Membro SAIU de um canal monitorado
             if before.channel and before.channel.id in dc_monitored and before.channel != after.channel:
