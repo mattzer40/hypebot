@@ -4770,6 +4770,7 @@ def get_settings(guild_id: int) -> dict:
     settings.setdefault("auto_resp_messages", [])  # [{trigger, response}]
 
     settings.setdefault("call_limit_roles", [])
+    settings.setdefault("puxar_allowed_roles", [])  # cargos que podem usar /puxar e !puxar/!mover
     settings.setdefault("dono_call_channels", [])   # list de voice channel IDs monitorados
     settings.setdefault("dono_call_allowed_roles", [])   # cargos que viram dono; vazio = todos
     settings.setdefault("dono_call_banner_url", "")
@@ -37546,19 +37547,20 @@ def build_limite_call_embed(author: discord.Member, settings: dict) -> discord.E
 
     roles = settings.get("call_limit_roles", [])
     guild = author.guild
-    if roles and guild:
-        mentions = []
-        for rid in roles:
-            r = guild.get_role(rid)
-            mentions.append(r.mention if r else f"<@&{rid}>")
-        cargos_value = " ".join(mentions)
-    else:
-        cargos_value = f"`{t['not_defined']}`"
+
+    def _fmt_roles(_rids):
+        if _rids and guild:
+            return " ".join((guild.get_role(_r).mention if guild.get_role(_r) else f"<@&{_r}>") for _r in _rids)
+        return f"`{t['not_defined']}`"
+
+    cargos_value = _fmt_roles(roles)
+    puxar_value = _fmt_roles(settings.get("puxar_allowed_roles", []))
 
     embed.add_field(
         name=f"<:mov_call:1518271964077232150>  {t['ticket_config_info_section']}",
         value=(
-            f"**{t['call_limit_cargos']}:** {cargos_value}"
+            f"**{t['call_limit_cargos']}:** {cargos_value}\n"
+            f"**Cargos p/ Puxar/Mover:** {puxar_value}"
         ),
         inline=False,
     )
@@ -37586,6 +37588,22 @@ class LimiteCallRoleSelect(discord.ui.RoleSelect):
         view = LimiteCallView(self.parent_view.author)
         await interaction.response.edit_message(embed=embed, view=view)
         await interaction.followup.send(embed=_notif_embed(t["call_limit_roles_updated"]), ephemeral=True)
+
+
+class PuxarRoleSelect(discord.ui.RoleSelect):
+    def __init__(self, parent_view: "LimiteCallView", placeholder: str):
+        super().__init__(placeholder=placeholder, min_values=0, max_values=25)
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        settings = get_settings(interaction.guild.id)
+        settings["puxar_allowed_roles"] = [r.id for r in self.values]
+        save_settings_to_disk()
+        embed = build_limite_call_embed(self.parent_view.author, settings)
+        view = LimiteCallView(self.parent_view.author)
+        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.followup.send(embed=_notif_embed(
+            "<a:online:1518271945550856295> Cargos que podem **puxar/mover** atualizados!"), ephemeral=True)
 
 
 class LimiteCallView(discord.ui.View):
@@ -37622,11 +37640,20 @@ class LimiteCallView(discord.ui.View):
         btn_cargos.callback = self._configurar_cargos
         self.add_item(btn_cargos)
 
+        btn_puxar = discord.ui.Button(
+            label="Cargos p/ Puxar",
+            style=discord.ButtonStyle.secondary,
+            emoji="<:mov_call:1518271964077232150>",
+            row=1,
+        )
+        btn_puxar.callback = self._configurar_puxar
+        self.add_item(btn_puxar)
+
         btn_reset = discord.ui.Button(
             label=t["btn_resetar_tudo"],
             style=discord.ButtonStyle.danger,
             emoji=_button_emoji(discord.ButtonStyle.danger),
-            row=0,
+            row=1,
         )
         btn_reset.callback = self._reset
         self.add_item(btn_reset)
@@ -37647,10 +37674,19 @@ class LimiteCallView(discord.ui.View):
             ephemeral=True,
         )
 
+    async def _configurar_puxar(self, interaction: discord.Interaction):
+        view = _SingleSelectView(PuxarRoleSelect(self, "Cargos que podem puxar/mover..."))
+        await interaction.response.send_message(
+            "<:mov_call:1518271964077232150> Selecione os cargos que podem usar `/puxar`, "
+            "`!puxar` e `!mover`:",
+            view=view, ephemeral=True,
+        )
+
     async def _reset(self, interaction: discord.Interaction):
         settings = get_settings(interaction.guild.id)
         t = TRANSLATIONS[settings["language"]]
         settings["call_limit_roles"] = []
+        settings["puxar_allowed_roles"] = []
         save_settings_to_disk()
         embed = build_limite_call_embed(self.author, settings)
         view = LimiteCallView(self.author)
@@ -44849,6 +44885,11 @@ def _can_puxar(member, settings: dict) -> bool:
         return False
     if member.guild_permissions.administrator or member.guild_permissions.move_members:
         return True
+    # Cargos dedicados p/ puxar (configurados no painel Limite Call). Se vazio, cai
+    # nos cargos do Limite Call (compatibilidade).
+    _puxar_roles = set(settings.get("puxar_allowed_roles", []) or [])
+    if _puxar_roles:
+        return bool(_puxar_roles & {r.id for r in member.roles})
     return _has_call_limit_perm(member, settings)
 
 
