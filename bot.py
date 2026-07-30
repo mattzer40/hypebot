@@ -8842,18 +8842,38 @@ def _new_menu_opcao_id() -> str:
     return str(int(datetime.now().timestamp() * 1000))
 
 
-def _parse_menu_emoji(emoji_raw: str | None) -> discord.PartialEmoji | str | None:
+def _parse_menu_emoji(emoji_raw) -> "discord.PartialEmoji | None":
+    """Converte o emoji salvo (custom '<:n:id>', ID puro, ou unicode) num
+    PartialEmoji VÁLIDO, ou None. NUNCA devolve um PartialEmoji sem nome — era o
+    bug: `PartialEmoji(id=int(...))` deixava name=None e o Discord recusava com
+    `400 (emoji.name: Invalid emoji)`, derrubando o painel de tickets inteiro."""
+    if not emoji_raw or not isinstance(emoji_raw, str):
+        return None
+    emoji_raw = emoji_raw.strip()
     if not emoji_raw:
         return None
-    try:
-        return discord.PartialEmoji(id=int(emoji_raw))
-    except (ValueError, TypeError):
-        pass
-    try:
-        return discord.PartialEmoji.from_str(emoji_raw)
-    except Exception:
-        pass
-    return emoji_raw
+    # ID puro (só dígitos): resolve o nome real; senão usa nome placeholder (renderiza pelo id).
+    if emoji_raw.isdigit():
+        eid = int(emoji_raw)
+        e = bot.get_emoji(eid)
+        if e is not None:
+            return discord.PartialEmoji(name=e.name, id=e.id, animated=e.animated)
+        return discord.PartialEmoji(name="emoji", id=eid)
+    # Custom <:nome:id> / <a:nome:id>
+    if emoji_raw.startswith("<") and emoji_raw.endswith(">"):
+        try:
+            pe = discord.PartialEmoji.from_str(emoji_raw)
+        except Exception:
+            return None
+        if pe.id and pe.name and re.fullmatch(r"[A-Za-z0-9_]{2,32}", pe.name):
+            return pe
+        if pe.id:  # nome ruim mas id válido → conserta o nome (renderiza pelo id)
+            return discord.PartialEmoji(name="emoji", id=pe.id, animated=bool(pe.animated))
+        return None
+    # Unicode: rejeita texto solto (":nome:", palavras) que o Discord recusa.
+    if any(c.isascii() and (c.isalnum() or c == ":") for c in emoji_raw):
+        return None
+    return discord.PartialEmoji(name=emoji_raw)
 
 
 def build_ticket_menu_selecao_embed(settings: dict, panel: dict) -> discord.Embed:
@@ -19773,9 +19793,29 @@ SECURITY_MENU_2_OPTIONS = [
 ]
 
 
-def _make_select_emoji(emoji_str: str):
+def _make_select_emoji(emoji_str):
+    """Converte a string de emoji para algo aceito por SelectOption/Button.
+
+    Retorna None quando o emoji é vazio ou malformado — assim a opção fica SEM
+    emoji, em vez de estourar `400 Invalid Form Body (emoji.name: Invalid emoji)`
+    e derrubar o painel inteiro (ex.: ticket com emoji vazio ou ":nome:")."""
+    if not isinstance(emoji_str, str):
+        return None
+    emoji_str = emoji_str.strip()
+    if not emoji_str:
+        return None
+    # Emoji custom: <:nome:id> / <a:nome:id> — precisa de id numérico e nome válido.
     if emoji_str.startswith("<") and emoji_str.endswith(">"):
-        return discord.PartialEmoji.from_str(emoji_str)
+        try:
+            pe = discord.PartialEmoji.from_str(emoji_str)
+        except Exception:
+            return None
+        if not pe.id or not pe.name or not re.fullmatch(r"[A-Za-z0-9_]{2,32}", pe.name):
+            return None
+        return pe
+    # Unicode: rejeita "texto" solto (":nome:", palavras) que o Discord recusa.
+    if any(c.isascii() and (c.isalnum() or c == ":") for c in emoji_str):
+        return None
     return emoji_str
 
 
