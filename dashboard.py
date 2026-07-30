@@ -1992,9 +1992,12 @@ function renderGuilds(cid, settings) {
     h+=`<tr>
       <td>${label}</td>
       <td><input id="pfx-${esc(gid)}" value="${esc(p)}" style="max-width:90px" maxlength="10"></td>
-      <td style="display:flex;gap:6px;align-items:center">
+      <td style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button type="button" class="btn btn-primary btn-sm" onclick="savePfx('${esc(cid)}','${esc(gid)}')">Salvar</button>
         <button type="button" class="btn btn-danger btn-sm" onclick="leaveGuild('${esc(cid)}','${esc(gid)}','${esc(name||gid)}')" title="Retirar bot deste servidor">🚪 Retirar Bot</button>
+        <input id="ma-${esc(gid)}" placeholder="ID do usuário" style="max-width:120px;font-size:.72rem" title="Liberar o /menu pra este usuário NESTE servidor">
+        <button type="button" class="btn btn-sm" style="background:var(--green,#2ecc71);color:#fff" onclick="grantMenu('${esc(cid)}','${esc(gid)}')" title="Liberar /menu deste usuário neste servidor">+ Menu</button>
+        <button type="button" class="btn btn-sm" style="background:var(--muted,#555);color:#fff" onclick="revokeMenu('${esc(cid)}','${esc(gid)}')" title="Tirar acesso ao /menu">− Menu</button>
       </td>
     </tr>`;
   }
@@ -2008,6 +2011,23 @@ async function savePfx(cid,gid){
   if(!prefix||prefix.length>10||prefix.includes(' ')){toast('❌ Prefixo inválido','error');return;}
   const r=await api('POST',`/api/customers/${cid}/prefix`,{guild_id:gid,prefix});
   if(r.ok) toast(`✅ Prefixo atualizado!`,'success');
+  else toast('❌ '+(r.error||'Erro'),'error');
+}
+
+async function grantMenu(cid,gid){
+  const el=document.getElementById('ma-'+gid); if(!el) return;
+  const uid=el.value.trim();
+  if(!/^\\d{10,}$/.test(uid)){toast('❌ ID de usuário inválido','error');return;}
+  const r=await api('POST',`/api/customers/${cid}/menu-access`,{guild_id:gid,user_id:uid,action:'add'});
+  if(r.ok){toast('✅ Acesso ao /menu liberado neste servidor (aplica em ~10s).','success'); el.value='';}
+  else toast('❌ '+(r.error||'Erro'),'error');
+}
+async function revokeMenu(cid,gid){
+  const el=document.getElementById('ma-'+gid); if(!el) return;
+  const uid=el.value.trim();
+  if(!/^\\d{10,}$/.test(uid)){toast('❌ ID de usuário inválido','error');return;}
+  const r=await api('POST',`/api/customers/${cid}/menu-access`,{guild_id:gid,user_id:uid,action:'remove'});
+  if(r.ok){toast('✅ Acesso ao /menu removido neste servidor (aplica em ~10s).','success'); el.value='';}
   else toast('❌ '+(r.error||'Erro'),'error');
 }
 
@@ -3425,7 +3445,7 @@ def api_auto_guild_ids():
     # Autenticação via secret key
     auth = request.headers.get("Authorization", "")
     cfg  = load_config()
-    expected = "Bearer " + cfg.get("secret_key", "")
+    expected = "Bearer " + os.environ.get("DASHBOARD_SECRET", "66e8aa01984654baacbf83593587260bb6c69d9907818eb16cf233ffede10ec8")
     if auth != expected:
         return jsonify({"ok": False, "error": "Não autorizado"}), 401
 
@@ -3491,7 +3511,7 @@ def api_verify_owner():
     Auth: Bearer {secret_key}"""
     auth = request.headers.get("Authorization", "")
     cfg  = load_config()
-    expected = "Bearer " + cfg.get("secret_key", "")
+    expected = "Bearer " + os.environ.get("DASHBOARD_SECRET", "66e8aa01984654baacbf83593587260bb6c69d9907818eb16cf233ffede10ec8")
     if auth != expected:
         return jsonify({"ok": False, "error": "Não autorizado"}), 401
 
@@ -3517,7 +3537,7 @@ def api_set_guild_id():
     Auth: Bearer {secret_key}"""
     auth = request.headers.get("Authorization", "")
     cfg  = load_config()
-    expected = "Bearer " + cfg.get("secret_key", "")
+    expected = "Bearer " + os.environ.get("DASHBOARD_SECRET", "66e8aa01984654baacbf83593587260bb6c69d9907818eb16cf233ffede10ec8")
     if auth != expected:
         return jsonify({"ok": False, "error": "Não autorizado"}), 401
 
@@ -3545,7 +3565,7 @@ def api_update_bot_name():
     Auth: Bearer {secret_key}"""
     auth = request.headers.get("Authorization", "")
     cfg  = load_config()
-    expected = "Bearer " + cfg.get("secret_key", "")
+    expected = "Bearer " + os.environ.get("DASHBOARD_SECRET", "66e8aa01984654baacbf83593587260bb6c69d9907818eb16cf233ffede10ec8")
     if auth != expected:
         return jsonify({"ok": False, "error": "Não autorizado"}), 401
 
@@ -3970,6 +3990,40 @@ def api_bot_profile(cid):
             return jsonify({"ok": False, "error": "Não foi possível buscar o perfil — verifique o token"}), 502
 
     return jsonify({"ok": True, "name": bot_name, "description": saved_desc})
+
+
+@app.route("/api/customers/<cid>/menu-access", methods=["POST"])
+@login_required
+def api_menu_access(cid):
+    """Libera/tira acesso ao /menu de um usuário POR SERVIDOR (authorized_members).
+    Só afeta o guild_id informado — NUNCA é global. Escreve um pedido que o bot aplica
+    nas settings em memória (evita corrida com o save loop)."""
+    customers = load_customers()
+    if not any(x["id"] == cid for x in customers):
+        return jsonify({"ok": False, "error": "Cliente não encontrado"}), 404
+    data = request.get_json(force=True) or {}
+    guild_id = str(data.get("guild_id", "")).strip()
+    user_id  = str(data.get("user_id", "")).strip()
+    action   = "remove" if data.get("action") == "remove" else "add"
+    if not guild_id.isdigit() or not user_id.isdigit():
+        return jsonify({"ok": False, "error": "IDs inválidos (use só números)"}), 400
+    cdir = CLIENTS_DIR / cid
+    if not cdir.exists():
+        return jsonify({"ok": False, "error": "Cliente sem diretório no volume"}), 404
+    req_file = cdir / "menu_access_pending.json"
+    payload = {"guild_id": int(guild_id), "add": [], "remove": []}
+    if req_file.exists():
+        try:
+            _ex = json.loads(req_file.read_text(encoding="utf-8"))
+            if int(_ex.get("guild_id", 0)) == int(guild_id):
+                payload["add"]    = [int(x) for x in _ex.get("add", [])]
+                payload["remove"] = [int(x) for x in _ex.get("remove", [])]
+        except Exception:
+            pass
+    if int(user_id) not in payload[action]:
+        payload[action].append(int(user_id))
+    req_file.write_text(json.dumps(payload), encoding="utf-8")
+    return jsonify({"ok": True})
 
 
 @app.route("/api/customers/<cid>/bot/description", methods=["POST"])

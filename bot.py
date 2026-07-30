@@ -4066,6 +4066,9 @@ _CLIENT_DIR    = os.path.dirname(SETTINGS_FILE)
 DESC_REQ_FILE   = os.path.join(_CLIENT_DIR, "bot_desc_pending.txt")
 DESC_RES_FILE   = os.path.join(_CLIENT_DIR, "bot_desc_result.txt")
 DESC_SAVED_FILE = os.path.join(_CLIENT_DIR, "bot_desc_saved.txt")
+# Pedido da dashboard: liberar/tirar acesso ao /menu de um usuário POR SERVIDOR.
+# {"guild_id": int, "add": [ids], "remove": [ids]}. Aplicado às settings em memória.
+MENUACCESS_REQ_FILE = os.path.join(_CLIENT_DIR, "menu_access_pending.json")
 
 # ── Streaming prefix dinâmico ─────────────────────────────────────────────────
 _stream_prefix_current: str = "hype!"
@@ -4528,6 +4531,36 @@ async def _settings_watchdog_loop() -> None:
                         _new_p = bot_settings.get(_reload_gid, {}).get("prefix", "")
                         if _new_p and _new_p != _stream_prefix_current:
                             asyncio.create_task(_set_streaming_prefix(_new_p))
+
+            # ── Pedido da dashboard: acesso ao /menu por servidor ─────────────
+            if os.path.exists(MENUACCESS_REQ_FILE):
+                try:
+                    import json as _maj
+                    with open(MENUACCESS_REQ_FILE, encoding="utf-8") as _maf:
+                        _req = _maj.load(_maf)
+                    os.remove(MENUACCESS_REQ_FILE)
+                    _gid = int(_req.get("guild_id", 0) or 0)
+                    if _gid:
+                        _s = get_settings(_gid)
+                        _am = _s.setdefault("authorized_members", [])
+                        for _uid in _req.get("add", []):
+                            try:
+                                _uid = int(_uid)
+                            except Exception:
+                                continue
+                            if _uid not in _am:
+                                _am.append(_uid)
+                        for _uid in _req.get("remove", []):
+                            try:
+                                _uid = int(_uid)
+                            except Exception:
+                                continue
+                            if _uid in _am:
+                                _am.remove(_uid)
+                        save_settings_to_disk()
+                        print(f"[menu_access] guild {_gid}: authorized_members atualizado ({len(_am)})", flush=True)
+                except Exception as _mae:
+                    print(f"[menu_access] erro: {_mae}", flush=True)
 
             # ── Pedido de atualização de descrição do bot ──────────────────────
             if os.path.exists(DESC_REQ_FILE):
