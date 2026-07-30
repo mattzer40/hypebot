@@ -1988,9 +1988,13 @@ function renderGuilds(cid, settings) {
   for(const[gid,gs] of entries){
     const p=(typeof gs==='object'&&gs.prefix)?gs.prefix:'n!';
     const name=(typeof gs==='object'&&gs.guild_name)?gs.guild_name:'';
+    const inv=(typeof gs==='object'&&gs.invite_url)?gs.invite_url:'';
     const label = name ? `<span style="color:var(--text)">${esc(name)}</span><br><small style="color:var(--muted);font-family:monospace">${esc(gid)}</small>` : `<span style="font-family:monospace;font-size:.78rem">${esc(gid)}</span>`;
+    const invLine = inv
+      ? `<div style="margin-top:5px"><a href="${esc(inv)}" target="_blank" rel="noopener" style="color:#22d3ee;font-size:.74rem;text-decoration:none">🔗 Entrar no servidor</a></div>`
+      : `<div style="margin-top:5px"><a href="#" onclick="genInvite('${esc(cid)}','${esc(gid)}');return false" style="color:var(--muted);font-size:.74rem;text-decoration:none">🔗 Gerar link de convite</a></div>`;
     h+=`<tr>
-      <td>${label}</td>
+      <td>${label}${invLine}</td>
       <td><input id="pfx-${esc(gid)}" value="${esc(p)}" style="max-width:90px" maxlength="10"></td>
       <td style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button type="button" class="btn btn-primary btn-sm" onclick="savePfx('${esc(cid)}','${esc(gid)}')">Salvar</button>
@@ -2029,6 +2033,13 @@ async function revokeMenu(cid,gid){
   const r=await api('POST',`/api/customers/${cid}/menu-access`,{guild_id:gid,user_id:uid,action:'remove'});
   if(r.ok){toast('✅ Acesso ao /menu removido neste servidor (aplica em ~10s).','success'); el.value='';}
   else toast('❌ '+(r.error||'Erro'),'error');
+}
+async function genInvite(cid,gid){
+  const r=await api('POST',`/api/customers/${cid}/guild-invite`,{guild_id:gid});
+  if(r.ok){
+    toast('🔗 Gerando link... recarregando em alguns segundos.','success');
+    setTimeout(()=>fetch('/api/customers/'+cid+'/settings').then(res=>res.json()).then(d=>renderGuilds(cid,d.settings||{})),4500);
+  } else toast('❌ '+(r.error||'Erro'),'error');
 }
 
 function leaveGuild(cid, gid, name) {
@@ -4023,6 +4034,27 @@ def api_menu_access(cid):
     if int(user_id) not in payload[action]:
         payload[action].append(int(user_id))
     req_file.write_text(json.dumps(payload), encoding="utf-8")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/customers/<cid>/guild-invite", methods=["POST"])
+@login_required
+def api_guild_invite(cid):
+    """(Re)gera o link de convite de UM servidor. Escreve um pedido que o bot processa
+    no watchdog loop: cria um convite permanente e salva em settings[gid]['invite_url'].
+    Só afeta o guild_id informado."""
+    customers = load_customers()
+    if not any(x["id"] == cid for x in customers):
+        return jsonify({"ok": False, "error": "Cliente não encontrado"}), 404
+    data = request.get_json(force=True) or {}
+    guild_id = str(data.get("guild_id", "")).strip()
+    if not guild_id.isdigit():
+        return jsonify({"ok": False, "error": "ID de servidor inválido"}), 400
+    cdir = CLIENTS_DIR / cid
+    if not cdir.exists():
+        return jsonify({"ok": False, "error": "Cliente sem diretório no volume"}), 404
+    (cdir / "invite_pending.json").write_text(
+        json.dumps({"guild_id": int(guild_id)}), encoding="utf-8")
     return jsonify({"ok": True})
 
 

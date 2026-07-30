@@ -4069,6 +4069,9 @@ DESC_SAVED_FILE = os.path.join(_CLIENT_DIR, "bot_desc_saved.txt")
 # Pedido da dashboard: liberar/tirar acesso ao /menu de um usuário POR SERVIDOR.
 # {"guild_id": int, "add": [ids], "remove": [ids]}. Aplicado às settings em memória.
 MENUACCESS_REQ_FILE = os.path.join(_CLIENT_DIR, "menu_access_pending.json")
+# Pedido da dashboard: (re)gerar o link de convite de um servidor. {"guild_id": int}.
+# O bot cria um convite permanente e salva em settings[gid]["invite_url"].
+INVITE_REQ_FILE = os.path.join(_CLIENT_DIR, "invite_pending.json")
 
 # ── Streaming prefix dinâmico ─────────────────────────────────────────────────
 _stream_prefix_current: str = "hype!"
@@ -4561,6 +4564,27 @@ async def _settings_watchdog_loop() -> None:
                         print(f"[menu_access] guild {_gid}: authorized_members atualizado ({len(_am)})", flush=True)
                 except Exception as _mae:
                     print(f"[menu_access] erro: {_mae}", flush=True)
+
+            # ── Pedido da dashboard: (re)gerar link de convite de um servidor ──
+            if os.path.exists(INVITE_REQ_FILE):
+                try:
+                    import json as _ivj
+                    with open(INVITE_REQ_FILE, encoding="utf-8") as _ivf:
+                        _ivreq = _ivj.load(_ivf)
+                    os.remove(INVITE_REQ_FILE)
+                    _ivgid = int(_ivreq.get("guild_id", 0) or 0)
+                    _ivg = bot.get_guild(_ivgid) if _ivgid else None
+                    if _ivg:
+                        async def _iv_gen(_g):
+                            try:
+                                _url = await _ensure_guild_invite(_g, force=True)
+                                save_settings_to_disk()
+                                print(f"[invite] guild {_g.id}: link {'gerado' if _url else 'FALHOU (sem permissão de criar convite)'}", flush=True)
+                            except Exception as _e2:
+                                print(f"[invite] falha ao gerar: {_e2}", flush=True)
+                        asyncio.create_task(_iv_gen(_ivg))
+                except Exception as _ive:
+                    print(f"[invite] erro: {_ive}", flush=True)
 
             # ── Pedido de atualização de descrição do bot ──────────────────────
             if os.path.exists(DESC_REQ_FILE):
@@ -23071,6 +23095,56 @@ def _bot_invite_url() -> str:
         return f"https://discord.com/oauth2/authorize?client_id={client_id}&scope=bot+applications.commands&permissions=8"
 
 
+async def _ensure_guild_invite(guild, *, force: bool = False) -> str:
+    """Gera (e cacheia em settings['invite_url']) um convite PERMANENTE do servidor,
+    para o dashboard mostrar um botão 'Entrar no servidor'. Reaproveita o cache salvo
+    e um convite permanente já existente antes de criar um novo. Retorna a URL ou ""."""
+    try:
+        settings = get_settings(guild.id)
+    except Exception:
+        settings = None
+    if settings is not None and not force:
+        _cached = settings.get("invite_url") or ""
+        if isinstance(_cached, str) and ("discord.gg/" in _cached or "discord.com/invite/" in _cached):
+            return _cached
+    me = getattr(guild, "me", None)
+    if me is None:
+        return ""
+    # 1) reaproveita um convite permanente que o bot já tenha criado
+    try:
+        if me.guild_permissions.manage_guild:
+            for inv in await guild.invites():
+                if inv.max_age == 0 and not inv.temporary and getattr(inv, "inviter", None) and inv.inviter.id == me.id:
+                    if settings is not None:
+                        settings["invite_url"] = inv.url
+                    return inv.url
+    except Exception:
+        pass
+    # 2) cria um convite permanente no primeiro canal em que o bot possa criar
+    _chans = []
+    if getattr(guild, "system_channel", None):
+        _chans.append(guild.system_channel)
+    _chans.extend(getattr(guild, "text_channels", []))
+    _seen = set()
+    for ch in _chans:
+        if ch.id in _seen:
+            continue
+        _seen.add(ch.id)
+        try:
+            if not ch.permissions_for(me).create_instant_invite:
+                continue
+            inv = await ch.create_invite(
+                max_age=0, max_uses=0, unique=False,
+                reason="Link de convite do servidor para o painel/dashboard",
+            )
+            if settings is not None:
+                settings["invite_url"] = inv.url
+            return inv.url
+        except Exception:
+            continue
+    return ""
+
+
 def build_proxy_config_embed(author: discord.Member, settings: dict) -> discord.Embed:
     icon_url = (author.guild.icon.url if getattr(author, "guild", None) and author.guild.icon else None) or _avatar_url(author)
     embed = discord.Embed(
@@ -30184,6 +30258,25 @@ async def on_ready():
             pass
     if bot.guilds:
         save_settings_to_disk()
+
+    # Gera/cacheia em background um link de convite por servidor (dashboard "Entrar no
+    # servidor"). Só cria quando falta — depois fica salvo em settings e não bate mais API.
+    async def _cache_all_invites():
+        _changed = False
+        for _g in list(bot.guilds):
+            try:
+                _before = get_settings(_g.id).get("invite_url", "")
+                _url = await _ensure_guild_invite(_g)
+                if _url and _url != _before:
+                    _changed = True
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+        if _changed:
+            save_settings_to_disk()
+            print("[invite] links de convite dos servidores atualizados", flush=True)
+    if bot.guilds:
+        asyncio.create_task(_cache_all_invites())
 
     # Sincroniza bot_name com o dashboard ao iniciar (usa cid direto)
     if _BOT_CUSTOMER_ID:
